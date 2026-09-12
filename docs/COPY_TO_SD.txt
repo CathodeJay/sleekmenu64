@@ -1,0 +1,75 @@
+SLEEKMENU 64 -- WHAT TO COPY TO THE SD CARD
+
+The supported way to prepare a card: copy sleekmenu-prep.pyz and the
+metadata collection's release-metadata.zip to the card root next to ROMS,
+then from there
+
+    python3 sleekmenu-prep.pyz
+
+That writes everything below and needs only Python and Pillow on the
+computer; it never touches the network. This note is for doing it by hand.
+
+LAYOUT
+
+    /SleekMenu64.z64            the browser. Launch it from the stock menu.
+    /release-metadata.zip       the collection, read in place
+    /ROMS/...                    your library, in whatever folders you like
+    /sleekmenu/catalog.ebc      titles, genre, publisher, year, descriptions
+    /sleekmenu/covers.pak       every cover in one file
+    /sleekmenu/favorites.txt    written by the browser as you star games
+    /sleekmenu/history.txt      the last fifteen games you launched
+    /ED64/gamedata/              saves, shared with the stock firmware
+
+Only the ROM is required. Without a catalog the browser scans the card and
+shows filename titles; without covers it draws a placeholder. Neither is an
+error.
+
+Do not copy examples/sample_metadata.json or a catalog built from it. It holds
+two fictional entries and exists to exercise the builder.
+
+WHAT IT WRITES
+
+The browser writes to the card in three places and nowhere else:
+
+    /sleekmenu/favorites.txt    when you press C-down
+    /sleekmenu/history.txt      when you launch a game
+    /ED64/gamedata/<game>.<ext>  cartridge saves, on the same names and in the
+                                 same format the stock firmware uses
+    /ED64/sysdata/registry.dat   the record the stock firmware reads to know
+                                 what to flush; both menus share it, so a game
+                                 started from one finishes its save in the other
+
+It never moves, renames, repairs or deletes anything, and it never touches the
+network.
+
+SUPPORTED
+
+EverDrive-64 X7 (OS 3.11) or EverDrive-64 Pro; the same ROM serves both.
+Other X-series carts use the same save register and will probably work; only
+the X7 has been tested at length, and the Pro is in its first round.
+
+.z64 and .v64 images up to 64 MiB on the X7 and 126 MiB on the Pro. The
+CIC seed is fingerprinted from the ROM's own IPL3 at boot, so every documented
+CIC works; the launch card names the five common ones and shows 0 for the
+rest.
+
+64DD disk images (.ndd), on the Pro only: listed like games, booted from the
+IPL in ED64/64ddipl (NDDJ2/NDDE0/NDXJ0.n64, chosen by the disk's region),
+and attached as an expansion disk to a cartridge ROM sitting in the same
+folder. Not yet run on hardware. FAT16, FAT32 and exFAT are all supported.
+
+CONTROLS
+
+    A            open a folder, or a game's details
+    B            parent folder
+    Start        play (from the details screen)
+    C-up         switch between the list, the cover grid and coverflow
+    C-left/right walk the genre tabs
+    C-down       favourite
+    Z            filters
+
+ART AND ROMS ARE YOURS
+
+Nothing here bundles, downloads or redistributes ROMs or box art. The covers
+on your card were converted from the metadata collection you put there. See
+the project README before sharing a card image with anyone else.

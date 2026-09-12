@@ -1,0 +1,10 @@
+# Everything the host tooling and the test suite need beyond the standard
+# library. Nothing here is required on the console, and nothing here is
+# downloaded at build time -- install it once:
+#
+#     pip install -r requirements-dev.txt
+#
+# Pillow reads the box art you supply and is the only hard dependency.
+# tools/make_sprite.py writes libdragon's sprite container itself, so there is
+# no MIPS toolchain in the art path.
+Pillow>=9.0

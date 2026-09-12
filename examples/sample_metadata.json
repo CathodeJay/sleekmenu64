@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "games": [
+    {
+      "title": "Homebrew Kart Demo",
+      "path": "USA/Racing/Homebrew Kart Demo.z64",
+      "cover": "covers/homebrew-kart.sprite",
+      "genre": "Racing",
+      "regions": ["USA"],
+      "players": 4,
+      "publisher": "Example Homebrew Team",
+      "year": 2025,
+      "favorite": true
+    },
+    {
+      "title": "Puzzle Prototype",
+      "path": "Multi/Puzzle/Puzzle Prototype.v64",
+      "genre": "Puzzle",
+      "regions": ["USA", "JAPAN", "EUROPE"],
+      "players": 2,
+      "publisher": "Example Author",
+      "year": 2024,
+      "favorite": false
+    }
+  ]
+}
+

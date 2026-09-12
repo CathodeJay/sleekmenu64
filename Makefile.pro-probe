@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# The EverDrive-64 Pro canary ROM: probe/pro_probe.c against the vendored
+# krikzz library. Built like the browser, without the font filesystem.
+#
+#     make -f Makefile.pro-probe N64_INST=/path/to/libdragon
+ifeq ($(N64_INST),)
+  $(error N64_INST is not set)
+endif
+LIBDRAGON_ROOT ?= third_party/libdragon
+
+BUILD_DIR := build/pro-probe
+include $(N64_INST)/include/n64.mk
+
+ROMNAME := sleekmenu-pro-probe
+NFM_BOOT := third_party/n64flashcartmenu/boot
+EDIO := third_party/ed64pro/edio
+C_FILES := probe/pro_probe.c $(EDIO)/everdrive.c $(EDIO)/n64.c \
+           $(NFM_BOOT)/boot.c $(NFM_BOOT)/cic.c $(NFM_BOOT)/cheats.c
+S_FILES := $(NFM_BOOT)/reboot.S
+OBJS := $(addprefix $(BUILD_DIR)/,$(C_FILES:.c=.o) $(S_FILES:.S=.o))
+
+CFLAGS += -Wextra -MP -Isrc -I$(EDIO) -I$(NFM_BOOT) -include boot_compat.h
+# Vendored third-party code is kept byte-for-byte upstream, so it is not held
+# to this project's warning bar.
+$(BUILD_DIR)/$(NFM_BOOT)/%.o: CFLAGS += -Wno-error
+$(BUILD_DIR)/$(EDIO)/%.o: CFLAGS += -Wno-error -w
+
+all: $(ROMNAME).z64
+.PHONY: all
+
+$(BUILD_DIR)/$(ROMNAME).elf: $(OBJS)
+
+$(ROMNAME).z64: N64_ROM_TITLE = "SleekMenu Pro probe"
+
+clean:
+	$(RM) -r $(BUILD_DIR) $(ROMNAME).z64
+.PHONY: clean
+
+ifneq ($(wildcard $(BUILD_DIR)),)
+  -include $(shell find $(BUILD_DIR) -name '*.d')
+endif

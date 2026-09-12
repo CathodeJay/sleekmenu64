@@ -1,0 +1,56 @@
+Data files in this directory
+============================
+
+coverdb.csv, genres.csv
+
+
+Licence
+-------
+
+Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+
+    Deed:      https://creativecommons.org/licenses/by-sa/4.0/
+    Legalcode: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+
+Attribution
+-----------
+
+coverdb.csv is a derivative work of the Nintendo 64 DAT files published by
+the libretro-database project, which are licensed CC BY-SA 4.0:
+
+    https://github.com/libretro/libretro-database
+
+The cartridge header CRCs, NUS product codes, release names, genres,
+publishers, years, player counts and region flags were extracted from those
+DATs by tools/seed_coverdb.py and reshaped into this project's schema.
+Corrections applied by hand through tools/curate.py (art overrides and genre
+fixes) are contributed to the same file under the same licence.
+
+genres.csv is an original mapping written for this project from the genre
+vocabulary used by those DATs onto a smaller display vocabulary. It is
+offered under the same licence so the two files travel together.
+
+
+Why this directory is licensed separately
+-----------------------------------------
+
+The rest of SleekMenu 64 is licensed AGPL-3.0-only (see ../LICENSE).
+CC BY-SA 4.0 is a share-alike licence, and Creative Commons has declared
+exactly two outside licences ShareAlike-compatible with version 4.0: the
+Free Art License 1.3 and GPLv3. AGPLv3 is not among them.
+
+Rather than assert a compatibility nobody has declared, these files keep
+their upstream licence. They are data read at build time by the host-side
+tooling; they are not linked into the ROM. If you redistribute them, keep
+this notice and the attribution above with them.
+
+
+What is NOT here
+----------------
+
+No box art. Cover images are the copyright of their respective publishers
+and are not redistributable, so none ship with this project -- not in the
+repository, not in a release, and not inside the prep tool. The tool fetches
+them to the user's own card from libretro-thumbnails at the user's request.
+See the README.
