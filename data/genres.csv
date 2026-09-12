@@ -1,0 +1,31 @@
+# sleekmenu-genres 1
+# Consolidates the genres libretro-database uses into the shorter list the tab
+# strip can actually show. Left column: the genre as libretro spells it. Right
+# column: what the browser displays. A genre missing from this file passes
+# through unchanged and is reported, so a new library surfaces the gap instead
+# of quietly growing a tab.
+source,genre
+Action,Action
+Beat'em Up,Action
+Adventure,Action-Adventure
+Fighting,Fighting
+Platform,Platforms
+Puzzle,Puzzle
+Quiz,Puzzle
+Racing,Racing
+Role-playing (RPG),Role Playing Games
+Shooter,Shooters
+Shoot'em Up,Shooters
+Lightgun Shooter,Shooters
+Simulation,Simulation
+Hunting and Fishing,Simulation
+Sports,Sports
+Sports with Animals,Sports
+Strategy,Strategy
+Board,Strategy
+Casual Game,Other
+Compilation,Other
+Educational,Other
+Gambling,Other
+Music / Dancing,Other
+Various,Other

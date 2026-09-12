@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  host-tests:
+    # The suite is host-side: it compiles the console modules with the system
+    # cc against a libdragon stub and runs them natively. No MIPS toolchain and
+    # no hardware are involved, which is the point.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pillow
+        run: pip install -r requirements-dev.txt
+
+      - name: Run the test suite
+        run: make test
+
+      - name: Build the release tool
+        run: make prep
+
+      - name: Run the release tool from a card, with nothing else installed
+        # The promise the archive makes: copy it next to ROMS/ and the
+        # collection's zip, run it, get a card. From a directory with no
+        # checkout in sight, so every import inside the archive has to
+        # resolve on its own. The collection is a two-game stand-in written
+        # in the release layout; the tool never fetches anything.
+        run: |
+          mkdir -p /tmp/card/ROMS
+          cp build/release/sleekmenu-prep.pyz /tmp/card/
+          python3 - <<'PY'
+          from pathlib import Path
+          from tests.rom_fixtures import write_rom
+          from tests.test_sleekmenu_prep import write_collection
+          write_rom(Path("/tmp/card/ROMS/Something.z64"), 0x11, 0x22, game_code="WR")
+          write_rom(Path("/tmp/card/ROMS/Nothing Knows This.z64"), 0x99, 0x88, game_code="QQ")
+          write_collection(Path("/tmp/card/release-metadata.zip"), "NWRE", zipped=True)
+          PY
+          cd /tmp/card && python3 sleekmenu-prep.pyz
+          test -f /tmp/card/sleekmenu/catalog.ebc
+          test -f /tmp/card/sleekmenu/covers.pak
+          ls -la /tmp/card/sleekmenu-prep.pyz
+
+      - name: Prove the card tooling works on a library it has never seen
+        # A smoke test in the same spirit as tests/test_portability.py, but
+        # driving the documented command line rather than the API.
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from tests.rom_fixtures import write_rom
+          from tests.test_sleekmenu_prep import write_collection
+          root = Path("/tmp/smoke")
+          (root / "CARD" / "ROMS").mkdir(parents=True)
+          write_rom(root / "CARD/ROMS/Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+          write_rom(root / "CARD/ROMS/Nothing Knows This.z64", 0x99, 0x88, game_code="QQ")
+          write_collection(root / "collection", "NWRE")
+          PY
+          python3 tools/prepare_card.py --card /tmp/smoke/CARD \
+              --roms /tmp/smoke/CARD/ROMS --metadata /tmp/smoke/collection
+          test -f /tmp/smoke/CARD/sleekmenu/catalog.ebc
+          test -f /tmp/smoke/CARD/sleekmenu/covers.pak

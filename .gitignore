@@ -1,0 +1,63 @@
+# Build output
+build/
+*.z64
+*.pyz
+*.o
+*.d
+*.elf
+*.dfs
+*.sprite
+
+# Vendored dependencies fetched at build time, not redistributed here.
+# libdragon is a full git checkout (~67 MB); point LIBDRAGON_ROOT at your own
+# and see the README's "Building the ROM". ares is needed only to regenerate
+# src/rom_db.c -- `make rom-db ARES=/path/to/ares` -- and never at build time.
+third_party/libdragon
+third_party/ares
+
+# Box art is the publishers', not ours. The cover pack is built on your
+# own machine from artwork you already have; nothing image-shaped belongs
+# in this repository.
+assets/
+covers/
+*.png
+*.jpg
+*.jpeg
+*.webp
+# ...except the browser's own screenshots for the README.
+!docs/screenshots/*.jpg
+
+# Personal card contents: ROM libraries, saves, and firmware state.
+# tests/fixtures/registry/ keeps four registry.dat samples on purpose --
+# see its README -- but nothing else from a real card.
+*.srm
+*.eep
+*.fla
+*.mpk
+*.sra
+save_db.*
+recent.dat
+/ED64/
+
+# ...but the golden sprites in tests/fixtures/ are the whole point of the
+# make_sprite tests: they were produced by libdragon's own mksprite and are
+# compared byte for byte, so they are committed on purpose.
+!tests/fixtures/sprites/*.sprite
+
+# Generated card payloads
+catalog.ebc
+covers.pak
+metadata.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Editors and platforms
+.DS_Store
+*.swp
+.idea/
+.vscode/

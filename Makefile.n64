@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+ifeq ($(N64_INST),)
+  $(error N64_INST is not set)
+endif
+ifeq ($(wildcard $(N64_INST)/include/n64.mk),)
+  $(error $(N64_INST)/include/n64.mk does not exist: N64_INST may be incorrect)
+endif
+LIBDRAGON_ROOT ?= third_party/libdragon
+ifeq ($(wildcard $(LIBDRAGON_ROOT)/n64.mk),)
+  $(error $(LIBDRAGON_ROOT)/n64.mk does not exist: LIBDRAGON_ROOT may be incorrect)
+endif
+
+BUILD_DIR := build/n64
+
+# Use libdragon's installed build system. LIBDRAGON_ROOT identifies the source
+# checkout being targeted, but a checkout is not an installed N64 toolchain.
+include $(N64_INST)/include/n64.mk
+
+ROMNAME := sleekmenu
+NFM_BOOT := third_party/n64flashcartmenu/boot
+EDIO := third_party/ed64pro/edio
+C_FILES := $(shell find src -name '*.c') $(NFM_BOOT)/boot.c $(NFM_BOOT)/cic.c $(NFM_BOOT)/cheats.c \
+           $(EDIO)/everdrive.c $(EDIO)/n64.c
+S_FILES := $(NFM_BOOT)/reboot.S
+OBJS := $(addprefix $(BUILD_DIR)/,$(C_FILES:.c=.o) $(S_FILES:.S=.o))
+DFS_IMAGE ?=
+
+# -MP emits a phony target for every header. Without it, deleting a header
+# leaves every stale .d file demanding a file that no longer exists, and the
+# build stops with "No rule to make target" instead of just recompiling.
+CFLAGS += -Wextra -MP -Isrc -I$(LIBDRAGON_ROOT)/src/fatfs -I$(LIBDRAGON_ROOT)/src/libcart
+CFLAGS += -I$(NFM_BOOT) -include boot_compat.h
+# The krikzz Pro library is visible only to the Pro backend, so nothing else
+# can pick up its u8/u32 macros or its FR_* names by accident.
+$(BUILD_DIR)/src/pro/%.o: CFLAGS += -I$(EDIO)
+# Vendored third-party code is kept byte-for-byte upstream, so it is not held
+# to this project's warning bar.
+$(BUILD_DIR)/$(NFM_BOOT)/%.o: CFLAGS += -Wno-error
+$(BUILD_DIR)/$(EDIO)/%.o: CFLAGS += -Wno-error -w
+all: $(ROMNAME).z64
+.PHONY: all
+
+$(BUILD_DIR)/$(ROMNAME).elf: $(OBJS)
+
+ifneq ($(DFS_IMAGE),)
+# DFS_IMAGE is produced by the host-side font-dfs target. Prevent n64.mk's
+# generic %.dfs rule from rebuilding it from an unrelated filesystem/ directory.
+$(DFS_IMAGE):
+	@test -f "$@"
+$(ROMNAME).z64: $(DFS_IMAGE)
+endif
+
+$(ROMNAME).z64: N64_ROM_TITLE = "SleekMenu 64"
+
+clean:
+	$(RM) -r $(BUILD_DIR) $(ROMNAME).z64
+.PHONY: clean
+
+ifneq ($(wildcard $(BUILD_DIR)),)
+  -include $(shell find $(BUILD_DIR) -name '*.d')
+endif
