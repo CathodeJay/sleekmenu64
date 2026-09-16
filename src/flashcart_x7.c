@@ -102,6 +102,9 @@ static void x7_point_of_no_return(void) {
 
 static bool x7_boot(sm_save_type_t type, unsigned config, bool from_disk,
     const uint32_t *cheats, char *status, size_t status_size) {
+    /* The menu's ROM header requests RTC initialisation from the stock OS.
+       The loaded game inherits that clock; GAM_CFG selects only the save
+       type, not RTC. See docs/X7_RTC.md for the hardware validation needed. */
     (void)config;
     if (from_disk) {
         /* The X-series has no drive emulation; the launcher refuses disks
