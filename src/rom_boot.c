@@ -15,9 +15,9 @@ void sm_rom_boot(sm_rom_boot_hook at_point_of_no_return, bool from_64dd, const u
     display_close();
     disable_interrupts();
 
-    /* The backend's last word. On the X7 this is the one EverDrive register
-       SleekMenu writes -- backup RAM being reconfigured for the incoming
-       game -- so nothing may touch the SD card after this line. */
+    /* The backend's last word. On the X7 this selects the incoming game's
+       backup RAM and RTC enable state, so nothing may touch the SD card
+       after this line. */
     if (at_point_of_no_return) at_point_of_no_return();
 
     /* The console's own TV type is what IPL3 must be told, whatever region the
