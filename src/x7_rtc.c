@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "x7_rtc.h"
 #include "save_type.h"
+#include "x7_save_reg.h"
 
 #ifdef __mips__
 #include <libdragon.h>
@@ -14,9 +15,16 @@
 #define X7_I2C_DAT 0x1F80001Cu
 #define X7_I2C_POLL_LIMIT 10000u
 
+static const char *last_error;
+
+const char *sm_x7_rtc_error(void) {
+    return last_error ? last_error : "X7 clock preparation failed";
+}
+
 static bool i2c_wait(void) {
     for (unsigned i = 0; i < X7_I2C_POLL_LIMIT; i++)
         if (!(io_read(X7_I2C_CMD) & 0x80u)) return true;
+    if (!last_error) last_error = "X7 clock: I2C timeout";
     return false;
 }
 
@@ -37,7 +45,12 @@ static bool i2c_end(void) {
 
 static bool i2c_command(uint8_t value) {
     io_write(X7_I2C_DAT, value);
-    return i2c_wait() && !(io_read(X7_I2C_CMD) & 1u);
+    if (!i2c_wait()) return false;
+    if (!(io_read(X7_I2C_CMD) & 1u)) return true;
+    last_error = value == 0xD0u ? "X7 clock: I2C write-address NACK" :
+        value == 0xD1u ? "X7 clock: I2C read-address NACK" :
+        "X7 clock: I2C register NACK";
+    return false;
 }
 
 static bool read_clock(uint8_t raw[16]) {
@@ -82,6 +95,7 @@ static bool write_block(uint8_t block, const uint8_t data[8]) {
 }
 
 bool sm_x7_rtc_prepare(unsigned config) {
+    last_error = NULL;
     if (!(config & SM_SAVE_CFG_RTC)) return true;
     uint8_t raw[16], time[8];
     static const uint8_t stop[8] = {0, 4, 0, 0, 0, 0, 0, 0};
@@ -97,11 +111,23 @@ bool sm_x7_rtc_prepare(unsigned config) {
     time[5] = raw[5] & 0x1Fu;
     time[6] = raw[6];
     time[7] = 1u;
+    /* SleekMenu runs as a game with RTC disabled, unlike the stock menu.
+       The cartridge port must be enabled before Joybus can reach its RTC.
+       OS 3.11's RTC diagnostic likewise writes 0x1000 before these commands
+       and zero afterward (0x8000CAB0..0x8000CACC). Save memory is already
+       flushed; no save transfer runs until this function returns. */
+    sm_x7_apply_launch_config(SM_SAVE_OFF, SM_SAVE_CFG_RTC);
     bool stopped = write_block(0u, stop);
+    if (!stopped) last_error = "X7 clock: Joybus stop failed";
     bool written = stopped && write_block(2u, time);
+    if (stopped && !written) last_error = "X7 clock: Joybus time write failed";
     /* Always try to restart the emulated clock, including after a failed
        stop/data command. No transaction here writes the physical DS1337. */
     bool started = write_block(0u, start);
+    if (!started && !last_error) last_error = "X7 clock: Joybus start failed";
+    /* Also disable RTC on failure. Save preparation and the final per-game
+       handoff set their own configuration; ordinary games keep RTC off. */
+    sm_x7_apply_save_type(SM_SAVE_OFF);
     return stopped && written && started;
 }
 #endif

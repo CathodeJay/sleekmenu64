@@ -6,8 +6,10 @@
 
 #ifdef __mips__
 /* Before arming a save, with interrupts available for Joybus. A non-RTC
-   launch does no clock IO. Does not change the physical clock or GAM_CFG. */
+   launch does no clock IO. Temporarily enables the cartridge RTC for Joybus
+   writes, then disables it before returning. Never changes the physical clock. */
 bool sm_x7_rtc_prepare(unsigned config);
+const char *sm_x7_rtc_error(void);
 #endif
 
 #endif

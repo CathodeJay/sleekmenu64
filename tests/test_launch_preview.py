@@ -250,10 +250,9 @@ class RetiredModuleTests(unittest.TestCase):
         for other in ("SYS_CFG", "DMA_ADDR", "DMA_LEN", "SD_STATUS", "BOOT_CFG"):
             self.assertNotIn(other, source)
 
-    def test_save_register_is_applied_only_at_the_point_of_no_return(self):
-        """Reconfiguring backup RAM under a live FatFs mount is unsafe, so the
-        one register write must happen only inside the boot handoff, and only
-        after interrupts are off."""
+    def test_save_register_callers_are_confined_to_handoff_and_hardware_io(self):
+        """Configuration changes cannot overlap SD or save transfers. The
+        final game configuration belongs inside the boot handoff."""
         callers = set()
         for path in (ROOT / "src").rglob("*.c"):
             if path.name == "x7_save_reg.c":
@@ -266,7 +265,9 @@ class RetiredModuleTests(unittest.TestCase):
         # which is the same register. It is allowed only because its two
         # hardware helpers touch no files at all, so an SD transaction can
         # never be in flight across the change -- see the next test.
-        self.assertEqual(callers, {"flashcart_x7.c", "save_io.c"})
+        # RTC preparation also needs the cartridge port enabled while sending
+        # Joybus commands; it runs before save preparation and restores RTC off.
+        self.assertEqual(callers, {"flashcart_x7.c", "save_io.c", "x7_rtc.c"})
         # The X7 backend writes it from the hook that sm_rom_boot() runs after
         # interrupts are off, and from nowhere else.
         x7 = strip_comments((ROOT / "src/flashcart_x7.c").read_text(encoding="utf-8"))

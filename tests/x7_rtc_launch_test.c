@@ -13,6 +13,7 @@ bool sm_x7_rtc_prepare(unsigned config) {
     seen_config = config;
     return clock_ok;
 }
+const char *sm_x7_rtc_error(void) { return "X7 clock: Joybus stop failed"; }
 bool sm_save_sync_arm(const char *path, const uint8_t *header,
     sm_save_type_t type, sm_save_sync_report_t *report) {
     (void)path; (void)header; (void)type; (void)report;
@@ -41,7 +42,7 @@ int main(void) {
     assert(!x7_arm("sd:/game.z64", header, SM_SAVE_FLASH, SM_SAVE_CFG_RTC, &report));
     assert(save_calls == 0 && boot_calls == 0);
     assert(!report.ran && !report.changed && report.type == SM_SAVE_FLASH);
-    assert(strstr(report.detail, "clock"));
+    assert(!strcmp(report.detail, "X7 clock: Joybus stop failed"));
     assert(!x7_arm("sd:/game.z64", header, SM_SAVE_FLASH, SM_SAVE_CFG_RTC, NULL));
     clock_ok = true;
     assert(x7_arm("sd:/game.z64", header, SM_SAVE_FLASH, SM_SAVE_CFG_RTC, &report));

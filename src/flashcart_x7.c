@@ -91,7 +91,7 @@ static bool x7_arm(const char *sd_path, const uint8_t *header, sm_save_type_t ty
         if (report) {
             memset(report, 0, sizeof(*report));
             report->type = type;
-            snprintf(report->detail, sizeof(report->detail), "Could not prepare X7 clock");
+            snprintf(report->detail, sizeof(report->detail), "%s", sm_x7_rtc_error());
         }
         return false;
     }

@@ -14,6 +14,7 @@ static unsigned write_count, read_count, data_at, packet_count, command_at;
 static uint8_t packets[4][64];
 static uint8_t raw[16];
 static uint32_t mode, last_data;
+static uint32_t game_config;
 static int nack_command, fail_packet, fail_busy_at;
 static bool timeout;
 static uint8_t rtc_status;
@@ -21,6 +22,7 @@ static uint8_t rtc_status;
 static void reset(void) {
     write_count = read_count = data_at = packet_count = command_at = 0;
     mode = last_data = 0;
+    game_config = 0;
     nack_command = fail_packet = fail_busy_at = -1;
     timeout = false;
     rtc_status = 0;
@@ -49,7 +51,10 @@ void io_write(uint32_t address, uint32_t value) {
     else if (address == DAT) {
         last_data = value;
         if (mode == 0x11u) command_at++;
-    } else assert(address == SM_X7_REG_GAM_CFG);
+    } else {
+        assert(address == SM_X7_REG_GAM_CFG);
+        game_config = value;
+    }
 }
 
 void joybus_exec(const void *input, void *output) {
@@ -57,7 +62,10 @@ void joybus_exec(const void *input, void *output) {
     memcpy(packets[packet_count], input, 64);
     memset(output, 0, 64);
     ((uint8_t *)output)[16] = rtc_status;
-    if ((int)packet_count == fail_packet) ((uint8_t *)output)[5] = 0x80;
+    /* An RTC-disabled cartridge does not answer the RTC commands. This
+       models SleekMenu's entry state, which the old stub omitted. */
+    if (!(game_config & SM_X7_GAM_CFG_RTC) || (int)packet_count == fail_packet)
+        ((uint8_t *)output)[5] = 0x80;
     packet_count++;
 }
 
@@ -81,6 +89,7 @@ int main(void) {
         for (unsigned config = 0; config <= SM_SAVE_CFG_MAX; config++) {
             reset();
             assert(sm_x7_rtc_prepare(config));
+            assert(game_config == 0);
             if (!(config & SM_SAVE_CFG_RTC))
                 assert(write_count == 0 && read_count == 0 && packet_count == 0);
             sm_x7_apply_launch_config((sm_save_type_t)type, config);
@@ -109,7 +118,7 @@ int main(void) {
         {CMD,0x20}, {DAT,0xFF}, {CMD,0x11}, {DAT,0xD0}, {DAT,0},
         {CMD,0x20}, {DAT,0xFF}, {CMD,0x11}, {DAT,0xD1}, {CMD,0x10}
     };
-    assert(write_count == 30);
+    assert(write_count == 32);
     for (unsigned i = 0; i < 10; i++) {
         assert(writes[i].address == prefix[i][0]);
         assert(writes[i].value == prefix[i][1]);
@@ -120,6 +129,8 @@ int main(void) {
     assert(writes[27].address == DAT && writes[27].value == 0xFF);
     assert(writes[28].address == CMD && writes[28].value == 0x30);
     assert(writes[29].address == DAT && writes[29].value == 0xFF);
+    assert(writes[30].address == SM_X7_REG_GAM_CFG && writes[30].value == 0x1000);
+    assert(writes[31].address == SM_X7_REG_GAM_CFG && writes[31].value == 0);
 
     /* A stopped clock (or an untouched status response) is not a failed
        write. PIF transport error flags are checked separately below. */
@@ -134,6 +145,8 @@ int main(void) {
         reset();
         nack_command = command;
         assert(!sm_x7_rtc_prepare(SM_SAVE_CFG_RTC));
+        assert(strstr(sm_x7_rtc_error(), "NACK"));
+        assert(game_config == 0);
         assert(packet_count == 0);
         assert(writes[write_count - 2].address == CMD);
         assert(writes[write_count - 2].value == 0x30);
@@ -141,6 +154,7 @@ int main(void) {
     reset();
     timeout = true;
     assert(!sm_x7_rtc_prepare(SM_SAVE_CFG_RTC));
+    assert(strstr(sm_x7_rtc_error(), "timeout"));
     assert(read_count <= 20002 && packet_count == 0);
     const int polled[] = {2, 4, 5, 7, 9, 11, 12, 13, 14, 15, 16, 17,
                           18, 19, 20, 21, 22, 23, 24, 25, 26, 28, 30};
@@ -155,6 +169,9 @@ int main(void) {
         fail_packet = packet;
         assert(!sm_x7_rtc_prepare(SM_SAVE_CFG_RTC));
         assert_packet(packet_count - 1, 0, start);
+        assert(game_config == 0);
+        const char *step[] = {"stop", "time write", "start"};
+        assert(strstr(sm_x7_rtc_error(), step[packet]));
     }
     puts("X7 RTC: stock OS protocol, per-game flags, and failure paths passed");
     return 0;
