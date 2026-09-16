@@ -15,6 +15,7 @@
 #include "rom_load.h"
 #include "save_sync.h"
 #include "x7_probe.h"
+#include "x7_rtc.h"
 #include "x7_save_reg.h"
 #include <libdragon.h>
 #include "ff.h"
@@ -86,26 +87,30 @@ static sm_flashcart_load_t x7_load(const char *sd_path, uint32_t bytes, bool byt
 
 static bool x7_arm(const char *sd_path, const uint8_t *header, sm_save_type_t type,
     unsigned config, sm_save_sync_report_t *report) {
-    (void)config;
+    if (!sm_x7_rtc_prepare(config)) {
+        if (report) {
+            memset(report, 0, sizeof(*report));
+            report->type = type;
+            snprintf(report->detail, sizeof(report->detail), "Could not prepare X7 clock");
+        }
+        return false;
+    }
     return sm_save_sync_arm(sd_path, header, type, report);
 }
 
-/* The one EverDrive register SleekMenu writes, and the only place it is
-   written on a launch: inside the handoff, after interrupts are off. The
+/* Apply the selected save type and RTC enable bit inside the handoff,
+   after interrupts are off. Clock preparation is already complete. The
    region-free config bit is about defeating a cartridge-side region lock,
    which this loader does not impose in the first place. */
 static sm_save_type_t pending_save_type;
+static unsigned pending_config;
 
 static void x7_point_of_no_return(void) {
-    sm_x7_apply_save_type(pending_save_type);
+    sm_x7_apply_launch_config(pending_save_type, pending_config);
 }
 
 static bool x7_boot(sm_save_type_t type, unsigned config, bool from_disk,
     const uint32_t *cheats, char *status, size_t status_size) {
-    /* The menu's ROM header requests RTC initialisation from the stock OS.
-       The loaded game inherits that clock; GAM_CFG selects only the save
-       type, not RTC. See docs/X7_RTC.md for the hardware validation needed. */
-    (void)config;
     if (from_disk) {
         /* The X-series has no drive emulation; the launcher refuses disks
            before getting here, and this is the backstop. */
@@ -113,6 +118,7 @@ static bool x7_boot(sm_save_type_t type, unsigned config, bool from_disk,
         return false;
     }
     pending_save_type = type;
+    pending_config = config;
     sm_rom_boot(x7_point_of_no_return, false, cheats);
     return true;    /* not reached */
 }

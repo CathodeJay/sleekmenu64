@@ -1,56 +1,81 @@
-# X7 clock handoff
+# X7 per-game RTC
 
-SleekMenu's ROM header requests RTC support from the stock EverDrive OS.
-The intended result is that a game launched through SleekMenu inherits the
-clock that the OS initialises when it launches the menu. This handoff is
-experimental until the hardware checks below pass.
+The X7 backend applies the selected ROM's RTC requirement at launch. Games
+without `SM_SAVE_CFG_RTC` receive a plain save-type value in `GAM_CFG`, so
+RTC is disabled. Games requesting RTC receive the save type plus `0x1000`.
+SleekMenu's own ROM header does not force RTC on.
 
-## Why the menu requests the clock
+The existing resolver supplies the requirement from the `ED` developer
+header, the first matching `ED64/save_db.txt` record, or the built-in game
+database. This is automatic per-game selection; it does not import manual
+settings saved in the stock OS's per-ROM configuration files. `AF=51`, for
+example, selects FlashRAM plus RTC for Animal Forest.
 
-Animal Forest requires FlashRAM and RTC. SleekMenu resolves its RTC flag
-from the game database, `save_db.txt`, or a homebrew header, but the X7
-backend does not initialise the RTC when launching a game. It only selects
-the save type in `GAM_CFG`. The Pro backend configures RTC separately.
+## Clock preparation
 
-The stock OS cannot see the selected game's header until SleekMenu loads
-it, and the stock OS is no longer running at that point. Setting
-`N64_ROM_RTC = 1` on the menu ROM asks the OS to initialise the clock before
-SleekMenu starts. The menu's load and save paths leave the RTC registers
-alone. No I2C clock writes or changes to the battery-backed date/time are
-needed in the menu.
+Only a game requesting RTC accesses the clock. Before save preparation,
+SleekMenu reads 16 bytes from the battery-backed DS1337 at I2C address
+`0x68`, register zero. It converts the date fields to Joybus order, then
+sends three cartridge-port commands: stop/unlock RTC block 0, write time
+block 2, and start/lock block 0. These initialise the game-facing clock;
+the physical DS1337 time is never written.
 
-The header uses krikzz's [developer override format]: `ED` at offsets
-`0x3C..0x3D`, and bit 0 of `0x3F` for RTC. Save type remains off for the menu;
-the selected game's save type is applied during launch as usual. RTC is
-requested for the menu as a whole, including launches of games that do not
-use a clock. Use the supported X7 OS 3.11: krikzz's [OS changelist] records
-EEPROM and RTC coexistence support from OS 3.07 onward.
+I2C waits are bounded. An I2C NACK, timeout, or failed Joybus write cancels
+the launch before the save is armed. The backend attempts to restart the
+emulated clock even if a Joybus write fails. After successful preparation,
+save transfer proceeds normally. The final handoff writes the complete
+save/RTC configuration, explicitly clearing RTC for non-RTC games.
 
-The X7 RTC cache is separate from `GAM_CFG`; libdragon's [X7 clock code]
-uses `0x1F808010` for that cache. Adding the RTC flag to `GAM_CFG` would
-change the save selection rather than initialise the clock.
+The driver accesses only the separate I2C registers `0x1F800018` and
+`0x1F80001C`. It does not touch libcart's SD state, key, or timing registers.
+The final `GAM_CFG` write remains in the existing register module.
 
-## Hardware validation
+## Evidence from the stock OS
 
-Host tests and inspecting the compiled ROM header cannot establish that
-the X7 clock continues across the boot handoff. On an X7 with OS 3.11:
+The supported X7 OS is 3.11. Its launch routine uses `GAM_CFG` bit `0x1000`
+for RTC; the older [public BIOS header] does not describe this bit. The
+old `0x8010` RTC-cache interface is not used by this implementation.
 
-1. Back up `ED64/gamedata/`. Check the stock OS clock and verify the same
-   Animal Forest ROM reports a sensible date/time when started directly.
-2. Start this SleekMenu build through the stock OS, then start Animal
-   Forest. Compare its date/time with the direct launch. Check that time
-   advances after spending a few minutes in the menu before launching.
-3. Save, reset to the stock menu, and launch the same ROM again. Confirm
-   the save and elapsed time, then repeat after a power cycle.
-4. Check an EEPROM game and an SRAM game through SleekMenu, including save
-   and reload, because RTC remains enabled during those launches too.
-5. If using the stock OS autoexec facility, check that entry path separately;
-   it must honour the menu's RTC header just as a manual launch does.
+`tools/trace_x7_rtc.py` executes the original OS 3.11 MIPS instructions in
+Unicorn with I2C/Joybus and unrelated menu routines stubbed. It checks all
+seven save types with RTC off and on. Off produces no clock traffic and
+writes exactly the save type. On reads the DS1337, constructs the three
+Joybus packets, and writes `save_type | 0x1000`.
 
-Record the cartridge, OS version, console, ROM identity, launch method,
-clock readings, and save results in the PR. Until verified, use the stock
-OS for Animal Forest on the X7. This change does not alter the Pro backend.
+The script requires an independently supplied [official OS 3.11 ROM] and
+checks its SHA-256 before using fixed addresses. No firmware is included.
+To reproduce, with Python and the optional `unicorn` package available:
 
-[developer override format]: https://github.com/krikzz/ed64-x-pub/blob/master/docs/rom_config_database.md
-[OS changelist]: https://krikzz.com/pub/support/everdrive-64/x-series/OS/changelist.txt
-[X7 clock code]: https://github.com/DragonMinded/libdragon/blob/unstable/src/ed64x.c
+```sh
+python3 tools/trace_x7_rtc.py /path/to/ED64/OS64.v64
+```
+
+Relevant OS addresses (virtual addresses, ROM offset = address -
+`0x80000400 + 0x1000`):
+
+| Address | Observed operation |
+|---|---|
+| `0x80006B28` | Game launch and per-game RTC branch |
+| `0x80006D20` | Read/initialise RTC, select bit `0x1000` |
+| `0x80001D60` | Read and normalise DS1337 fields |
+| `0x800013E8` | I2C read transaction |
+| `0x80010358` | Construct stop/time/start RTC writes |
+| `0x80010270` | Assemble a Joybus write packet |
+| `0x80000B90` | Write full configuration to `GAM_CFG` |
+
+Host tests exercise the production register and RTC modules, comparing
+packets against this trace and checking every save/config combination,
+bus failures, cancellation before save preparation, and an RTC launch
+followed by a non-RTC launch.
+
+## Remaining hardware check
+
+The CPU trace establishes the stock software's behaviour, not electrical
+operation of an X7. Validate Animal Forest's clock progression and save
+reload through this build, then one ordinary EEPROM game as a check of
+the RTC-off handoff. Broad testing of every game with RTC enabled is not
+required by this design: ordinary launches receive the same RTC-off
+configuration as the stock OS. The Pro backend is unchanged.
+
+[public BIOS header]: https://github.com/krikzz/ed64-x-pub/blob/master/ED64-XIO/inc/bios.h
+[official OS 3.11 ROM]: https://krikzz.com/pub/support/everdrive-64/x-series/OS/OS-V3.11.zip

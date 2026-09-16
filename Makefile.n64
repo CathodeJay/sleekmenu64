@@ -51,10 +51,6 @@ $(ROMNAME).z64: $(DFS_IMAGE)
 endif
 
 $(ROMNAME).z64: N64_ROM_TITLE = "SleekMenu 64"
-# The X7 inherits the clock initialised by the stock OS. Request it for the
-# menu itself, before loading a game replaces the menu's ROM header.
-# See docs/X7_RTC.md for the handoff assumptions and hardware validation.
-$(ROMNAME).z64: N64_ROM_RTC = 1
 
 clean:
 	$(RM) -r $(BUILD_DIR) $(ROMNAME).z64

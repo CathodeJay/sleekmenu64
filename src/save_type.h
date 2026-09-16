@@ -21,9 +21,8 @@ typedef enum {
 
 #define SM_SAVE_TYPE_MAX 6u
 
-/* Config nibble. Additive, per the same document. Neither bit belongs to
-   REG_GAM_CFG: RTC is a separate register and region affects the boot
-   handoff, so both are carried for later and applied by neither yet. */
+/* ROM config nibble, not raw register bits. The X7 backend translates RTC
+   to GAM_CFG bit 0x1000; region-free is handled by the boot path. */
 #define SM_SAVE_CFG_RTC 1u
 #define SM_SAVE_CFG_REGION_FREE 2u
 #define SM_SAVE_CFG_MAX 3u

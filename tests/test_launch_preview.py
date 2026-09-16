@@ -54,6 +54,16 @@ def build_and_run(name, sources, extra_flags=(), args=()):
 
 
 class HostModuleTests(unittest.TestCase):
+    def test_x7_rtc_protocol(self):
+        build_and_run("x7-rtc-test",
+                      ["src/x7_rtc.c", "src/x7_save_reg.c", "tests/x7_rtc_test.c"],
+                      ["-D__mips__", "-Itests/stubs/x7"])
+
+    def test_x7_rtc_launch_order(self):
+        build_and_run("x7-rtc-launch-test", ["tests/x7_rtc_launch_test.c"],
+                      ["-D__mips__", "-Itests/stubs/x7", "-ffunction-sections",
+                       "-fdata-sections", "-Wl,--gc-sections"])
+
     def test_host_policy_module(self):
         build_and_run("launch-policy-test",
                       ["src/launch_policy.c", "tests/launch_policy_test.c"])
@@ -248,7 +258,8 @@ class RetiredModuleTests(unittest.TestCase):
         for path in (ROOT / "src").rglob("*.c"):
             if path.name == "x7_save_reg.c":
                 continue
-            if "sm_x7_apply_save_type(" in strip_comments(path.read_text(encoding="utf-8")):
+            source = strip_comments(path.read_text(encoding="utf-8"))
+            if "sm_x7_apply_save_type(" in source or "sm_x7_apply_launch_config(" in source:
                 callers.add(path.name)
         # save_io.c is the second sanctioned caller: moving a save to or from
         # the cartridge means telling the cartridge which save device to be,
@@ -261,8 +272,8 @@ class RetiredModuleTests(unittest.TestCase):
         x7 = strip_comments((ROOT / "src/flashcart_x7.c").read_text(encoding="utf-8"))
         hook = x7.index("static void x7_point_of_no_return(void)")
         hook_end = x7.index("\n}", hook)
-        self.assertIn("sm_x7_apply_save_type(", x7[hook:hook_end])
-        self.assertEqual(x7.count("sm_x7_apply_save_type("), 1)
+        self.assertIn("sm_x7_apply_launch_config(", x7[hook:hook_end])
+        self.assertEqual(x7.count("sm_x7_apply_launch_config("), 1)
         self.assertIn("sm_rom_boot(x7_point_of_no_return, false, cheats)", x7)
         boot = strip_comments((ROOT / "src/rom_boot.c").read_text(encoding="utf-8"))
         self.assertLess(boot.index("disable_interrupts()"),
