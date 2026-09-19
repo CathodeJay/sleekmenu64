@@ -386,13 +386,13 @@ class CatalogTab:
         if card is None:
             self.summary.set("No card picked.")
         else:
+            broken = None
             try:
                 self.document = card_catalog.load(card)
             except card_catalog.CatalogJsonError as error:
-                self.summary.set(str(error))
+                broken = str(error)
             if self.document is None:
-                if not self.summary.get().startswith(str(card)):
-                    self.summary.set("No catalog on this card yet: press Prepare.")
+                self.summary.set(broken or card_catalog.why_missing(card))
             else:
                 self.covers = card_catalog.Covers.open(card)
                 self.games = {str(game["path"]): game for game in self.document["games"]}

@@ -60,6 +60,17 @@ def load(card: Path) -> dict | None:
     return document
 
 
+def why_missing(card: Path) -> str:
+    """What to say when a card has no catalog.json: a card prepared before
+    the file existed still has the packed catalog the console reads, and
+    that is worth saying, since "no catalog" would be untrue."""
+    packed = card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME
+    if packed.is_file():
+        return (f"This card has a {card_layout.CATALOG_NAME} the console can read, built by an "
+                "earlier version of this tool; press Prepare once and it shows here.")
+    return "No catalog on this card yet: press Prepare."
+
+
 def tree(games: list[dict]) -> dict:
     """The games as the browser shows them: folders nested from the card
     root, each holding its own games in title order. A folder is a dict

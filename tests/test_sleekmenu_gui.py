@@ -182,6 +182,15 @@ class WindowTests(unittest.TestCase):
             write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
+            # a card prepared before catalog.json existed: the packed catalog is there, and said so
+            (card / "sleekmenu" / "catalog.json").unlink()
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            catalog = root.sleekmenu_state["catalog"]
+            self.assertIn("earlier version", catalog.summary.get())
+            root.destroy()
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
             root = sleekmenu_gui.build(card=str(card))
             root.update()
             catalog = root.sleekmenu_state["catalog"]

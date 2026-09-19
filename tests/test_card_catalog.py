@@ -100,8 +100,14 @@ class CardTests(unittest.TestCase):
     def test_a_card_without_a_catalog_is_none_and_a_broken_one_is_an_error(self):
         with tempfile.TemporaryDirectory() as scratch:
             self.assertIsNone(card_catalog.load(Path(scratch)))
+            self.assertEqual(card_catalog.why_missing(Path(scratch)), "No catalog on this card yet: press Prepare.")
+            # a card prepared before catalog.json existed has the packed one and nothing else
+            packed = Path(scratch) / "sleekmenu" / "catalog.ebc"
+            packed.parent.mkdir(parents=True)
+            packed.write_bytes(b"EBCT")
+            self.assertIn("earlier version", card_catalog.why_missing(Path(scratch)))
+            self.assertIsNone(card_catalog.load(Path(scratch)))
             broken = card_catalog.path_on(Path(scratch))
-            broken.parent.mkdir(parents=True)
             broken.write_text("{not json")
             with self.assertRaises(card_catalog.CatalogJsonError):
                 card_catalog.load(Path(scratch))
