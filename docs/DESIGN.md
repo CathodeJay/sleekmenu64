@@ -105,7 +105,11 @@ and `description.txt` fill in the rest.
 
 Covers are converted by `tools/make_sprite.py`, which writes libdragon's
 sprite format itself; `tests/test_make_sprite.py` checks its output byte for
-byte against the real `mksprite`. No toolchain anywhere in the art path.
+byte against the real `mksprite`, at the thumbnail's size and the box
+view's. No toolchain anywhere in the art path. The two packs come from one
+plan and one decode per picture, so they cannot disagree about which
+picture a game gets, and the large sprite never enlarges a source: a
+libretro box fills it, a collection scan sits in it at its own size.
 The same module decodes a sprite back to pixels, which is how the window
 shows a box: out of `covers.pak`, exactly as the console will draw it,
 never from the picture it was made from.
@@ -120,7 +124,7 @@ On the console the work is split into small modules:
 | `input` | controller state mapped to actions |
 | `catalog` | bounded parsing and CRC check of the catalog |
 | `cover_pack` | binary-searched cover lookup in `covers.pak` |
-| `ui` | list, grid and coverflow views, filters, the launch card, the cheats page |
+| `ui` | list, grid and coverflow views, filters, the launch card, the box view, the cheats page |
 | `launch_policy` | suffix, magic, size and boot-code checks before anything boots |
 | `flashcart` / `launch` | one interface over the two cartridges; the X7 backend streams the ROM through libcart, the Pro backend (`src/pro/`) has the cartridge's MCU copy it |
 | `x7_rtc` / `x7_save_reg` | the X7's clock and save configuration for the game about to run |
@@ -154,6 +158,15 @@ per frame; coverflow carries six of its seven covers across a step and reads
 one. Covers live in a single `covers.pak` because opening a file by name on a
 FAT card walks the folder from the start, and with long names that is over
 100 KB of reading per picture.
+
+**The box, full screen.** A on the launch card opens `SM_SCREEN_BOX`: the
+game's cover from `covers-large.pak`, 256×180, centred between the title
+band and the footer -- the largest a 1.4:1 box gets inside the NTSC safe
+area with both bands kept. The sprite is read when the view opens (92 KB,
+one seek) and freed when it closes; nothing is cached. Without the pack the
+view doubles the thumbnail nearest-neighbour and says why. The large sprite
+is drawn by the same software blit as everything else, 46K pixels a frame
+against the grid's 37K.
 
 **The box back.** The description on the launch card is rendered whole,
 once, into a surface of its own when the card opens, and the card shows a

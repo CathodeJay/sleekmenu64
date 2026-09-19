@@ -54,10 +54,11 @@ class FieldTests(unittest.TestCase):
         self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD"), roms=sleekmenu_prep.WHOLE_CARD),
                          "an empty games folder is the whole card, said so -- never 'as remembered'")
         options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", False, True, hires=True,
-                                             roms=" ROMS/ ")
+                                             roms=" ROMS/ ", large_covers=False)
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
         self.assertEqual(options.roms, Path("ROMS"))
         self.assertTrue(options.no_checksums and options.fix_checksums and options.hires)
+        self.assertTrue(options.no_large_covers)
 
     def test_a_card_is_described_in_one_line(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -204,7 +205,13 @@ class WindowTests(unittest.TestCase):
             catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()
             self.assertEqual(catalog.title.get(), "Kaizo")
-            self.assertIsNotNone(catalog.photo, "the box, decoded from covers.pak")
+            self.assertIsNotNone(catalog.photo, "the box, decoded from covers-large.pak")
+            self.assertEqual(catalog.photo.width(), 256)
+            # without the large pack, the thumbnail doubled
+            (card / "sleekmenu" / "covers-large.pak").unlink()
+            catalog.reload()
+            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            root.update()
             self.assertEqual(catalog.photo.width(), 96 * sleekmenu_gui.BOX_ZOOM)
             self.assertIn("parent game", catalog.notes.get())
             catalog.only_mine.set(True)

@@ -111,16 +111,21 @@ class HostModuleTests(unittest.TestCase):
             with self.subTest(covers="pack" if packed else "loose"), \
                  tempfile.TemporaryDirectory() as scratch:
                 pack = pathlib.Path(scratch) / "covers.pak"
+                large = pathlib.Path(scratch) / "covers-large.pak"
                 if packed:
                     pack.write_bytes(cover_pack.build(
                         {"cover.sprite": make_sprite.encode(
                             Image.new("RGBA", (96, 72), (40, 80, 120, 255)))}))
+                    large.write_bytes(cover_pack.build(
+                        {"cover.sprite": make_sprite.encode(
+                            Image.new("RGBA", make_sprite.LARGE_CANVAS_SIZE, (40, 80, 120, 255)))}))
                 build_and_run(
                     "ui-test", sources,
                     ["-Itests/stubs"] + CHEATS_FLAGS +
                     [f'-DSM_FAVORITES_PATH="{scratch}/favorites.txt"',
                      f'-DSM_COVERS_DIR="{scratch}/covers"',
-                     f'-DSM_COVER_PACK_PATH="{pack}"'],
+                     f'-DSM_COVER_PACK_PATH="{pack}"',
+                     f'-DSM_COVER_PACK_LARGE_PATH="{large}"'],
                 )
 
     def test_host_list_view_module(self):

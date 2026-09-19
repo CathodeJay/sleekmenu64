@@ -88,6 +88,9 @@ class CardTests(unittest.TestCase):
     def test_the_box_shown_is_the_sprite_the_console_will_draw(self):
         covers = card_catalog.Covers.open(self.card)
         self.assertIsNotNone(covers)
+        self.assertTrue(covers.has_large)
+        width, height, rgb = covers.pixels(self.games["ROMS/Hacks/Wave Race Kaizo.z64"], large=True)
+        self.assertEqual((width, height), make_sprite.LARGE_CANVAS_SIZE)
         width, height, rgb = covers.pixels(self.games["ROMS/Hacks/Wave Race Kaizo.z64"])
         self.assertEqual((width, height), make_sprite.CANVAS_SIZE)
         self.assertEqual(len(rgb), width * height * 3)

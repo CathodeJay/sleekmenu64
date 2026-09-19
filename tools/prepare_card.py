@@ -40,7 +40,8 @@ from tools import (build_catalog, build_metadata, card_catalog, cover_pack, cove
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 from tools.card_layout import (  # noqa: F401  (re-exported for callers)
-    CARD_FOLDER, COVERS_FOLDER, COVER_PACK_NAME, CATALOG_NAME, CATALOG_JSON_NAME)
+    CARD_FOLDER, COVERS_FOLDER, COVERS_LARGE_FOLDER, COVER_PACK_NAME, COVER_PACK_LARGE_NAME,
+    CATALOG_NAME, CATALOG_JSON_NAME)
 
 
 class PrepareError(ValueError):
@@ -58,7 +59,7 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             work: Path | None = None, dry_run: bool = False,
             loose_covers: bool = False, genres: Path | None = None,
             log=print, progress_stream=None, rom_paths: list[str] | None = None,
-            progress_factory=None, roms_folder: str = "") -> dict:
+            progress_factory=None, roms_folder: str = "", large_covers: bool = True) -> dict:
     _check_directory(roms, "ROM folder")
     _check_directory(card, "card")
     try:
@@ -73,6 +74,7 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
     work = work or Path(tempfile.mkdtemp(prefix="sleekmenu-"))
     work.mkdir(parents=True, exist_ok=True)
     covers_out = work / CARD_FOLDER / COVERS_FOLDER
+    covers_large_out = work / CARD_FOLDER / COVERS_LARGE_FOLDER if large_covers else None
     if rom_paths is None:
         rom_paths = library.walk(roms)
     summary: dict[str, object] = {"database_entries": len(coverdb.load(database_path))
@@ -110,9 +112,10 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
                 progress = Progress(len(planned.sources), "sprites",
                                     stream=None if progress_stream is None else progress_stream)
         summary["sprites"] = pack_covers.pack(planned, repo, covers_out, dry_run=dry_run,
-                                              progress=progress)
+                                              progress=progress, large_destination=covers_large_out)
         if progress is not None:
-            progress.done(f"sprites:  {summary['sprites']} written")
+            progress.done(f"sprites:  {summary['sprites']} written"
+                          + (" at both sizes" if covers_large_out is not None else ""))
         else:
             log(f"sprites:  {summary['sprites']} written to {covers_out}")
         if summary["sprites"] and not loose_covers and not dry_run:
@@ -123,6 +126,13 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             count, size = cover_pack.pack_directory(covers_out, work / COVER_PACK_NAME)
             summary["pack_bytes"] = size
             log(f"pack:     {count} covers in one {size // 1024} KB file")
+            if covers_large_out is not None:
+                # The box view's pack: the same names at 256x180, opened by
+                # the browser beside the first and read one sprite at a time.
+                count, size = cover_pack.pack_directory(covers_large_out, work / COVER_PACK_LARGE_NAME)
+                summary["large_pack_bytes"] = size
+                log(f"large:    {count} covers for the box view in one "
+                    + (f"{size // 1048576} MB" if size >= 1048576 else f"{size // 1024} KB") + " file")
 
     metadata_path = work / "metadata.json"
     document, how = build_metadata.build(roms, card, database_path, genres, overrides,
@@ -161,6 +171,9 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             else:
                 shutil.copy2(work / COVER_PACK_NAME, destination / COVER_PACK_NAME)
                 written.append(f"{CARD_FOLDER}/{COVER_PACK_NAME} ({summary['sprites']} covers)")
+                if covers_large_out is not None:
+                    shutil.copy2(work / COVER_PACK_LARGE_NAME, destination / COVER_PACK_LARGE_NAME)
+                    written.append(f"{CARD_FOLDER}/{COVER_PACK_LARGE_NAME} ({summary['sprites']} covers)")
         if rom_image is not None:
             if not rom_image.is_file():
                 raise PrepareError(f"ROM image not found: {rom_image}")
@@ -185,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="build everything, write nothing")
     parser.add_argument("--loose-covers", action="store_true",
                         help="write a covers/ directory instead of covers.pak; slower to browse")
+    parser.add_argument("--no-large-covers", action="store_true",
+                        help="skip covers-large.pak, the box view's 256x180 covers")
     parser.add_argument("--genres", type=Path, default=build_metadata.DEFAULT_GENRES,
                         help="genre consolidation map; pass a missing path to keep libretro's")
     args = parser.parse_args(argv)
@@ -194,7 +209,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.metadata is not None:
             repo = MetadataRepo.open(args.metadata)
         summary = prepare(args.roms, args.card, args.coverdb, repo, args.rom, args.overrides,
-                          args.work, args.dry_run, args.loose_covers, args.genres)
+                          args.work, args.dry_run, args.loose_covers, args.genres,
+                          large_covers=not args.no_large_covers)
     except (PrepareError, RepoError, coverdb.CoverDBError, pack_covers.CoverPackError,
             make_sprite.SpriteError, cover_pack.CoverPackError, build_catalog.CatalogError,
             library.LibraryError, OSError) as exc:

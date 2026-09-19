@@ -19,6 +19,7 @@ this is the reference.
 /sleekmenu/catalog.ebc      titles, genre, publisher, year     written by the tool
 /sleekmenu/catalog.json     the same, with every field's source  written by the tool
 /sleekmenu/covers.pak       every cover, one file              written by the tool
+/sleekmenu/covers-large.pak the same covers at 256x180             written by the tool
 /sleekmenu/favorites.txt    one ROM path per line              written by the browser
 /sleekmenu/history.txt      the last fifteen launches          written by the browser
 /sleekmenu/cheats.txt       which cheats are on, per game      written by the browser
@@ -182,6 +183,16 @@ The covers go into one `covers.pak` rather than a folder of files because
 opening a file by name on a FAT card means walking the folder from the start,
 and with long file names that is slow. `--loose-covers` writes the folder
 form instead, which is handier when debugging a card.
+
+`covers-large.pak` is the same plan at 256x180 -- the same names, from the
+same pictures, one decode for both sizes -- for the box view the browser
+opens with A on a game's details. A picture larger than the canvas (a
+libretro box, one of yours) is fitted to it; the collection's 158x112 scan
+is centred at its own size, never enlarged. About 90 KB a cover, so 700
+covers are 64 MB; `--no-large-covers` skips it, and the browser then doubles
+the thumbnail in the view and says so. The browser opens the pack beside
+the first at startup and reads one sprite when the view opens, freed when
+it closes.
 
 ## Step by step, from a checkout
 

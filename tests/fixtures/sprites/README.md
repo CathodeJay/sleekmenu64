@@ -5,3 +5,6 @@ They exist so the test suite can prove `tools/make_sprite.py` still writes
 libdragon's container correctly without requiring the libdragon toolchain to be
 installed. Regenerate them only when deliberately following an upstream format
 change, and say so in the commit.
+
+`256x180.sprite` is the box view's size (`make_sprite.LARGE_CANVAS_SIZE`),
+made the same way.

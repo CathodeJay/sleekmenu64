@@ -21,6 +21,11 @@ BROWSER_ROM = "SleekMenu64.z64"
 
 COVERS_FOLDER = "covers"
 COVER_PACK_NAME = "covers.pak"
+#: The box view's covers, 256x180 against the thumbnails' 96x72: the same
+#: container and the same names, in a second pack the browser opens beside
+#: the first. Optional: a card without it still browses.
+COVER_PACK_LARGE_NAME = "covers-large.pak"
+COVERS_LARGE_FOLDER = "covers-large"
 CATALOG_NAME = "catalog.ebc"
 #: Under CARD_FOLDER: the catalog as the tool built it, with where every
 #: field came from (tools/card_catalog.py). Read by the tool's window and by

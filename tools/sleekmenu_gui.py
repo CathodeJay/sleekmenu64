@@ -196,7 +196,7 @@ class Runner:
 
 
 def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums: bool,
-                 hires: bool = False, roms: str = "") -> sleekmenu_prep.Options:
+                 hires: bool = False, roms: str = "", large_covers: bool = True) -> sleekmenu_prep.Options:
     """The window's fields as the run takes them. An empty metadata field
     means whatever is on the card, as on the command line. An empty games
     folder is the whole card, said so: the field shows what the card
@@ -208,6 +208,7 @@ def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums:
         no_checksums=not check_checksums,
         fix_checksums=fix_checksums,
         hires=hires,
+        no_large_covers=not large_covers,
     )
 
 
@@ -455,14 +456,19 @@ class CatalogTab:
                              f" · Title: {sources.get('title', '')}")
             self.description.insert("1.0", str(game.get("description") or ""))
             self.notes.set("\n".join(provenance.notes(game)))
-            pixels = self.covers.pixels(game) if self.covers is not None else None
+            # The box view's sprite when the card has the large pack --
+            # what the console draws full screen -- else the thumbnail,
+            # doubled so it is legible.
+            large = self.covers.pixels(game, large=True) if self.covers is not None else None
+            pixels = large or (self.covers.pixels(game) if self.covers is not None else None)
             if pixels is None:
                 self.photo = None
                 self.box.configure(image="", text="(no box)")
             else:
                 width, height, rgb = pixels
-                self.photo = self.tk.PhotoImage(data=make_sprite.to_ppm(width, height, rgb),
-                                                format="PPM").zoom(BOX_ZOOM, BOX_ZOOM)
+                self.photo = self.tk.PhotoImage(data=make_sprite.to_ppm(width, height, rgb), format="PPM")
+                if large is None:
+                    self.photo = self.photo.zoom(BOX_ZOOM, BOX_ZOOM)
                 self.box.configure(image=self.photo, text="")
         self.description.configure(state="disabled")
 
@@ -583,6 +589,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     check_var = tk.BooleanVar(value=True)
     fix_var = tk.BooleanVar(value=False)
     hires_var = tk.BooleanVar(value=False)
+    large_var = tk.BooleanVar(value=True)
     status_var = tk.StringVar(value="")
 
     ttk.Label(frame, text="Card").grid(row=0, column=0, sticky="w")
@@ -609,6 +616,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                     variable=fix_var).pack(anchor="w")
     ttk.Checkbutton(options, text="Fetch high-resolution boxes from libretro (about 250 KB a game, once)",
                     variable=hires_var).pack(anchor="w")
+    ttk.Checkbutton(options, text="Build the large covers for the box view (about 90 KB a game)",
+                    variable=large_var).pack(anchor="w")
 
     bar = ttk.Progressbar(frame, mode="determinate")
     bar.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(12, 2))
@@ -755,7 +764,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         prepare.configure(state="disabled")
         stop.configure(state="normal")
         runner = Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get(),
-                                     hires_var.get(), roms_var.get()))
+                                     hires_var.get(), roms_var.get(), large_var.get()))
         state["runner"] = runner
         runner.start()
         root.after(100, poll)

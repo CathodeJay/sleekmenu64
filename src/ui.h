@@ -61,7 +61,8 @@ _Static_assert((int)SM_UI_SLOTS_MAX >= (int)SM_UI_GRID_VISIBLE,
    after you stop. */
 enum { SM_UI_SETTLE_FRAMES = 6 };
 
-typedef enum { SM_SCREEN_LIBRARY, SM_SCREEN_FILTERS, SM_SCREEN_LAUNCH_DETAILS, SM_SCREEN_CHEATS } sm_screen_t;
+typedef enum { SM_SCREEN_LIBRARY, SM_SCREEN_FILTERS, SM_SCREEN_LAUNCH_DETAILS, SM_SCREEN_CHEATS,
+               SM_SCREEN_BOX } sm_screen_t;
 typedef enum { SM_VIEW_LIST, SM_VIEW_GRID, SM_VIEW_COVERFLOW } sm_view_t;
 
 typedef struct {
@@ -115,6 +116,11 @@ typedef struct {
     sprite_t *cover_sprite;
     uint32_t cover_index;
     bool cover_loaded;
+    /* The box view's sprite, read from covers-large.pak when the view opens
+       and freed when it closes: one 92 KB read, held for as long as it is on
+       screen and no longer. NULL with the view open means the card has no
+       large cover for this game, and the view doubles the thumbnail. */
+    sprite_t *box_sprite;
     sprite_t *slot_sprites[SM_UI_SLOTS_MAX];
     uint32_t slot_indices[SM_UI_SLOTS_MAX];
     /* Which slots have not been looked up yet. A scroll keeps the sprites for
@@ -165,6 +171,10 @@ typedef struct {
        keep running, but it pays a FatFs directory walk per cover and that is
        the pause between moving the cursor and the picture arriving. */
     sm_cover_pack_t covers;
+    /* The box view's pack, opened beside the first; its index is 16 bytes a
+       cover. A card without it is a card without the view's large art, not
+       an error. */
+    sm_cover_pack_t covers_large;
     bool initialized;
 } sm_ui_t;
 

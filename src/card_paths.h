@@ -25,6 +25,11 @@
 #ifndef SM_COVER_PACK_PATH
 #define SM_COVER_PACK_PATH SM_CARD_DIR "/covers.pak"
 #endif
+/* The box view's covers, 256x180, same container and names as covers.pak.
+   Optional: without it the view doubles the thumbnail and says so. */
+#ifndef SM_COVER_PACK_LARGE_PATH
+#define SM_COVER_PACK_LARGE_PATH SM_CARD_DIR "/covers-large.pak"
+#endif
 #ifndef SM_COVERS_DIR
 #define SM_COVERS_DIR SM_CARD_DIR "/covers"
 #endif

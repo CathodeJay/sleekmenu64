@@ -37,6 +37,10 @@ import sys
 from pathlib import Path
 
 CANVAS_SIZE = (96, 72)
+#: The box view's sprite: what fits the safe area under the header and
+#: above the footer, at the box's own proportions. A picture smaller than
+#: this is centred at its own size, never stretched.
+LARGE_CANVAS_SIZE = (256, 180)
 # The colour behind art that does not fill the frame. Matching the detail
 # panel's background makes a portrait cover look matted rather than pasted.
 MATTE_RGBA = (28, 32, 40, 255)
@@ -147,10 +151,12 @@ def to_ppm(width: int, height: int, rgb: bytes) -> bytes:
 def fit_image(image, canvas: tuple[int, int] = CANVAS_SIZE,
               matte: tuple[int, int, int, int] = MATTE_RGBA, width_scale: float = 1.0):
     """Fit an image inside the sprite canvas without changing its aspect
-    ratio -- after undoing a stretch the source carries, when `width_scale`
-    says it does: the Pro menu's metadata is pre-stretched to double width
-    for a 640-pixel mode, and fitting that as-is gives a letterboxed
-    ribbon of a box."""
+    ratio and without enlarging it -- a scan smaller than the canvas is
+    centred at its own size, which is what the box view wants from the
+    collection's 158-pixel fronts: honest, not soft -- after undoing a
+    stretch the source carries, when `width_scale` says it does: the Pro
+    menu's metadata is pre-stretched to double width for a 640-pixel mode,
+    and fitting that as-is gives a letterboxed ribbon of a box."""
     from PIL import Image
 
     source = image.convert("RGBA")
@@ -178,31 +184,47 @@ def convert_image(image, destination: Path, canvas: tuple[int, int] | None = CAN
     return len(payload)
 
 
+def convert_sizes(image, targets, width_scale: float = 1.0) -> int:
+    """One open image to several sprites -- `targets` is a list of
+    (destination, canvas) -- decoded once, which is what writing the small
+    and the large cover from one scan wants. Returns the bytes written."""
+    return sum(convert_image(image, destination, canvas, width_scale=width_scale)
+               for destination, canvas in targets)
+
+
 def convert_bytes(data: bytes, destination: Path, what: str = "image",
-                  canvas: tuple[int, int] | None = CANVAS_SIZE, width_scale: float = 1.0) -> int:
-    """Convert an image held in memory -- one read straight out of a zip."""
+                  canvas: tuple[int, int] | None = CANVAS_SIZE, width_scale: float = 1.0,
+                  also=None) -> int:
+    """Convert an image held in memory -- one read straight out of a zip.
+    `also` is a list of further (destination, canvas) pairs from the same
+    decode."""
     try:
         from PIL import Image
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise SpriteError("Pillow is required to convert images: pip install pillow") from exc
     try:
         with Image.open(io.BytesIO(data)) as image:
-            return convert_image(image, destination, canvas, width_scale=width_scale)
+            return convert_sizes(image, [(destination, canvas)] + list(also or []), width_scale)
     except OSError as exc:
         raise SpriteError(f"cannot read {what}: {exc}") from exc
 
 
 def convert(source: Path, destination: Path, canvas: tuple[int, int] | None = CANVAS_SIZE,
             matte: tuple[int, int, int, int] = MATTE_RGBA,
-            tiles: tuple[int, int] | None = None) -> int:
-    """Convert one image file to a sprite. Returns the bytes written."""
+            tiles: tuple[int, int] | None = None, also=None) -> int:
+    """Convert one image file to a sprite. Returns the bytes written.
+    `also` is a list of further (destination, canvas) pairs from the same
+    decode."""
     try:
         from PIL import Image
     except ImportError as exc:  # pragma: no cover - environment dependent
         raise SpriteError("Pillow is required to convert images: pip install pillow") from exc
     try:
         with Image.open(source) as image:
-            return convert_image(image, destination, canvas, matte, tiles)
+            written = convert_image(image, destination, canvas, matte, tiles)
+            for other, other_canvas in also or []:
+                written += convert_image(image, other, other_canvas, matte)
+            return written
     except OSError as exc:
         raise SpriteError(f"cannot read image {source}: {exc}") from exc
 

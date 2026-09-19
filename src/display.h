@@ -33,6 +33,10 @@ enum {
     SM_ROW_HEIGHT = 10,
     SM_COVER_WIDTH = 96,
     SM_COVER_HEIGHT = 72,
+    /* The box view: what fits the safe area under the header and above the
+       footer at a box's proportions. tools/make_sprite.py writes this size. */
+    SM_COVER_LARGE_WIDTH = 256,
+    SM_COVER_LARGE_HEIGHT = 180,
     SM_FONT_WIDTH = 5,
     SM_FONT_HEIGHT = 8
 };

@@ -93,6 +93,7 @@ What the tool writes, and what it leaves alone:
 /sleekmenu/catalog.ebc     titles, genre, publisher, year, descriptions
 /sleekmenu/catalog.json    the same, readable, with where every field came from
 /sleekmenu/covers.pak      every cover in one file
+/sleekmenu/covers-large.pak the same covers at 256×180, for the box view
 /sleekmenu/favorites.txt   written by the browser as you star games
 /sleekmenu/history.txt     the last fifteen games you launched
 /sleekmenu/cheats.txt      which cheats are on, per game
@@ -110,7 +111,7 @@ edit in the window.
 | Control | Browsing | Launch details |
 |---|---|---|
 | D-pad / stick | Move | Scroll the description |
-| A | Open a folder, or a game's details | — |
+| A | Open a folder, or a game's details | The box, full screen (B back) |
 | B | Parent folder | Back to the list |
 | Start | Play the game under the cursor | Play |
 | C-left / C-right | Previous / next genre tab | — |
@@ -136,6 +137,11 @@ The **grid** shows twelve covers at a time, for scanning a folder by eye.
 side. Here L and R jump to the next letter of the alphabet instead of paging.
 
 ![Coverflow: the selected box face on, the shelf receding on both sides](docs/screenshots/coverflow.jpg)
+
+**The box**, full screen: A on a game's details. It is drawn from
+`covers-large.pak`, which the tool writes beside the small pack: the
+collection's scan uncropped at its own size, or, after `--hires`, the
+512-pixel box fitted to the screen. B goes back; Start still plays.
 
 Z opens the **filter** from any view: genre (with a count for each), region,
 players, publisher, year and favourites, combined. Z again clears it, B
@@ -237,8 +243,8 @@ keeps a 512-pixel box for every retail cartridge; `--hires` (the window's
 "Fetch high-resolution boxes" box) fetches one for every game on the card
 the database knows, about 250 KB each, into `sleekmenu/art/hires/` by
 game code, and builds the covers from those — a 512-pixel box downscaled
-looks better than a 158-pixel one downscaled, and the large view of a
-later release will draw them at full size. Only what is missing is
+looks better than a 158-pixel one downscaled, and the box view (A on a
+game's details) draws them at full size. Only what is missing is
 fetched, so a second run costs nothing; a picture of your own still wins;
 Stop ends it between two boxes, and the report names the games libretro
 has no box for.

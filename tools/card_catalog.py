@@ -114,33 +114,50 @@ def count(node: dict) -> int:
 
 
 class Covers:
-    """covers.pak, read once, for looking at the boxes exactly as the
-    console will draw them: the sprite out of the pack, decoded -- never
-    the picture the sprite was made from."""
+    """covers.pak, and covers-large.pak when the card has it, read once,
+    for looking at the boxes exactly as the console will draw them: the
+    sprite out of the pack, decoded -- never the picture the sprite was
+    made from."""
 
-    def __init__(self, blob: bytes):
+    def __init__(self, blob: bytes, large_blob: bytes | None = None):
         self.blob = blob
         self.entries = {entry.hash: entry for entry in cover_pack.read_index(blob)}
+        self.large_blob = large_blob
+        self.large_entries = ({entry.hash: entry for entry in cover_pack.read_index(large_blob)}
+                              if large_blob is not None else {})
 
     @classmethod
     def open(cls, card: Path) -> "Covers | None":
-        """None when the card has no pack, or a pack that will not read."""
-        pack = card / card_layout.CARD_FOLDER / card_layout.COVER_PACK_NAME
+        """None when the card has no pack, or a pack that will not read.
+        A large pack that will not read is left out, not fatal."""
+        folder = card / card_layout.CARD_FOLDER
         try:
-            return cls(pack.read_bytes())
+            blob = (folder / card_layout.COVER_PACK_NAME).read_bytes()
+            covers = cls(blob)
         except (OSError, cover_pack.CoverPackError):
             return None
+        try:
+            covers = cls(blob, (folder / card_layout.COVER_PACK_LARGE_NAME).read_bytes())
+        except (OSError, cover_pack.CoverPackError):
+            pass
+        return covers
 
-    def pixels(self, game: dict) -> tuple[int, int, bytes] | None:
-        """Width, height and packed RGB rows of the game's box; None when
-        the game has no cover or the pack lacks it."""
+    @property
+    def has_large(self) -> bool:
+        return bool(self.large_entries)
+
+    def pixels(self, game: dict, large: bool = False) -> tuple[int, int, bytes] | None:
+        """Width, height and packed RGB rows of the game's box -- the box
+        view's with `large` -- or None when the game has no cover or the
+        pack lacks it."""
         name = game.get("cover")
         if not name:
             return None
-        entry = self.entries.get(cover_pack.cover_hash(str(name)))
-        if entry is None:
+        blob, entries = (self.large_blob, self.large_entries) if large else (self.blob, self.entries)
+        entry = entries.get(cover_pack.cover_hash(str(name)))
+        if entry is None or blob is None:
             return None
         try:
-            return make_sprite.decode(self.blob[entry.offset:entry.offset + entry.length])
+            return make_sprite.decode(blob[entry.offset:entry.offset + entry.length])
         except make_sprite.SpriteError:
             return None

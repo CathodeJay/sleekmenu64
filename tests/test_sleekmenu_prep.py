@@ -221,7 +221,16 @@ class EntryPointTests(unittest.TestCase):
         # and nothing was unpacked onto the card
         self.assertEqual(sorted(p.name for p in out.iterdir()),
                          [card_layout.CATALOG_NAME, card_layout.CATALOG_JSON_NAME,
-                          card_layout.COVER_PACK_NAME])
+                          card_layout.COVER_PACK_LARGE_NAME, card_layout.COVER_PACK_NAME])
+        self.assertIn("large:    1 covers for the box view", self.output)
+        # --no-large-covers leaves the box view's pack out of the run (and,
+        # as with everything else, never deletes the one already there)
+        (out / card_layout.COVER_PACK_LARGE_NAME).unlink()
+        code = self.run_prep("--no-large-covers")
+        self.assertEqual(code, 0, self.output)
+        self.assertTrue((out / card_layout.COVER_PACK_NAME).is_file())
+        self.assertFalse((out / card_layout.COVER_PACK_LARGE_NAME).exists())
+        self.assertNotIn("large:", self.output)
 
     def test_a_collection_unpacked_for_another_menu_is_honoured(self):
         write_collection(self.card / "menu", "NWRE")

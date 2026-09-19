@@ -107,21 +107,27 @@ def plan(roms_root: Path, rom_paths: list[str], repo: MetadataRepo | None,
 
 
 def pack(planned: Plan, repo: MetadataRepo | None, destination: Path, dry_run: bool = False,
-         progress=None) -> int:
+         progress=None, large_destination: Path | None = None) -> int:
     """Write every sprite the plan names. Returns how many were written.
     `progress` is anything with a step(detail) method -- see tools/progress.py
     -- or None; converting several hundred pictures takes long enough to
-    look stuck."""
+    look stuck. With `large_destination`, the box view's 256x180 sprite is
+    written there too, from the same decode of the same picture, under the
+    same name: one plan, two sizes, so the two packs cannot disagree."""
     destination.mkdir(parents=True, exist_ok=True)
+    if large_destination is not None:
+        large_destination.mkdir(parents=True, exist_ok=True)
     written = 0
     for name in sorted(planned.sources):
         if not dry_run:
             found = planned.sources[name]
+            also = ([(large_destination / name, make_sprite.LARGE_CANVAS_SIZE)]
+                    if large_destination is not None else [])
             if isinstance(found, Found):
                 make_sprite.convert_bytes(repo.read(found), destination / name, found.path,
-                                          width_scale=repo.width_scale)
+                                          width_scale=repo.width_scale, also=also)
             else:
-                make_sprite.convert(found.path, destination / name)
+                make_sprite.convert(found.path, destination / name, also=also)
         written += 1
         if progress is not None:
             progress.step(name)

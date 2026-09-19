@@ -546,6 +546,51 @@ int main(void) {
         assert(ui.screen == SM_SCREEN_LIBRARY);
     }
 
+    /* ---- the box view: A on the card, B back, one read each way ------ */
+    {
+        /* The large cover is read when the view opens and freed when it
+           closes, and the card is left as it was. Without the large pack the
+           view still opens, doubles the thumbnail and says why. The packed
+           run of this test supplies covers-large.pak with a 256x180 sprite;
+           the loose run has no such file. */
+        static const row_t rows[] = {
+            {"a.z64", "Alpha", "Racing", 0, "", 0, NULL},
+        };
+        int loads;
+        start(rows, 1u);
+        settle();
+        frame(PRESS(select));                 /* A: the launch card */
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        assert(ui.cover_sprite != NULL);
+        assert(ui.box_sprite == NULL);
+        loads = sm_test_sprite_loads;
+        frame(PRESS(select));                 /* A again: the box */
+        assert(ui.screen == SM_SCREEN_BOX);
+        if (sm_cover_pack_ready(&ui.covers_large)) {
+            assert(ui.box_sprite != NULL);
+            assert(ui.box_sprite->width == SM_COVER_LARGE_WIDTH);
+            assert(ui.box_sprite->height == SM_COVER_LARGE_HEIGHT);
+            assert(sm_test_sprite_loads == loads + 1);
+            draw_clean();
+            assert(!sm_test_drew("No large cover"));
+        } else {
+            assert(ui.box_sprite == NULL);
+            assert(sm_test_sprite_loads == loads);
+            draw_clean();
+            assert(sm_test_drew("No large covers on this card"));
+        }
+        assert(sm_test_drew("Alpha"));
+        assert(sm_test_drew("B BACK"));
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        assert(ui.box_sprite == NULL);
+        assert(ui.cover_sprite != NULL);      /* the card's own cover is untouched */
+        draw_clean();
+        assert(sm_test_drew("A BOX"));
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LIBRARY);
+    }
+
     /* ---- a filter you cannot clear is a filter you cannot use -------- */
     {
         /* Publisher and year used to step through the catalog in storage

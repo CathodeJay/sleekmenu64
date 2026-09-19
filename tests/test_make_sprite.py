@@ -29,8 +29,8 @@ class MakeSpriteTests(unittest.TestCase):
         fails, we are no longer writing the format the console reads -- the
         sizes chosen cover an odd width (row padding), a 1x1 (slice counts
         clamping to 1), and one small enough to fit TMEM plus one that is not
-        (the flag in the extended header)."""
-        for name in ("1x1", "16x16", "17x5", "33x41"):
+        (the flag in the extended header), and the box view's 256x180."""
+        for name in ("1x1", "16x16", "17x5", "33x41", "256x180"):
             with self.subTest(sprite=name):
                 width, height = (int(part) for part in name.split("x"))
                 expected = (FIXTURES / f"{name}.sprite").read_bytes()

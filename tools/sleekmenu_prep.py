@@ -17,6 +17,7 @@ What it puts beside itself:
 
     sleekmenu/catalog.ebc      titles, genre, publisher, year, descriptions
     sleekmenu/covers.pak       every cover in one file
+    sleekmenu/covers-large.pak the same covers at 256x180, for the box view
 
 The collection is n64-flashcart-menu-metadata, the public-domain set the
 N64FlashcartMenu and the EverDrive-64 Pro both use. A card without it gets
@@ -278,6 +279,7 @@ class Options:
     no_checksums: bool = False
     no_download: bool = False       # never reach for the collection, even when it is missing
     hires: bool = False             # fetch high-resolution boxes from libretro before building
+    no_large_covers: bool = False   # skip the box view's covers-large.pak
 
 
 def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None) -> int:
@@ -375,7 +377,7 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
             roms=roms, card=card, database_path=database_path, repo=repo,
             work=work / "build", dry_run=options.dry_run, genres=genres_path, log=log,
             progress_stream=None, rom_paths=rom_paths, progress_factory=progress_factory,
-            roms_folder=found.chosen)
+            roms_folder=found.chosen, large_covers=not options.no_large_covers)
     except progress.Cancelled as stop:
         fail(f"sleekmenu-prep: {stop}; the catalog and covers were not written")
         return 3
@@ -419,6 +421,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-download", action="store_true",
                         help="never fetch the collection, even when the card has none "
                              f"(also: {fetch.OFFLINE_VARIABLE}=1 in the environment)")
+    parser.add_argument("--no-large-covers", action="store_true",
+                        help="skip covers-large.pak, the 256x180 covers the box view draws "
+                             "(about 90 KB a game)")
     parser.add_argument("--hires", action="store_true",
                         help="fetch a high-resolution box from libretro-thumbnails for every game the "
                              "database knows, once (about 250 KB each), and build the covers from those")
@@ -441,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         return run(Options(card=args.card, roms=args.roms, metadata=args.metadata,
                            dry_run=args.dry_run, fix_checksums=args.fix_checksums,
                            no_checksums=args.no_checksums, no_download=args.no_download,
-                           hires=args.hires),
+                           hires=args.hires, no_large_covers=args.no_large_covers),
                    log=print, fail=lambda message: print(message, file=sys.stderr))
     except KeyboardInterrupt:
         # Ctrl-C during the fetch leaves no .part on the card; during a

@@ -202,6 +202,11 @@ static void unload_cover(sm_ui_t *ui) {
     ui->cover_loaded = false;
 }
 
+static void unload_box(sm_ui_t *ui) {
+    if (ui->box_sprite) sprite_free(ui->box_sprite);
+    ui->box_sprite = NULL;
+}
+
 static void unload_slots(sm_ui_t *ui) {
     for (int i = 0; i < SM_UI_SLOTS_MAX; i++) {
         if (ui->slot_sprites[i]) sprite_free(ui->slot_sprites[i]);
@@ -258,6 +263,37 @@ static bool cover_bytes_plausible(const void *data, uint32_t length) {
     return 8u + width * height * 2u <= length;
 }
 
+/* One sprite out of a pack, by the name the catalog gives it. In place: the
+   buffer IS the sprite, so claiming ownership is what makes sprite_free
+   release it. Copying it would double the memory and the time for no gain. */
+static sprite_t *load_pack_cover(sm_cover_pack_t *pack, const char *name) {
+    uint32_t length = 0u;
+    void *bytes = sm_cover_pack_read(pack, name, &length);
+    sprite_t *sprite;
+    if (!bytes) return NULL;
+    if (!cover_bytes_plausible(bytes, length)) { free(bytes); return NULL; }
+    sprite = sprite_load_buf(bytes, (int)length);
+    if (!sprite) { free(bytes); return NULL; }
+    sprite->flags |= SPRITE_FLAGS_OWNEDBUFFER;
+    return sprite;
+}
+
+/* The box view's sprite for an item, from the large pack only: there is no
+   loose-directory form of the large art, and a sprite of another size is
+   refused rather than drawn wrong. */
+static sprite_t *load_large_cover(uint32_t item, const sm_catalog_t *catalog, sm_cover_pack_t *pack) {
+    sm_game_t game;
+    sprite_t *sprite;
+    if ((item & SM_UI_FOLDER_BIT) || !sm_cover_pack_ready(pack) || !sm_cart_image_intact()) return NULL;
+    if (!catalog_get(catalog, item, &game) || !safe_cover_path(game.cover)) return NULL;
+    sprite = load_pack_cover(pack, game.cover);
+    if (sprite && (sprite->width != SM_COVER_LARGE_WIDTH || sprite->height != SM_COVER_LARGE_HEIGHT)) {
+        sprite_free(sprite);
+        return NULL;
+    }
+    return sprite;
+}
+
 static sprite_t *load_item_cover(uint32_t item, const sm_catalog_t *catalog,
     sm_cover_pack_t *pack) {
     if (item & SM_UI_FOLDER_BIT) return NULL;
@@ -280,16 +316,8 @@ static sprite_t *load_item_cover(uint32_t item, const sm_catalog_t *catalog,
 
     sprite_t *sprite = NULL;
     if (sm_cover_pack_ready(pack)) {
-        uint32_t length = 0u;
-        void *bytes = sm_cover_pack_read(pack, game.cover, &length);
-        if (!bytes) return NULL;
-        if (!cover_bytes_plausible(bytes, length)) { free(bytes); return NULL; }
-        /* In place: the buffer IS the sprite, so claiming ownership is what
-           makes sprite_free release it. Copying it would double the memory
-           and the time for no gain. */
-        sprite = sprite_load_buf(bytes, (int)length);
-        if (!sprite) { free(bytes); return NULL; }
-        sprite->flags |= SPRITE_FLAGS_OWNEDBUFFER;
+        sprite = load_pack_cover(pack, game.cover);
+        if (!sprite) return NULL;
     } else {
         if (snprintf(path, sizeof(path), SM_COVERS_DIR "/%s", game.cover) >= (int)sizeof(path))
             return NULL;
@@ -1094,6 +1122,7 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
         /* Opened once and held: after this, a cover costs a seek and a read
            rather than a walk through a directory of 745 long filenames. */
         sm_cover_pack_open(&ui->covers, SM_COVER_PACK_PATH);
+        sm_cover_pack_open(&ui->covers_large, SM_COVER_PACK_LARGE_PATH);
         sm_favorites_load(&ui->favorites, SM_FAVORITES_PATH);
         sm_history_load(&ui->history, SM_HISTORY_PATH);
         /* The launcher writes the entry itself, at the point of no return. */
@@ -1148,7 +1177,31 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
             ui->status = launch_status_message();
         }
         if (actions.start && launch_selected_path()[0]) launch_from_card(ui, catalog, layout);
+        if (actions.select && !ui->diagnostics && ui->item_count) {
+            /* Look closer, once more: A opened this card from the list, and
+               A opens the box from the card. The read happens here, once. */
+            unload_box(ui);
+            ui->box_sprite = load_large_cover(ui->items[ui->selected] & ~SM_UI_FOLDER_BIT,
+                catalog, &ui->covers_large);
+            ui->screen = SM_SCREEN_BOX;
+            return;
+        }
         if (!ui->diagnostics) scroll_description(ui, layout, actions);
+        return;
+    }
+    if (ui->screen == SM_SCREEN_BOX) {
+        if (actions.back || actions.select) {
+            unload_box(ui);
+            ui->screen = SM_SCREEN_LAUNCH_DETAILS;
+            return;
+        }
+        if (actions.start && launch_selected_path()[0]) {
+            /* The load draws its bar on the card; the box goes first, and
+               its 92 KB with it. */
+            unload_box(ui);
+            ui->screen = SM_SCREEN_LAUNCH_DETAILS;
+            launch_from_card(ui, catalog, layout);
+        }
         return;
     }
     if (ui->screen == SM_SCREEN_CHEATS) {
@@ -2235,10 +2288,65 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
     graphics_draw_box(s, l->safe_left, l->footer_top, width, SM_FOOTER_HEIGHT,
         graphics_make_color(16, 22, 32, 255));
     graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
-    snprintf(line, sizeof(line), "%s LOAD   C^ SWITCH   Z DETAILS%s",
+    snprintf(line, sizeof(line), "%s LOAD  A BOX  C^ SWITCH  Z DETAILS%s",
         launch_boot_mode() == SM_BOOT_VERIFY ? "VERIFIED" : "FAST",
-        launch_cheats_available() ? "   Cv CHEATS" : "");
+        launch_cheats_available() ? "  Cv CHEATS" : "");
     draw_truncated(s, l->safe_left + 3, l->footer_top + 2, line, chars);
+}
+
+/* The box view: the game's cover as large as the screen allows, centred
+   between the title band and the footer. From covers-large.pak when the card
+   has it; otherwise the thumbnail doubled, nearest-neighbour, with a line
+   saying why it is soft. */
+static void draw_box_view(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm_ui_t *ui) {
+    sm_game_t game;
+    bool have = ui->item_count &&
+        catalog_get(c, ui->items[ui->selected] & ~SM_UI_FOLDER_BIT, &game);
+    int width = l->safe_right - l->safe_left;
+    int chars = (width - 6) / SM_FONT_WIDTH;
+    int top = l->safe_top + SM_HEADER_HEIGHT + 4;
+    int bottom = l->footer_top - 4;
+    int box_w, box_h, x, y;
+
+    graphics_draw_box(s, l->safe_left, l->safe_top, width, SM_HEADER_HEIGHT,
+        graphics_make_color(24, 45, 72, 255));
+    graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
+    draw_truncated(s, l->safe_left + 3, l->safe_top + 3, have ? game.title : "BOX", chars);
+
+    if (ui->box_sprite) {
+        box_w = ui->box_sprite->width;
+        box_h = ui->box_sprite->height;
+        x = l->safe_left + (width - box_w) / 2;
+        y = top + (bottom - top - box_h) / 2;
+        graphics_draw_sprite_trans(s, x, y, ui->box_sprite);
+    } else if (ui->cover_sprite) {
+        box_w = SM_COVER_WIDTH * 2;
+        box_h = SM_COVER_HEIGHT * 2;
+        x = l->safe_left + (width - box_w) / 2;
+        y = top + (bottom - top - box_h) / 2;
+        draw_cover_scaled(s, x, y, ui->cover_sprite, box_w, box_h);
+    } else {
+        box_w = SM_COVER_WIDTH * 2;
+        box_h = SM_COVER_HEIGHT * 2;
+        x = l->safe_left + (width - box_w) / 2;
+        y = top + (bottom - top - box_h) / 2;
+        graphics_draw_box(s, x, y, box_w, box_h, graphics_make_color(35, 42, 52, 255));
+        graphics_set_color(graphics_make_color(130, 145, 160, 255), 0);
+        graphics_draw_text(s, x + (box_w - 6 * SM_FONT_WIDTH) / 2, y + box_h / 2 - 4, "NO ART");
+    }
+    if (!ui->box_sprite && ui->cover_sprite) {
+        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+        draw_truncated(s, l->safe_left + 3, l->footer_top - SM_FONT_HEIGHT - 2,
+            sm_cover_pack_ready(&ui->covers_large)
+                ? "No large cover for this game"
+                : "No large covers on this card: run sleekmenu-prep again",
+            chars);
+    }
+
+    graphics_draw_box(s, l->safe_left, l->footer_top, width, SM_FOOTER_HEIGHT,
+        graphics_make_color(16, 22, 32, 255));
+    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+    draw_truncated(s, l->safe_left + 3, l->footer_top + 2, "START PLAY   B BACK", chars);
 }
 
 /* The cheats page: every entry the game's file holds, on or off, one per
@@ -2309,6 +2417,10 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
     graphics_set_color(graphics_make_color(245,230,160,255),0);
     if (ui->screen == SM_SCREEN_LAUNCH_DETAILS) {
         draw_launch_card(s, l, c, ui);
+        return;
+    }
+    if (ui->screen == SM_SCREEN_BOX) {
+        draw_box_view(s, l, c, ui);
         return;
     }
     if (ui->screen == SM_SCREEN_CHEATS) {
@@ -2383,8 +2495,10 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
 
 void ui_close(sm_ui_t *ui) {
     unload_cover(ui);
+    unload_box(ui);
     unload_slots(ui);
     sm_cover_pack_close(&ui->covers);
+    sm_cover_pack_close(&ui->covers_large);
     if (ui->desc_surface.buffer) surface_free(&ui->desc_surface);
     ui->desc_lines = 0;
 }

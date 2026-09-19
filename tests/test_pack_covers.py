@@ -76,6 +76,43 @@ class CoverPackerTests(unittest.TestCase):
         sprite = (self.root / "covers" / "NSME.sprite").read_bytes()
         self.assertEqual(sprite[:4], (96).to_bytes(2, "big") + (72).to_bytes(2, "big"))
 
+    def test_the_box_views_pack_is_the_same_plan_at_the_large_size(self):
+        """One plan, two sizes, one decode: the large sprite carries the
+        same name as the small one, so the two packs cannot disagree about
+        which picture a game gets. A collection scan is smaller than the
+        large canvas and is centred at its own size, never stretched; a
+        picture bigger than the canvas -- libretro's, the owner's -- is
+        fitted to it."""
+        from tools import make_sprite
+        from tests.test_custom_art import picture
+        write_rom(self.roms / "Super Mario 64 (USA).z64", 1, 2, game_code="SM")
+        write_rom(self.roms / "F-Zero X (USA).z64", 3, 4, game_code="FX")
+        art = self.root / "sleekmenu" / "art"
+        picture(art / "NFXE.png", size=(512, 357), color=(20, 160, 60, 255))
+        planned = pack_covers.plan(self.roms, ["Super Mario 64 (USA).z64", "F-Zero X (USA).z64"],
+                                   self.repo, art)
+        written = pack_covers.pack(planned, self.repo, self.root / "covers",
+                                   large_destination=self.root / "covers-large")
+        self.assertEqual(written, 2)
+        self.assertEqual(sorted(p.name for p in (self.root / "covers-large").iterdir()),
+                         sorted(p.name for p in (self.root / "covers").iterdir()))
+        # the collection's 158x112 scan, centred on the 256x180 matte at its own size
+        width, height, rgb = make_sprite.decode((self.root / "covers-large" / "NSME.sprite").read_bytes())
+        self.assertEqual((width, height), make_sprite.LARGE_CANVAS_SIZE)
+        def pixel(x, y):
+            at = (y * width + x) * 3
+            return tuple(rgb[at:at + 3])
+        self.assertEqual(pixel(128, 90), (248, 0, 0), "the scan's red at the centre")
+        self.assertEqual(pixel(2, 2), tuple(c & ~7 for c in make_sprite.MATTE_RGBA[:3]), "matte at the corner")
+        self.assertEqual(pixel(128 - 79 + 1, 90), (248, 0, 0), "the scan's left edge, 79 from centre")
+        self.assertEqual(pixel(128 - 79 - 2, 90), tuple(c & ~7 for c in make_sprite.MATTE_RGBA[:3]))
+        # the owner's 512-pixel picture fills the large canvas
+        width, height, rgb = make_sprite.decode((self.root / "covers-large" / "NFXE.sprite").read_bytes())
+        self.assertEqual(pixel(2, 2), (16, 160, 56), "green to the edge: fitted, not centred small")
+        # and the small pack is what it always was
+        small = (self.root / "covers" / "NFXE.sprite").read_bytes()
+        self.assertEqual(small[:4], (96).to_bytes(2, "big") + (72).to_bytes(2, "big"))
+
     def test_a_dry_run_writes_nothing_and_still_counts(self):
         write_rom(self.roms / "Super Mario 64 (USA).z64", 1, 2, game_code="SM")
         planned = pack_covers.plan(self.roms, ["Super Mario 64 (USA).z64"], self.repo)
