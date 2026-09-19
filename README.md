@@ -177,6 +177,26 @@ cheat1_desc = "99 Coins"
 cheat1_code = "8133B218 0063"
 ```
 
+## Your own art
+
+Box art comes from the collection by the game code in the ROM's header, so
+a hack gets the box of the game it was built on and homebrew gets none. A
+picture of your own, named after the ROM file, wins over the collection.
+The tool looks in three places, in this order:
+
+```text
+ROMS/Hacks/SM64 Star Road.png       beside the game, same name as the ROM
+sleekmenu/art/SM64 Star Road.png    if you keep the ROM folders clean
+sleekmenu/art/NSME.png              by game code: every ROM with that code
+```
+
+PNG or JPEG, any size; it is fitted like the scans are, and the name can be
+in any case. A text file the same way — `SM64 Star Road.txt` beside the
+ROM or in `sleekmenu/art/` — becomes the description on the launch card,
+and a first line of `Title: Super Mario Star Road` renames the game in the
+list. Pictures and text are read when the tool runs, so a new one needs a
+re-run of the tool, like a new game does.
+
 ## Building from source
 
 Needs a [libdragon](https://github.com/DragonMinded/libdragon) toolchain.

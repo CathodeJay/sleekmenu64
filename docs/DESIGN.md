@@ -47,6 +47,12 @@ one with no Japanese scan gets the USA box rather than an empty frame. On a
 real 3,400-game card, 92% of games are boxed exactly and most of the rest from
 a neighbouring region.
 
+A picture of the card owner's own, named after the ROM file beside it or in
+`sleekmenu/art/`, comes before the collection, and a `.txt` the same way
+becomes the description: that is how a hack stops wearing its parent's box
+and homebrew gets one at all (`tools/custom_art.py`; CARD_LAYOUT.md has the
+rules).
+
 Text comes from `data/coverdb.csv`, keyed by the CRC pair in the ROM header —
 what the dump *is*, not what it is named. The game code is used only as a
 fallback, because two characters of game id collide for eleven known pairs of

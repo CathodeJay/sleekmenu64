@@ -39,7 +39,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import coverdb, genre_map, headers, identify, library, rom_header
+from tools import coverdb, custom_art, genre_map, headers, identify, library, rom_header
 from tools.metadata_repo import MetadataRepo, RepoError
 
 DEFAULT_COVERDB = Path(__file__).resolve().parent.parent / "data" / "coverdb.csv"
@@ -122,6 +122,10 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         raise SystemExit(f"no ROMs under {roms}")
 
     records, how = [], Counter()
+    # The card owner's own text, beside a ROM or in sleekmenu/art/, is read
+    # only against the card: without a card root there is no art folder.
+    art_folder = custom_art.art_dir(sd_root)
+    art_index = custom_art.Index()
     for rom_path in rom_paths:
         path = roms / rom_path
         relative = PurePosixPath(path.relative_to(root).as_posix())
@@ -174,6 +178,15 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
             description = repo.description(header.product_code)
             if description:
                 how["collection has a description"] += 1
+        # Text of the card owner's own wins over the collection's: a hack
+        # has its parent's description otherwise, which describes the wrong
+        # game.
+        title = relative.stem
+        own = custom_art.find_text(art_index, roms, rom_path, art_folder)
+        if own is not None:
+            how["own text"] += 1
+            description = own.description or description
+            title = own.title or title
 
         record = {
             # The header CRC pair and game code, so a correction to
@@ -183,7 +196,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
             # most of an hour. Both are dropped when the catalog is encoded.
             "crc": header.crc_pair,
             "code": header.product_code,
-            "title": relative.stem,
+            "title": title,
             "path": str(relative),
             "regions": regions,
             "genre": genre,

@@ -22,6 +22,9 @@ BROWSER_ROM = "SleekMenu64.z64"
 COVERS_FOLDER = "covers"
 COVER_PACK_NAME = "covers.pak"
 CATALOG_NAME = "catalog.ebc"
+#: Under CARD_FOLDER: the card owner's own pictures and text, by ROM name
+#: or game code (tools/custom_art.py). Read by the tool, never the browser.
+ART_FOLDER = "art"
 
 #: Folder names the library scan never descends into, case-folded for
 #: comparison against a directory name from the card: the browser's own, the

@@ -35,7 +35,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import (build_catalog, build_metadata, cover_pack, coverdb, library,
+from tools import (build_catalog, build_metadata, cover_pack, coverdb, custom_art, library,
                    make_sprite, pack_covers)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
@@ -78,8 +78,12 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
                                   if database_path.is_file() else 0}
 
     covers: dict[str, str] = {}
-    if repo is not None:
-        planned = pack_covers.plan(roms, rom_paths, repo)
+    # The card owner's own art is looked up whether or not there is a
+    # collection: a card of homebrew with a picture beside each game is a
+    # card with covers.
+    art_folder = custom_art.art_dir(card)
+    planned = pack_covers.plan(roms, rom_paths, repo, art_folder)
+    if repo is not None or planned.sources:
         covers = planned.covers
         (work / "cover-map.json").write_text(
             json.dumps({"schema_version": 1, "covers": covers}, indent=2, sort_keys=True) + "\n",
@@ -87,9 +91,11 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
         (work / "cover-unmatched.json").write_text(
             json.dumps({"schema_version": 1, "unmatched": planned.without}, indent=2) + "\n",
             encoding="utf-8")
-        summary.update(covers=len(covers), without_art=len(planned.without))
-        log(f"covers:   {len(covers)} ROMs have a box in the collection, "
-            f"{len(planned.without)} do not")
+        summary.update(covers=len(covers), without_art=len(planned.without),
+                       custom_art=planned.custom)
+        log(f"covers:   {len(covers)} ROMs have a box"
+            + (f" ({planned.custom} from your own art)" if planned.custom else "")
+            + f", {len(planned.without)} do not")
 
         # Progress follows the log: a caller that silenced one wants neither.
         # print is the only log that means "a person is watching".

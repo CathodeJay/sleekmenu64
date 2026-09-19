@@ -19,6 +19,7 @@ this is the reference.
 /sleekmenu/history.txt      the last fifteen launches          written by the browser
 /sleekmenu/cheats.txt       which cheats are on, per game      written by the browser
 /sleekmenu/cheats/          your own .cht files (optional)     yours
+/sleekmenu/art/             your own box art and text (optional)  yours
 
 /ED64/CHEATS/               the Pro menu's cheat pack          the EverDrive's, read only
 /ED64/gamedata/             saves                              shared with the EverDrive menu
@@ -79,6 +80,15 @@ ED64/metadata/                    the EverDrive-64 Pro menu's layout (edmeta)
 ```
 
 `--metadata PATH` names a zip or folder anywhere else.
+
+**Your own pictures** come before the collection. For `Hacks/Star Road.z64`
+the tool looks for `Hacks/Star Road.png` (or `.jpg`) beside the ROM, then
+`sleekmenu/art/Star Road.png`, then `sleekmenu/art/<game code>.png`, which
+replaces the collection's box for every ROM with that code. A per-ROM
+picture becomes a sprite named after a hash of the ROM's path, so two
+games of one name in two folders never share one; a code override takes the
+collection's sprite name for that code. `Star Road.txt` in either place is
+the description, and a first line `Title: ...` the title (`tools/custom_art.py`).
 
 ## How a game finds its text
 
