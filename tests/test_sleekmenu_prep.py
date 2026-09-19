@@ -2,12 +2,16 @@
 """The card-preparation tool: the entry point and the archive it ships as.
 
 Two layers. The entry-point tests drive `sleekmenu_prep.main()` in-process
-against a small metadata collection written into the card, so they are fast;
-nothing here ever touches the network, because the tool never does. The
-archive tests build the real .pyz and run it as a subprocess the way a person
-does -- from a card, with no arguments -- because the whole point of the
-archive is that it works with nothing else installed, and only running it
-proves that.
+against a small metadata collection written into the card, so they are fast.
+The archive tests build the real .pyz and run it as a subprocess the way a
+person does -- from a card, with no arguments -- because the whole point of
+the archive is that it works with nothing else installed, and only running
+it proves that.
+
+Nothing here touches the network: every run is told to stay offline through
+the environment, the way CI is. What the tool does on a card that lacks the
+collection, and how it fetches one, is tests/test_fetch.py, against a server
+in the test process.
 """
 
 import contextlib
@@ -25,10 +29,18 @@ from unittest import mock
 from PIL import Image
 
 from tests.rom_fixtures import write_rom
-from tools import build_prep, card_layout, coverdb, library, sleekmenu_prep
+from tools import build_prep, card_layout, coverdb, fetch, library, sleekmenu_prep
 
 ROOT = Path(__file__).resolve().parent.parent
 PNG_BYTES = None
+OFFLINE = {fetch.OFFLINE_VARIABLE: "1"}
+
+
+def stay_offline(test: unittest.TestCase) -> None:
+    """The tool told, for the length of one test, never to fetch."""
+    patch = mock.patch.dict(os.environ, OFFLINE)
+    patch.start()
+    test.addCleanup(patch.stop)
 
 
 def png_bytes() -> bytes:
@@ -170,6 +182,7 @@ class CardDiscoveryTests(unittest.TestCase):
 
 class EntryPointTests(unittest.TestCase):
     def setUp(self):
+        stay_offline(self)
         self.temporary = tempfile.TemporaryDirectory()
         self.card = Path(self.temporary.name) / "CARD"
         self.roms = self.card / "ROMS"
@@ -377,7 +390,7 @@ class ArchiveTests(unittest.TestCase):
             crc, entry = next((c, e) for c, e in database.items()
                               if e.genre and e.name == "Super Mario 64 (USA)")
             write_rom(card / "ROMS" / "mario.z64", int(crc[:8], 16), int(crc[8:], 16))
-            env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+            env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"} | OFFLINE
             result = subprocess.run([sys.executable, str(copy)], cwd=card,
                                     capture_output=True, text=True, env=env, timeout=120)
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)

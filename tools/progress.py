@@ -11,12 +11,43 @@ here.
 On a terminal this rewrites one line in place, a few times a second at most.
 Anywhere else -- CI logs, a pipe -- it prints a line at each tenth, so the
 output is still readable afterwards rather than a wall of carriage returns.
+
+The steps are also where a run is stopped on request. A window's Stop
+button cannot interrupt a thread; what it can do is set a flag, and
+`stoppable()` wraps any progress factory so that the flag is looked at
+before every step and answered with Cancelled between two files, or between
+two pieces of a download, never in the middle of one.
 """
 
 from __future__ import annotations
 
 import sys
 import time
+
+
+class Cancelled(Exception):
+    """The run was asked to stop, and did, at a step."""
+
+
+def stoppable(progress_factory, cancel):
+    """`progress_factory` with `cancel()` asked before every step: true, and
+    the step raises Cancelled instead of counting."""
+    def factory(total: int, label: str):
+        return _Stoppable(progress_factory(total, label), cancel, label)
+    return factory
+
+
+class _Stoppable:
+    def __init__(self, bar, cancel, label: str):
+        self.bar, self.cancel, self.label = bar, cancel, label
+
+    def step(self, detail: str = "", n: int = 1) -> None:
+        if self.cancel():
+            raise Cancelled(f"stopped while {self.label}")
+        self.bar.step(detail, n)
+
+    def done(self, summary: str = "") -> None:
+        self.bar.done(summary)
 
 
 class Progress:

@@ -6,6 +6,11 @@ on:
     branches: [main]
   pull_request:
 
+env:
+  # Every test that runs the prep tool sets this itself; here it also
+  # covers whatever a future test forgets, so CI never reaches GitHub.
+  SLEEKMENU_NO_DOWNLOAD: '1'
+
 jobs:
   host-tests:
     # The suite is host-side: it compiles the console modules with the system

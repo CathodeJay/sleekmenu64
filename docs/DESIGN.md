@@ -16,10 +16,18 @@ and the matching of games to art and text in detail.
 ## Principles
 
 **Nothing is bundled.** The ROM contains a font and nothing else. Box art,
-descriptions and the ROMs are yours, on your card; the tool that prepares the
-card downloads nothing and the console never touches the network. The only
-data shipped is `data/coverdb.csv` (titles, genre, publisher, year, players;
-CC BY-SA 4.0), which holds no images.
+descriptions and the ROMs are yours, on your card, and the console never
+touches the network. The only data shipped is `data/coverdb.csv` (titles,
+genre, publisher, year, players; CC BY-SA 4.0), which holds no images. The
+tool that prepares the card fetches one thing, once: the box-art collection,
+from its own releases page onto a card that lacks it (`tools/fetch.py`). It
+lands through a `.part` file and is kept only once it opens as a collection
+with boxes in it, so an interrupted download never passes for one; three
+addresses are tried, since GitHub's `releases/latest/download/` answers only
+for a release not marked pre-release. Offline, the report shows the address
+and the card gets a catalog without covers; `--no-download` and
+`SLEEKMENU_NO_DOWNLOAD=1` forbid the fetch, and the test suite sets the
+latter so no test reaches GitHub.
 
 **No dependence on one collection.** `tests/test_portability.py` builds a
 card from a library in which not one game appears in the shipped database and
@@ -28,7 +36,11 @@ checks the result still works, boxes included.
 **One tool, two faces.** The card is prepared by `tools/sleekmenu_prep.run()`,
 whether the command line or the window asks: the window
 (`tools/sleekmenu_gui.py`, Tkinter) collects five answers and hands them
-over, and reports the same lines and progress the terminal prints. The
+over, and reports the same lines and progress the terminal prints. Its Stop
+button is a flag the run reads before every progress step and between two
+pieces of a download (`tools/progress.stoppable()`), so a stop lands between
+two files, never inside one, and before the catalog or covers are written;
+Ctrl-C on the command line ends the same way. The
 downloadable builds are that window frozen with its Python by PyInstaller,
 one per platform, built by `.github/workflows/prep-app.yml` on every tag and
 proven there by preparing a card from the frozen binary. They are not

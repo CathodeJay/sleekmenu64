@@ -9,7 +9,7 @@ this is the reference.
 ```text
 /SleekMenu64.z64            the browser                        you copy it
 /sleekmenu-prep.pyz         the card-preparation tool          you copy it
-/release-metadata.zip       box art and descriptions           you download it
+/release-metadata.zip       box art and descriptions           fetched by the tool
 /ROMS/...                   your games, in any folders          yours
 /<any other folder>/...     or anywhere else on the card        yours
 
@@ -48,8 +48,9 @@ These, and nothing else:
 
 It never creates folders, never renames, moves or deletes a file, and never
 touches the network. The prep tool creates the `sleekmenu/` folder and
-writes `catalog.ebc` and `covers.pak` into it; everything else it reads in
-place.
+writes `catalog.ebc` and `covers.pak` into it, and fetches
+`release-metadata.zip` to the card root when the card has no collection;
+everything else it reads in place.
 
 ## How a game finds its box
 
@@ -70,7 +71,9 @@ cartridge's, a hack or a translation gets the box of the game it was built
 on. A ROM with a blank or unprintable code — most homebrew — gets no box.
 
 The collection can be on the card in any of these forms; the tool takes the
-first it finds and never unpacks a zip:
+first it finds and never unpacks a zip. A card with none gets the zip
+fetched to its root (`--no-download` forbids that; offline, the report says
+where to get it):
 
 ```text
 sleekmenu/release-metadata.zip    or    release-metadata.zip

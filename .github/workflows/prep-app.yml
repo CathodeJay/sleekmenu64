@@ -15,6 +15,11 @@ on:
 permissions:
   contents: write
 
+env:
+  # The window's tests prepare cards with no collection; they stay offline
+  # on their own, and this covers what a future test forgets.
+  SLEEKMENU_NO_DOWNLOAD: '1'
+
 jobs:
   build:
     strategy:

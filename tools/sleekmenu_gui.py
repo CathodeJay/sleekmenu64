@@ -4,7 +4,8 @@
 terminal.
 
 Pick the card (found on its own when it is the only removable disk), see
-whether the box-art collection is on it, press Prepare, watch the progress.
+whether the box-art collection is on it -- it is fetched onto the card when
+not -- press Prepare, watch the progress, Stop if it is taking too long.
 Nothing here decides anything about the card: the window collects five
 answers and hands them to tools/sleekmenu_prep.run(), which is what the
 command line runs. The downloadable builds are this file frozen with its
@@ -126,17 +127,23 @@ def describe_card(card: Path) -> str:
 class Runner:
     """sleekmenu_prep.run() on a thread, with every line and every progress
     step posted to a queue the window drains between frames. The window
-    never blocks on the card, and the run never touches a widget."""
+    never blocks on the card, and the run never touches a widget. `stop()`
+    raises a flag the run looks at before every step; it ends with code 3
+    a moment later, having written nothing more."""
 
     def __init__(self, options: sleekmenu_prep.Options):
         self.options = options
         self.events: queue.Queue = queue.Queue()
         self.code: int | None = None
+        self.stopping = threading.Event()
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._work, name="sleekmenu-prep", daemon=True)
         self._thread.start()
+
+    def stop(self) -> None:
+        self.stopping.set()
 
     def run_inline(self) -> int:
         """The same run on the calling thread, for tests."""
@@ -167,7 +174,8 @@ class Runner:
                 self.options,
                 log=lambda line: events.put(("log", line)),
                 fail=lambda line: events.put(("error", line)),
-                progress_factory=Bar)
+                progress_factory=Bar,
+                cancel=self.stopping.is_set)
         except Exception as error:  # noqa: BLE001 -- the window must say it, not die
             events.put(("error", f"sleekmenu-prep: {type(error).__name__}: {error}"))
             runner.code = 1
@@ -245,8 +253,12 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     log = tk.Text(frame, height=12, wrap="word", state="disabled", font=("Menlo", 11) if sys.platform == "darwin" else ("Consolas", 10) if sys.platform == "win32" else ("monospace", 10))
     log.grid(row=7, column=0, columnspan=3, sticky="nsew", pady=(4, 8))
     frame.rowconfigure(7, weight=1)
-    prepare = ttk.Button(frame, text="Prepare")
-    prepare.grid(row=8, column=2, sticky="e")
+    actions = ttk.Frame(frame)
+    actions.grid(row=8, column=2, sticky="e")
+    stop = ttk.Button(actions, text="Stop", state="disabled")
+    stop.pack(side="left", padx=(0, 6))
+    prepare = ttk.Button(actions, text="Prepare")
+    prepare.pack(side="left")
 
     def say(line: str) -> None:
         log.configure(state="normal")
@@ -274,8 +286,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         elif collection is not None:
             metadata_note.set(f"{collection.name} found on the card.")
         else:
-            metadata_note.set(f"Not on the card. Download {metadata_repo.RELEASE_ZIP_NAME} (click), "
-                              "put it on the card or choose it with Browse.")
+            metadata_note.set(f"Not on the card: Prepare fetches {metadata_repo.RELEASE_ZIP_NAME} "
+                              "(about 52 MB) from GitHub (click to see), or choose a copy with Browse.")
 
     def browse_card() -> None:
         chosen = filedialog.askdirectory(title="The card")
@@ -292,7 +304,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             on_card_change()
 
     def open_download(_event=None) -> None:
-        if "Download" in metadata_note.get():
+        if "GitHub" in metadata_note.get():
             webbrowser.open(DOWNLOAD_URL)
 
     def poll() -> None:
@@ -316,14 +328,18 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             elif kind == "done":
                 state["runner"] = None
                 prepare.configure(state="normal")
+                stop.configure(state="disabled")
                 bar["value"] = bar["maximum"]
                 if event[1] == 0:
                     status_var.set("Done. Eject the card and start SleekMenu64.z64 from the EverDrive menu.")
                     say("")
                     say("Eject the card and start SleekMenu64.z64 from the EverDrive menu.")
+                elif event[1] == 3:
+                    status_var.set("Stopped. Press Prepare to start again.")
                 else:
                     status_var.set("Stopped; see the last line above.")
                 state["last_code"] = event[1]
+                on_card_change()
                 if smoke:
                     root.after(200, root.destroy)
                 return
@@ -341,10 +357,19 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         log.configure(state="disabled")
         bar["value"] = 0
         prepare.configure(state="disabled")
+        stop.configure(state="normal")
         runner = Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get()))
         state["runner"] = runner
         runner.start()
         root.after(100, poll)
+
+    def ask_stop() -> None:
+        runner = state["runner"]
+        if runner is None:
+            return
+        runner.stop()
+        stop.configure(state="disabled")
+        status_var.set("Stopping…")
 
     ttk.Button(buttons, text="Browse…", command=browse_card).pack(side="left")
     ttk.Button(buttons, text="Refresh", command=refresh_cards).pack(side="left", padx=(6, 0))
@@ -354,6 +379,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     card_var.trace_add("write", on_card_change)
     metadata_var.trace_add("write", on_card_change)
     prepare.configure(command=start)
+    stop.configure(command=ask_stop)
     refresh_cards()
     if card:
         card_var.set(card)

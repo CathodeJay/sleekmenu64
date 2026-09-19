@@ -28,22 +28,15 @@ game started from either menu carries its save into the other.
 - `SleekMenu64.z64` — the browser
 - `sleekmenu-prep.pyz` — the tool that builds the catalog and the covers
 
-**2. Get the box art and descriptions.** Download `release-metadata.zip` from
-the [n64-flashcart-menu-metadata releases](https://github.com/n64-tools/n64-flashcart-menu-metadata/releases).
-It is a public-domain collection of box scans and descriptions for every
-cartridge, shared with other N64 menus. SleekMenu ships none of it and never
-downloads anything itself.
-
-**3. Copy the three files to the root of the card**, next to your games:
+**2. Copy the two files to the root of the card**, next to your games:
 
 ```text
 /SleekMenu64.z64
 /sleekmenu-prep.pyz
-/release-metadata.zip
 /ROMS/...                 or any folders of your own
 ```
 
-**4. Run the tool from the card.** It takes no arguments; running it from the
+**3. Run the tool from the card.** It takes no arguments; running it from the
 card is how it knows where the card is.
 
 ```sh
@@ -51,8 +44,19 @@ cd /Volumes/CARD          # or wherever the card is mounted
 python3 sleekmenu-prep.pyz
 ```
 
-It finds every ROM on the card, wherever it is, matches each one to its box
-and description, and writes `sleekmenu/catalog.ebc` and
+The first time, it fetches the box art and descriptions onto the card:
+`release-metadata.zip` (about 52 MB) from the
+[n64-flashcart-menu-metadata releases](https://github.com/n64-tools/n64-flashcart-menu-metadata/releases),
+a public-domain collection of box scans and descriptions for every
+cartridge, shared with other N64 menus. SleekMenu ships none of it; the zip
+stays on the card and is read in place from then on. Offline, the card still
+gets its catalog, without covers, and the report shows where to download the
+zip by hand — drop it at the root of the card and run the tool again.
+`--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps the
+tool off the network altogether.
+
+Then it finds every ROM on the card, wherever it is, matches each one to its
+box and description, and writes `sleekmenu/catalog.ebc` and
 `sleekmenu/covers.pak` beside itself. A card of three thousand games takes
 under a minute. Run it again whenever you add games.
 
@@ -60,20 +64,22 @@ under a minute. Run it again whenever you add games.
 same tool with Python inside, one download per system:
 `SleekMenu-Prep-mac-arm64.zip` (Apple silicon), `SleekMenu-Prep-mac-intel.zip`,
 `SleekMenu-Prep-windows.exe`, `SleekMenu-Prep-linux`. Open it, pick the card
-(it is picked for you when it is the only removable disk), check that the
-box-art zip was found, press Prepare. It is not code-signed, so the first
+(it is picked for you when it is the only removable disk), press Prepare;
+the box-art zip is fetched onto the card if it is not there, and Stop ends
+the run if it takes too long. It is not code-signed, so the first
 launch warns: on macOS, right-click the app and choose Open (on macOS 15,
 System Settings → Privacy & Security → Open Anyway); on Windows, More info
 → Run anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
 opens the same window.
 
-**5. Eject the card, put it in the cart, and start `SleekMenu64.z64` from the
+**4. Eject the card, put it in the cart, and start `SleekMenu64.z64` from the
 EverDrive menu.** Press Start on a game to play it, A for its details. To get
 back to the EverDrive menu, reset the console.
 
 What the tool writes, and what it leaves alone:
 
 ```text
+/release-metadata.zip      the box-art collection, fetched once and read in place
 /sleekmenu/catalog.ebc     titles, genre, publisher, year, descriptions
 /sleekmenu/covers.pak      every cover in one file
 /sleekmenu/favorites.txt   written by the browser as you star games

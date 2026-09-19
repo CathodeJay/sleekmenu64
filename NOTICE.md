@@ -79,13 +79,15 @@ Cover images belong to their publishers and are not yours or ours to relicense
 — a permissive licence stamped over scanned box art is void as applied,
 whoever does it.
 
-The prep tool fetches nothing. It reads the
+The prep tool reads the
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata)
 collection — the public-domain (Unlicense) set the N64FlashcartMenu and the
-EverDrive-64 Pro's own menu draw on — from wherever the user has put it on the
-card, and converts the boxes their library needs. That is the line this
-project holds: it never distributes a picture, never downloads one, and never
-claims a licence over one. The collection's dedication covers its own
-contribution; the scans themselves remain the publishers'. A card prepared
-with the tool carries them the way a card prepared for either of those menus
-does; passing that card on is the user's act, not ours.
+EverDrive-64 Pro's own menu draw on — from the user's card, and converts the
+boxes their library needs. A card that lacks the collection gets it fetched
+from that project's own releases page, by the user's machine, onto the
+user's card: the same download the collection's page offers, made for them.
+That is the line this project holds: it never hosts a picture, never ships
+one, and never claims a licence over one. The collection's dedication covers
+its own contribution; the scans themselves remain the publishers'. A card
+prepared with the tool carries them the way a card prepared for either of
+those menus does; passing that card on is the user's act, not ours.

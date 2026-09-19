@@ -11,7 +11,7 @@ your own, loose at the root -- reads every ROM header, finds each game's box
 and description in the metadata collection by the game code the header
 carries, converts the boxes, packs them, and writes the catalog. Run it
 again after adding games and it does the whole card again in a few seconds
--- nothing is downloaded, so there is nothing to save.
+-- the collection stays on the card, so nothing is fetched twice.
 
 What it puts beside itself:
 
@@ -19,16 +19,17 @@ What it puts beside itself:
     sleekmenu/covers.pak       every cover in one file
 
 The collection is n64-flashcart-menu-metadata, the public-domain set the
-N64FlashcartMenu and the EverDrive-64 Pro both use. This tool never touches
-the network: download release-metadata.zip from
+N64FlashcartMenu and the EverDrive-64 Pro both use. A card without it gets
+release-metadata.zip fetched onto it from
 
     https://github.com/n64-tools/n64-flashcart-menu-metadata/releases
 
-once, drop it on the card next to this file (or in sleekmenu/), and it is
-read in place -- the zip is never unpacked onto the card. A card that already
+the first time (about 52 MB; --no-download forbids it), and the zip is read
+in place from then on -- never unpacked onto the card. A card that already
 holds the collection unpacked for another menu (menu/metadata) is read as it
-is. Without a collection the card gets a catalog and no covers, which is a
-working card, not an error.
+is. Offline, or with the download refused, the card gets a catalog and no
+covers, which is a working card, not an error, and the report says where
+the zip comes from.
 
 This is the same pipeline as tools/prepare_card.py with the card found for
 you; it exists so that the release can be one ROM and one file, with no
@@ -50,8 +51,8 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools import (build_catalog, card_layout, cover_pack, coverdb, headers, library,
-                   make_sprite, metadata_repo, n64_checksum, pack_covers, prepare_card)
+from tools import (build_catalog, card_layout, cover_pack, coverdb, fetch, headers, library,
+                   make_sprite, metadata_repo, n64_checksum, pack_covers, prepare_card, progress)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 
@@ -243,17 +244,22 @@ class Options:
     dry_run: bool = False
     fix_checksums: bool = False
     no_checksums: bool = False
+    no_download: bool = False       # never reach for the collection, even when it is missing
 
 
-def run(options: Options, log=print, fail=None, progress_factory=None) -> int:
+def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None) -> int:
     """The whole run. Every line of the report goes through `log`, errors
-    through `fail` (the same, by default), and the three long passes take
-    their progress line from `progress_factory(total, label)` -- the
-    terminal's rewriting line by default, the window's bar when there is
-    one. The command line and the window share this, so the two can never
-    do different things to a card."""
+    through `fail` (the same, by default), and the long passes take their
+    progress line from `progress_factory(total, label)` -- the terminal's
+    rewriting line by default, the window's bar when there is one. `cancel`,
+    when given, is asked before every progress step and between two pieces
+    of a download; true, and the run stops there with code 3, before the
+    catalog or covers are written. The command line and the window share
+    this, so the two can never do different things to a card."""
     fail = fail or log
     progress_factory = progress_factory or Progress
+    if cancel is not None:
+        progress_factory = progress.stoppable(progress_factory, cancel)
     try:
         card = find_card(options.card)
         found = find_library(card, options.roms, create=not options.dry_run)
@@ -280,15 +286,28 @@ def run(options: Options, log=print, fail=None, progress_factory=None) -> int:
             "onto it, in any folders you like, and run this again.")
         return 0
 
-    # One pass over the card, with progress, before anything else asks. Every
-    # later step reads headers through the cache and touches the card no more.
-    scan = progress_factory(len(rom_paths), "scanning")
-    found_roms = headers.scan(roms, rom_paths, scan)
-    scan.done(f"scanned   {len(rom_paths)} files, {found_roms} are N64 ROMs")
-
     work = Path(tempfile.mkdtemp(prefix="sleekmenu-prep-"))
     repo = None
     try:
+        if source is None and not options.dry_run and not options.no_download and not fetch.offline_by_request():
+            # The one thing the tool fetches, and only onto the card. A card
+            # that has the collection is never asked again.
+            log(f"metadata: not on the card; fetching {fetch.ASSET} (about 52 MB) "
+                f"from github.com/{fetch.REPOSITORY}")
+            try:
+                fetched = fetch.collection(card, progress_factory, cancel, log)
+                source = fetched.path
+                log(f"          {fetched.bytes / 1048576:.1f} MB written to {source}")
+            except fetch.FetchError as error:
+                log(f"          could not fetch it ({error})")
+
+        # One pass over the card, with progress, before anything else asks.
+        # Every later step reads headers through the cache and touches the
+        # card no more.
+        scan = progress_factory(len(rom_paths), "scanning")
+        found_roms = headers.scan(roms, rom_paths, scan)
+        scan.done(f"scanned   {len(rom_paths)} files, {found_roms} are N64 ROMs")
+
         database_path = data_file("coverdb.csv", work)
         genres_path = data_file("genres.csv", work)
         if source is None:
@@ -307,6 +326,9 @@ def run(options: Options, log=print, fail=None, progress_factory=None) -> int:
             roms=roms, card=card, database_path=database_path, repo=repo,
             work=work / "build", dry_run=options.dry_run, genres=genres_path, log=log,
             progress_stream=None, rom_paths=rom_paths, progress_factory=progress_factory)
+    except progress.Cancelled as stop:
+        fail(f"sleekmenu-prep: {stop}; the catalog and covers were not written")
+        return 3
     except (PrepError, RepoError, prepare_card.PrepareError, coverdb.CoverDBError,
             pack_covers.CoverPackError, make_sprite.SpriteError, cover_pack.CoverPackError,
             build_catalog.CatalogError, library.LibraryError, OSError) as error:
@@ -342,6 +364,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="rewrite the header checksum of a hack that would not boot on a console")
     parser.add_argument("--no-checksums", action="store_true",
                         help="skip the checksum pass over hacks and homebrew")
+    parser.add_argument("--no-download", action="store_true",
+                        help="never fetch the collection, even when the card has none "
+                             f"(also: {fetch.OFFLINE_VARIABLE}=1 in the environment)")
     parser.add_argument("--gui", action="store_true",
                         help="open the window instead of running in the terminal")
     args = parser.parse_args(argv)
@@ -357,11 +382,16 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         return sleekmenu_gui.main([])
 
-    return run(Options(card=args.card, roms=args.roms, metadata=args.metadata,
-                       dry_run=args.dry_run, fix_checksums=args.fix_checksums,
-                       no_checksums=args.no_checksums),
-               log=print, fail=lambda message: print(message, file=sys.stderr))
-
+    try:
+        return run(Options(card=args.card, roms=args.roms, metadata=args.metadata,
+                           dry_run=args.dry_run, fix_checksums=args.fix_checksums,
+                           no_checksums=args.no_checksums, no_download=args.no_download),
+                   log=print, fail=lambda message: print(message, file=sys.stderr))
+    except KeyboardInterrupt:
+        # Ctrl-C during the fetch leaves no .part on the card; during a
+        # pass, no catalog or covers. The newline ends a progress line.
+        print("\nsleekmenu-prep: stopped", file=sys.stderr)
+        return 130
 
 
 if __name__ == "__main__":

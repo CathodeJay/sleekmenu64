@@ -9,6 +9,7 @@ failed, since a Python without Tk is exactly what the command line is for.
 """
 
 import contextlib
+import gc
 import io
 import os
 import sys
@@ -17,6 +18,7 @@ import unittest
 from pathlib import Path
 
 from tests.rom_fixtures import write_rom
+from tests.test_sleekmenu_prep import stay_offline
 from tools import sleekmenu_gui, sleekmenu_prep
 
 
@@ -65,22 +67,28 @@ class FieldTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.TestCase):
+    def setUp(self):
+        stay_offline(self)
+        self.temporary = tempfile.TemporaryDirectory()
+        self.card = Path(self.temporary.name) / "CARD"
+        write_rom(self.card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
     def test_the_run_reports_every_line_and_its_progress(self):
-        with tempfile.TemporaryDirectory() as scratch:
-            card = Path(scratch) / "CARD"
-            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
-            runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from(str(card), "", True, False))
-            with contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(runner.run_inline(), 0)
-            events = runner.drain()
-            kinds = [event[0] for event in events]
-            self.assertEqual(kinds[-1], "done")
-            self.assertEqual(events[-1][1], 0)
-            self.assertIn(("progress", "scanning", 1, 1), events)
-            logs = [event[1] for event in events if event[0] == "log"]
-            self.assertTrue(any(line.startswith("card:") for line in logs))
-            self.assertTrue(any("scanned   1 files" in line for line in logs))
-            self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
+        runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from(str(self.card), "", True, False))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(runner.run_inline(), 0)
+        events = runner.drain()
+        kinds = [event[0] for event in events]
+        self.assertEqual(kinds[-1], "done")
+        self.assertEqual(events[-1][1], 0)
+        self.assertIn(("progress", "scanning", 1, 1), events)
+        logs = [event[1] for event in events if event[0] == "log"]
+        self.assertTrue(any(line.startswith("card:") for line in logs))
+        self.assertTrue(any("scanned   1 files" in line for line in logs))
+        self.assertTrue((self.card / "sleekmenu" / "catalog.ebc").is_file())
 
     def test_a_bad_card_is_an_error_line_and_a_code_never_a_traceback(self):
         runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from("/nonexistent/card", "", True, False))
@@ -88,6 +96,19 @@ class RunnerTests(unittest.TestCase):
         events = runner.drain()
         self.assertEqual(events[-1], ("done", 2))
         self.assertTrue(any(event[0] == "error" and "not a folder" in event[1] for event in events))
+
+    def test_a_stop_ends_the_run_at_its_next_step_with_nothing_written(self):
+        """Stop is a flag the run reads before each step; here it is raised
+        before the run starts, so the first step -- scanning -- is where it
+        ends, and the card gets no catalog."""
+        runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from(str(self.card), "", True, False))
+        runner.stop()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(runner.run_inline(), 3)
+        events = runner.drain()
+        self.assertEqual(events[-1], ("done", 3))
+        self.assertTrue(any(event[0] == "error" and "stopped while scanning" in event[1] for event in events))
+        self.assertFalse((self.card / "sleekmenu" / "catalog.ebc").exists())
 
 
 def display_available() -> bool:
@@ -103,6 +124,16 @@ def display_available() -> bool:
 
 @unittest.skipUnless(display_available(), "Tk and a display are needed for the window itself")
 class WindowTests(unittest.TestCase):
+    def setUp(self):
+        stay_offline(self)
+
+    def tearDown(self):
+        # A closed window's variables sit in reference cycles until a
+        # collection happens to run -- possibly on the next test's worker
+        # thread, where Tk refuses them with "main thread is not in main
+        # loop". Collect them here, on the thread that made them.
+        gc.collect()
+
     def test_the_window_opens_and_closes(self):
         root = sleekmenu_gui.build(smoke=True)
         root.mainloop()
