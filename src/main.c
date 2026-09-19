@@ -73,16 +73,14 @@ int main(void) {
            of them. Without it the browser still works, just plainly. */
         catalog_loaded = catalog_load(&catalog, SM_CATALOG_PATH, error, sizeof(error));
         if (!catalog_loaded) {
-            /* ROMS is the conventional EverDrive library root. Scan it first so
-               large cards do not needlessly walk every non-game directory. */
-            scan_display.phase = "Scanning ROMS folder";
+            /* The games can be anywhere on the card. The scan skips the
+               folders known to hold none (the firmware's, this browser's,
+               an unpacked art collection), which is what kept a ROMS-first
+               scan cheap; ROMS itself is just another folder now. */
+            scan_display.phase = "Scanning the card";
             scan_display.note = "Scanning SD; large cards take time";
             draw_scan_now(&scan_display, NULL);
-            if (!catalog_discover_sd(&catalog, "sd:/ROMS", error, sizeof(error), scan_progress, &scan_display)) {
-                scan_display.phase = "Fallback: scanning SD root";
-                draw_scan_now(&scan_display, NULL);
-                catalog_discover_sd(&catalog, "sd:/", error, sizeof(error), scan_progress, &scan_display);
-            }
+            catalog_discover_sd(&catalog, SM_SD_ROOT, error, sizeof(error), scan_progress, &scan_display);
             if (catalog.count > 0) {
                 ui.status = catalog.discovery_capped
                     ? "ROM scan reached 8192-item cap; metadata can be added later"

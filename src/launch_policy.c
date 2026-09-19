@@ -11,8 +11,11 @@ bool launch_resolve_paths(const char *path, sm_launch_paths_t *paths) {
     memset(paths, 0, sizeof(*paths));
     if (!path || !path[0]) return false;
 
-    /* Catalog paths may be relative to the ROMS scan root or to the SD root.
-     * A leading slash and an sd:/ prefix are safe, explicit SD-root forms. */
+    /* Catalog paths are relative to the card root, which is also what the
+     * card scan records; a leading slash and an sd:/ prefix say so
+     * explicitly. A bare relative path is tried at the root first and then
+     * under ROMS/, which is where a catalog built against a ROMS folder
+     * rather than the card (make metadata without CARD) would put it. */
     if (!strncasecmp(path, "sd:/", 4)) {
         written = snprintf(paths->primary, sizeof(paths->primary), "sd:/%s", path + 4);
         if (written < 0 || written >= (int)sizeof(paths->primary)) return false;
@@ -21,22 +24,12 @@ bool launch_resolve_paths(const char *path, sm_launch_paths_t *paths) {
     }
     relative = path[0] == '/' ? path + 1 : path;
     if (!relative[0]) return false;
-    if (!strncasecmp(relative, "ROMS/", 5)) {
-        written = snprintf(paths->primary, sizeof(paths->primary), "sd:/%s", relative);
-        if (written < 0 || written >= (int)sizeof(paths->primary)) return false;
-        paths->count = 1;
-        return true;
-    }
-    if (path[0] == '/') {
-        written = snprintf(paths->primary, sizeof(paths->primary), "sd:/%s", relative);
-        if (written < 0 || written >= (int)sizeof(paths->primary)) return false;
-        paths->count = 1;
-        return true;
-    }
-
-    written = snprintf(paths->primary, sizeof(paths->primary), "sd:/ROMS/%s", relative);
+    written = snprintf(paths->primary, sizeof(paths->primary), "sd:/%s", relative);
     if (written < 0 || written >= (int)sizeof(paths->primary)) return false;
-    written = snprintf(paths->fallback, sizeof(paths->fallback), "sd:/%s", relative);
+    paths->count = 1;
+    if (path[0] == '/' || !strncasecmp(relative, "ROMS/", 5)) return true;
+
+    written = snprintf(paths->fallback, sizeof(paths->fallback), "sd:/ROMS/%s", relative);
     if (written < 0 || written >= (int)sizeof(paths->fallback)) {
         memset(paths, 0, sizeof(*paths));
         return false;

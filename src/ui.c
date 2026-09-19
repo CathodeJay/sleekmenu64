@@ -582,6 +582,41 @@ static void focus_selected(sm_ui_t *ui, const sm_layout_t *layout) {
         grid ? SM_UI_GRID_COLUMNS : 1u);
 }
 
+/* The folder every game is under: the longest run of leading path components
+   shared by every path in the catalog. Empty when the games are spread over
+   two top-level folders or some sit at the root. Component by component, so
+   "ROMS/N64/..." on every game opens inside ROMS/N64. */
+static void find_library_root(const sm_catalog_t *catalog, char *root, size_t size) {
+    sm_game_t first;
+    size_t depth = 0;
+    root[0] = '\0';
+    if (!catalog->count || !catalog_get(catalog, 0, &first)) return;
+    for (;;) {
+        const char *slash = strchr(first.path + depth, '/');
+        size_t candidate;
+        bool shared = true;
+        if (!slash) break;
+        candidate = (size_t)(slash - first.path);
+        for (uint32_t i = 1; i < catalog->count && shared; i++) {
+            sm_game_t game;
+            if (!catalog_get(catalog, i, &game) ||
+                strncmp(game.path, first.path, candidate + 1u) != 0) shared = false;
+        }
+        if (!shared || candidate + 1u > size) break;
+        depth = candidate + 1u;
+    }
+    if (depth) snprintf(root, size, "%.*s", (int)(depth - 1u), first.path);
+}
+
+/* The folder as the header shows it: relative to the root, so a card whose
+   library is all under ROMS/ shows "/" at the top and "/1 US" inside, not
+   "/ROMS/1 US". */
+static const char *folder_for_display(const sm_ui_t *ui) {
+    size_t root_length = strlen(ui->root);
+    if (!root_length || strncmp(ui->folder, ui->root, root_length)) return ui->folder;
+    return ui->folder[root_length] == '/' ? ui->folder + root_length + 1 : ui->folder + root_length;
+}
+
 /* Backing out of a folder should land on the folder just left, not on the top
    of the parent -- otherwise every step back loses your place. */
 static void select_folder_named(sm_ui_t *ui, const sm_catalog_t *catalog,
@@ -911,6 +946,8 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
             }
             if (ui->favorites.count) sm_favorites_save(&ui->favorites, SM_FAVORITES_PATH);
         }
+        find_library_root(catalog, ui->root, sizeof(ui->root));
+        snprintf(ui->folder, sizeof(ui->folder), "%s", ui->root);
         rebuild(ui, catalog);
     }
     ensure_genre_tabs(ui, catalog);
@@ -1017,7 +1054,7 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
         apply_strip_tab(ui, catalog, SM_STRIP_ALL);
         return;
     }
-    if (actions.back && ui->folder[0]) {
+    if (actions.back && strlen(ui->folder) > strlen(ui->root)) {
         /* Sized to match folder_label's buffer, so a name that fits there fits
            here too and the two always agree. */
         char leaving[64];
@@ -2163,9 +2200,9 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
         else if (ui->view != SM_VIEW_LIST && ui->genre_tab) {
             const sm_genre_tab_t *tab = strip_genre(ui, ui->genre_tab);
             snprintf(header, sizeof(header), "%s  /%.*s", tab ? tab->code : "FAV",
-                (int)sizeof(header) - 8, ui->folder);
+                (int)sizeof(header) - 8, folder_for_display(ui));
         } else
-            snprintf(header, sizeof(header), "/%.*s", (int)sizeof(header) - 2, ui->folder);
+            snprintf(header, sizeof(header), "/%.*s", (int)sizeof(header) - 2, folder_for_display(ui));
         graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
         draw_truncated(s, l->safe_left + 3, l->safe_top + 3, header, counter_chars - 10);
         if (ui->item_count) {

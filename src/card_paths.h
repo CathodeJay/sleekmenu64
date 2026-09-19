@@ -46,6 +46,10 @@
 /* The stock firmware's own folder. Excluded from the library scan for the same
    reason: it holds saves and system state, not games. */
 #define SM_FIRMWARE_FOLDER "ED64"
+/* The browser itself, at the card root: a .z64 to a folder walk, and the one
+   file that must never be listed as a game. tools/card_layout.py has the
+   same name. */
+#define SM_BROWSER_ROM "SleekMenu64.z64"
 /* The cheat database the EverDrive-64 Pro's firmware ships, one libretro
    .cht per game; the same folder serves an X7 card. */
 #define SM_FIRMWARE_CHEATS_DIR SM_SD_ROOT SM_FIRMWARE_FOLDER "/CHEATS"

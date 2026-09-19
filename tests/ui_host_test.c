@@ -685,6 +685,66 @@ int main(void) {
         assert(sm_test_drew("FAVOURITES"));
     }
 
+    /* ---- a library all under one folder opens inside it -------------- */
+    {
+        static const row_t rows[] = {
+            {"ROMS/US/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"ROMS/US/Beta.z64",  "Beta",  "Racing", 0, "", 0, NULL},
+            {"ROMS/JP/Gamma.z64", "Gamma", "Puzzle", 0, "", 0, NULL},
+        };
+        start(rows, 3u);
+        /* Every game is under ROMS/, so the first thing on screen is US and
+           JP, not a list with one entry called ROMS in it. */
+        assert(!strcmp(ui.root, "ROMS"));
+        assert(!strcmp(ui.folder, "ROMS"));
+        assert(ui.item_count == 2u);
+        assert((ui.items[0] & SM_UI_FOLDER_BIT) && (ui.items[1] & SM_UI_FOLDER_BIT));
+        draw();
+        assert(!sm_test_drew("ROMS"));
+        /* B at the root stays put: there is nothing above the library. */
+        frame(PRESS(back));
+        assert(!strcmp(ui.folder, "ROMS"));
+        assert(ui.item_count == 2u);
+        /* Into US and back out lands on US, as before, without leaving. */
+        frame(PRESS(select));
+        assert(!strcmp(ui.folder, "ROMS/US"));
+        assert(ui.item_count == 2u);
+        draw();
+        assert(sm_test_drew("/US"));
+        frame(PRESS(back));
+        assert(!strcmp(ui.folder, "ROMS"));
+        /* The shortlists still hold full paths, so a favourite is found. */
+        frame(PRESS(select)); frame(PRESS(favorite));
+        frame(PRESS(genre_next));            /* favourites, flat */
+        assert(ui.flat && ui.item_count == 1u);
+        frame(PRESS(back));                  /* out of the shortlist */
+        assert(!ui.flat && !strcmp(ui.folder, "ROMS/US"));
+    }
+
+    /* ---- games in two places open at the card root ------------------ */
+    {
+        static const row_t rows[] = {
+            {"ROMS/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"Homebrew/Beta.z64", "Beta", "Racing", 0, "", 0, NULL},
+        };
+        start(rows, 2u);
+        assert(ui.root[0] == '\0' && ui.folder[0] == '\0');
+        assert(ui.item_count == 2u);
+        draw();
+        assert(sm_test_drew("ROMS") && sm_test_drew("Homebrew"));
+    }
+
+    /* ---- and a nested common folder is followed all the way down ------ */
+    {
+        static const row_t rows[] = {
+            {"ROMS/N64/A/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"ROMS/N64/Beta.z64", "Beta", "Racing", 0, "", 0, NULL},
+        };
+        start(rows, 2u);
+        assert(!strcmp(ui.root, "ROMS/N64"));
+        assert(ui.item_count == 2u);         /* the folder A and the game Beta */
+    }
+
     /* ---- coverflow -------------------------------------------------- */
     {
         static row_t rows[30];

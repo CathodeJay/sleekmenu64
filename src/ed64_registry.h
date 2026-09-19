@@ -54,9 +54,9 @@ bool sm_registry_write(uint8_t *blob, size_t size, const sm_registry_record_t *r
 bool sm_registry_normalise_path(const char *path, char *out, size_t out_size);
 
 /* Turn the "sd:/..." path the loader actually opened into the card-absolute
-   form the firmware stores. Prefer this over normalising a catalog path: the
-   catalog's paths are relative to the ROMS root and are not what is on the
-   card. */
+   form the firmware stores. Prefer this over normalising a catalog path: a
+   catalog built against a ROM folder rather than the card holds paths that
+   are not what is on the card. */
 bool sm_registry_path_for_launch(const char *resolved_sd_path, char *out, size_t out_size);
 
 #ifdef __mips__

@@ -48,10 +48,12 @@ int main(void) {
     uint32_t crc = 0;
     sm_cic_t cic = SM_CIC_UNKNOWN;
     sm_launch_paths_t paths;
+    /* Card-relative first, which is what every catalog and the card scan
+       record; ROMS/ second, for a catalog built against the ROM folder. */
     assert(launch_resolve_paths("Action/Game.z64", &paths));
     assert(paths.count == 2);
-    assert(!strcmp(paths.primary, "sd:/ROMS/Action/Game.z64"));
-    assert(!strcmp(paths.fallback, "sd:/Action/Game.z64"));
+    assert(!strcmp(paths.primary, "sd:/Action/Game.z64"));
+    assert(!strcmp(paths.fallback, "sd:/ROMS/Action/Game.z64"));
     assert(launch_resolve_paths("ROMS/Action/Game.z64", &paths));
     assert(paths.count == 1 && !strcmp(paths.primary, "sd:/ROMS/Action/Game.z64"));
     assert(launch_resolve_paths("/ROMS/Action/Game.z64", &paths));

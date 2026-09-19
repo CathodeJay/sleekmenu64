@@ -14,8 +14,8 @@ game started from either menu carries its save into the other.
 
 ## What you need
 
-- An EverDrive-64 X7 (OS 3.11) or an EverDrive-64 Pro, with your ROMs in a
-  `ROMS` folder on the card, in any sub-folders you like.
+- An EverDrive-64 X7 (OS 3.11) or an EverDrive-64 Pro, with your ROMs on
+  the card in any folders you like — `ROMS`, `Games`, several, or none.
 - A computer with Python 3.9 or newer and [Pillow](https://python-pillow.org/)
   (`pip install Pillow`) to prepare the card. No compiler, no toolchain.
 
@@ -32,13 +32,13 @@ It is a public-domain collection of box scans and descriptions for every
 cartridge, shared with other N64 menus. SleekMenu ships none of it and never
 downloads anything itself.
 
-**3. Copy the three files to the root of the card**, next to `ROMS`:
+**3. Copy the three files to the root of the card**, next to your games:
 
 ```text
 /SleekMenu64.z64
 /sleekmenu-prep.pyz
 /release-metadata.zip
-/ROMS/...
+/ROMS/...                 or any folders of your own
 ```
 
 **4. Run the tool from the card.** It takes no arguments; running it from the
@@ -49,10 +49,10 @@ cd /Volumes/CARD          # or wherever the card is mounted
 python3 sleekmenu-prep.pyz
 ```
 
-It reads every ROM, matches each one to its box and description, and writes
-`sleekmenu/catalog.ebc` and `sleekmenu/covers.pak` beside itself. A card of
-three thousand games takes under a minute. Run it again whenever you add
-games.
+It finds every ROM on the card, wherever it is, matches each one to its box
+and description, and writes `sleekmenu/catalog.ebc` and
+`sleekmenu/covers.pak` beside itself. A card of three thousand games takes
+under a minute. Run it again whenever you add games.
 
 **5. Eject the card, put it in the cart, and start `SleekMenu64.z64` from the
 EverDrive menu.** Press A on a game for its details, Start to play. To get

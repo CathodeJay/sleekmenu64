@@ -155,9 +155,27 @@ static const char *path_basename(const char *path) {
     return slash == NULL ? path : slash + 1;
 }
 
+/* Bookkeeping the operating systems leave on a card -- "._Game.z64"
+   AppleDouble twins, ".Trashes", "$RECYCLE.BIN" -- by name shape. */
+static bool hidden_name(const char *name) {
+    return name[0] == '.' || name[0] == '$';
+}
+
+/* Folders known to hold no games, so a scan of the whole card need not walk
+   them: the browser's own, the firmware's, the N64FlashcartMenu's (its menu
+   ROM is a .n64 file), an unpacked art collection (thousands of entries),
+   and the one Windows keeps on every removable disk. tools/card_layout.py
+   has the same list; the two must agree or the tool and the browser would
+   disagree about what is on the card. */
 static bool excluded_directory(const char *path) {
     const char *name = path_basename(path);
-    return !strcasecmp(name, SM_FIRMWARE_FOLDER) || !strcasecmp(name, SM_CARD_FOLDER);
+    return hidden_name(name) || !strcasecmp(name, SM_FIRMWARE_FOLDER) ||
+           !strcasecmp(name, SM_CARD_FOLDER) || !strcasecmp(name, "menu") ||
+           !strcasecmp(name, "metadata") || !strcasecmp(name, "System Volume Information");
+}
+
+static bool excluded_file(const char *name) {
+    return hidden_name(name) || !strcasecmp(name, SM_BROWSER_ROM);
 }
 
 static char *copy_title(const char *path) {
@@ -271,7 +289,7 @@ bool catalog_discover_sd(sm_catalog_t *catalog, const char *root, char *error, s
                     return false;
                 }
                 pending[pending_count++] = child;
-            } else if (entry.d_type == DT_REG && rom_suffix(entry.d_name)) {
+            } else if (entry.d_type == DT_REG && rom_suffix(entry.d_name) && !excluded_file(entry.d_name)) {
                 if (catalog->count == SM_DISCOVERY_MAX_GAMES) {
                     catalog->discovery_capped = true;
                 } else {

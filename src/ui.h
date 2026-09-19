@@ -70,6 +70,13 @@ typedef struct {
     uint32_t item_count;
     uint32_t items[SM_UI_MAX_ITEMS];
     char folder[256];
+    /* Where browsing starts and where B stops: the folder every game on the
+       card is under, when there is one. A card whose whole library sits in
+       ROMS/ opens inside ROMS/ rather than on a list with one entry in it;
+       a card with games in two folders, or loose at the root, opens at the
+       root. Catalog paths and everything written to the card keep the full
+       form; only the tree and its header are relative to this. */
+    char root[256];
     /* The favourites view is flat: no folders, every starred game wherever it
        lives. The folder being browsed is put aside so that stepping back off
        the tab returns to it. */

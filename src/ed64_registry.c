@@ -97,8 +97,8 @@ bool sm_registry_normalise_path(const char *path, char *out, size_t out_size) {
     return true;
 }
 
-/* The one to call at launch. A catalog stores paths relative to the ROMS root,
-   so the loader resolves "1 US - N-Z/x.z64" to "sd:/ROMS/1 US - N-Z/x.z64"
+/* The one to call at launch. A catalog built against a ROMS folder stores
+   "1 US - N-Z/x.z64", which the loader resolves to "sd:/ROMS/1 US - N-Z/x.z64"
    before opening it -- and the record has to name the file the loader actually
    opened, not the catalog's shorthand. Normalising the shorthand directly
    wrote "/1 US - N-Z/x.z64" into the firmware's own state file, a path that

@@ -11,6 +11,7 @@ this is the reference.
 /sleekmenu-prep.pyz         the card-preparation tool          you copy it
 /release-metadata.zip       box art and descriptions           you download it
 /ROMS/...                   your games, in any folders          yours
+/<any other folder>/...     or anywhere else on the card        yours
 
 /sleekmenu/catalog.ebc      titles, genre, publisher, year     written by the tool
 /sleekmenu/covers.pak       every cover, one file              written by the tool
@@ -24,10 +25,14 @@ this is the reference.
 /ED64/sysdata/registry.dat  which game is loaded, save type    shared with the EverDrive menu
 ```
 
-Only the ROM is required. Without `catalog.ebc` the browser scans `ROMS` and
-shows file names; without `covers.pak` it draws a placeholder. The ROMs must
-be on the card itself: the catalog records each game's path relative to the
-card root.
+Only the ROM is required. Without `catalog.ebc` the browser scans the card
+and shows file names; without `covers.pak` it draws a placeholder. The ROMs
+must be on the card itself: the catalog records each game's path relative to
+the card root, spelled as the card spells it. Both the tool and the browser
+skip the folders that hold no games — `ED64`, `sleekmenu`, `menu`,
+`metadata`, `System Volume Information`, anything hidden — and the browser's
+own `SleekMenu64.z64`. When every game is under one folder, the browser
+opens inside it.
 
 ## What the browser writes
 

@@ -84,11 +84,11 @@ def load_cover_map(path: Path | None) -> dict[str, str]:
 def relative_root(roms: Path, sd_root: Path | None) -> Path:
     """Which directory catalog paths are recorded against.
 
-    This is not cosmetic. The browser resolves a catalog path as sd:/ROMS/<p>
-    and then as sd:/<p>; a path recorded against a ROM folder that is neither
-    the card root nor ROMS/ matches neither, and every launch fails with
-    nothing on screen to explain it. Passing --sd-root records paths against
-    the card, which always resolves."""
+    This is not cosmetic. The browser resolves a catalog path as sd:/<p>
+    and then as sd:/ROMS/<p>; a path recorded against a ROM folder that is
+    neither the card root nor ROMS/ matches neither, and every launch fails
+    with nothing on screen to explain it. Passing --sd-root records paths
+    against the card, which always resolves."""
     if sd_root is None:
         return roms
     roms_resolved, sd_resolved = roms.resolve(), sd_root.resolve()

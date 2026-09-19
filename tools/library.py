@@ -48,17 +48,39 @@ class LibraryError(ValueError):
 def walk(root: Path, suffixes=LIBRARY_SUFFIXES, excluded=card_layout.EXCLUDED_DIRECTORIES) -> list[str]:
     """Every file under `root` with one of the suffixes, as forward-slash
     paths relative to `root`, in a case-folded order that is the same on
-    every platform. Folders named in `excluded` are never entered."""
+    every platform. Folders named in `excluded` are never entered, hidden
+    entries are skipped, and the browser's own ROM is not a game. Names come
+    from the directory listing, so the catalog spells a folder the way the
+    card does and not the way a caller typed it."""
     if not root.is_dir():
         raise LibraryError(f"not a folder: {root}")
     found: list[str] = []
     for directory, names, files in os.walk(root):
         names[:] = sorted(
-            (name for name in names if excluded is None or name.casefold() not in excluded),
+            (name for name in names
+             if not card_layout.hidden(name) and (excluded is None or name.casefold() not in excluded)),
             key=str.casefold,
         )
         base = Path(directory)
         for filename in sorted(files, key=str.casefold):
+            if card_layout.hidden(filename) or filename.casefold() == card_layout.BROWSER_ROM.casefold():
+                continue
             if Path(filename).suffix.casefold() in suffixes:
                 found.append((base / filename).relative_to(root).as_posix())
     return sorted(found, key=lambda value: (value.casefold(), value))
+
+
+def spelled_on_disk(card: Path, folder: Path) -> Path:
+    """`folder` with each component spelled as the card's directory listing
+    spells it. macOS and Windows open `ROMS` and `roms` alike, so a typed
+    path is not evidence of the card's spelling, and the catalog must carry
+    the card's: the browser shows folders by the names the catalog holds."""
+    try:
+        parts = folder.resolve().relative_to(card.resolve()).parts
+    except ValueError:
+        return folder
+    current = card.resolve()
+    for part in parts:
+        match = next((name for name in os.listdir(current) if name.casefold() == part.casefold()), part)
+        current = current / match
+    return current

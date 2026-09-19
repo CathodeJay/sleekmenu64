@@ -167,13 +167,13 @@ int main(void) {
         assert(!sm_registry_normalise_path("ROMS/a.z64", small, sizeof(small)));
     }
 
-    /* The bug this test exists for. A catalog stores paths relative to the
-       ROMS root, so the browser hands the loader "1 US - N-Z/x.z64"; the
-       loader resolves that to "sd:/ROMS/1 US - N-Z/x.z64" and opens it. What
-       goes into the firmware's record has to name the file on the CARD. The
-       shorthand normalised directly gives "/1 US - N-Z/x.z64" -- a path that
-       does not exist, written into the state file the stock menu reads at
-       boot. Resolve first, then strip the volume. */
+    /* The bug this test exists for. A catalog built against a ROMS folder
+       stores "1 US - N-Z/x.z64"; the loader tries "sd:/1 US - N-Z/x.z64",
+       then "sd:/ROMS/1 US - N-Z/x.z64", and opens the one that exists. What
+       goes into the firmware's record has to name the file on the CARD: the
+       candidate that opened, with its volume stripped. The shorthand
+       normalised directly gives "/1 US - N-Z/x.z64" -- a path that does not
+       exist, written into the state file the stock menu reads at boot. */
     {
         static const char *catalog_paths[] = {
             "1 US - N-Z/Super Mario 64 (USA).z64",
@@ -184,11 +184,16 @@ int main(void) {
         for (size_t i = 0; i < sizeof(catalog_paths) / sizeof(*catalog_paths); i++) {
             sm_launch_paths_t resolved;
             char card[SM_REGISTRY_PATH_MAX];
+            /* On the card the file is under ROMS/, so that is the candidate
+               that opens: the primary for a card-relative path, the fallback
+               for the ROMS-relative shorthand. */
             assert(launch_resolve_paths(catalog_paths[i], &resolved));
-            assert(sm_registry_path_for_launch(resolved.primary, card, sizeof(card)));
+            const char *opened = strstr(resolved.primary, "sd:/ROMS/") ? resolved.primary
+                               : resolved.count == 2 ? resolved.fallback : resolved.primary;
+            assert(sm_registry_path_for_launch(opened, card, sizeof(card)));
             if (strcmp(card, "/ROMS/1 US - N-Z/Super Mario 64 (USA).z64")) {
-                fprintf(stderr, "%s\n  resolved %s\n  card     %s\n",
-                    catalog_paths[i], resolved.primary, card);
+                fprintf(stderr, "%s\n  opened   %s\n  card     %s\n",
+                    catalog_paths[i], opened, card);
                 assert(0);
             }
         }

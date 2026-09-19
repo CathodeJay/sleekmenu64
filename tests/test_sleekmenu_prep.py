@@ -25,7 +25,7 @@ from unittest import mock
 from PIL import Image
 
 from tests.rom_fixtures import write_rom
-from tools import build_prep, card_layout, coverdb, sleekmenu_prep
+from tools import build_prep, card_layout, coverdb, library, sleekmenu_prep
 
 ROOT = Path(__file__).resolve().parent.parent
 PNG_BYTES = None
@@ -86,22 +86,22 @@ class CardDiscoveryTests(unittest.TestCase):
             with mock.patch.object(sys, "argv", [str(archive)]):
                 self.assertEqual(sleekmenu_prep.find_card(None), card.resolve())
 
-    def test_a_missing_roms_folder_is_made_and_reported(self):
-        """A fresh card has no ROMS/ yet. Making it and saying so beats an
-        error naming a folder the person has never heard of."""
+    def test_a_card_with_no_games_gets_a_roms_folder_and_says_so(self):
+        """A fresh card has nothing on it. Making ROMS/ and saying so beats
+        an error naming a folder the person has never heard of."""
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch)
-            roms, created = sleekmenu_prep.find_roms(card, None)
-            self.assertEqual(roms, card / "ROMS")
-            self.assertTrue(created)
-            self.assertTrue(roms.is_dir())
-            roms, created = sleekmenu_prep.find_roms(card, None)
-            self.assertFalse(created)
+            found = sleekmenu_prep.find_library(card, None)
+            self.assertEqual(found.created, card / "ROMS")
+            self.assertTrue(found.created.is_dir())
+            self.assertEqual(found.rom_paths, [])
+            found = sleekmenu_prep.find_library(card, None)
+            self.assertIsNone(found.created, "made once, then it is just an empty folder")
 
     def test_a_dry_run_does_not_make_folders(self):
         with tempfile.TemporaryDirectory() as scratch:
-            with self.assertRaises(sleekmenu_prep.PrepError):
-                sleekmenu_prep.find_roms(Path(scratch), None, create=False)
+            found = sleekmenu_prep.find_library(Path(scratch), None, create=False)
+            self.assertIsNone(found.created)
             self.assertFalse((Path(scratch) / "ROMS").exists())
 
     def test_an_explicit_roms_folder_that_does_not_exist_is_still_an_error(self):
@@ -109,7 +109,56 @@ class CardDiscoveryTests(unittest.TestCase):
         saying it is not there."""
         with tempfile.TemporaryDirectory() as scratch:
             with self.assertRaises(sleekmenu_prep.PrepError):
-                sleekmenu_prep.find_roms(Path(scratch), Path(scratch) / "Games")
+                sleekmenu_prep.find_library(Path(scratch), Path(scratch) / "Games")
+
+    def test_games_are_found_wherever_they_are_on_the_card(self):
+        """Nothing is assumed about `ROMS`: a folder of any name, several
+        folders, and files loose at the root are all the library, recorded
+        relative to the card so every launch resolves."""
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch)
+            write_rom(card / "Games" / "Alpha.z64", 1, 2)
+            write_rom(card / "Hacks" / "Beta.z64", 3, 4)
+            write_rom(card / "Loose.z64", 5, 6)
+            found = sleekmenu_prep.find_library(card, None)
+            self.assertEqual(found.root, card)
+            self.assertEqual(found.rom_paths, ["Games/Alpha.z64", "Hacks/Beta.z64", "Loose.z64"])
+            self.assertIsNone(found.created)
+            self.assertEqual(sleekmenu_prep.describe_library(found),
+                             "1 at the card root, 1 in Games/, 1 in Hacks/")
+
+    def test_the_browsers_own_files_and_the_systems_are_never_games(self):
+        """SleekMenu64.z64 sits at the card root and is a .z64; the
+        N64FlashcartMenu's folder holds a .n64; macOS leaves a `._` twin
+        beside every file it copies; the firmware folder holds saves. None
+        of them is a game."""
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch)
+            write_rom(card / "ROMS" / "Alpha.z64", 1, 2)
+            (card / card_layout.BROWSER_ROM).write_bytes(b"\x80\x37\x12\x40" + bytes(60))
+            (card / "ROMS" / "._Alpha.z64").write_bytes(b"\x00\x05\x16\x07")
+            write_rom(card / "menu" / "sc64menu.n64", 7, 8)
+            write_rom(card / "ED64" / "OS64.v64", 9, 10)
+            write_rom(card / "System Volume Information" / "x.z64", 11, 12)
+            write_rom(card / ".Trashes" / "y.z64", 13, 14)
+            found = sleekmenu_prep.find_library(card, None)
+            self.assertEqual(found.rom_paths, ["ROMS/Alpha.z64"])
+
+    def test_a_folder_is_recorded_as_the_card_spells_it(self):
+        """`--roms ROMS` on a card whose folder is `roms`: the catalog must say
+        `roms`, or the browser shows a folder the card does not have. Only
+        a case-insensitive file system can stage this, so the spelling
+        helper is checked directly."""
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch)
+            write_rom(card / "roms" / "Alpha.z64", 1, 2)
+            spelled = library.spelled_on_disk(card, card / "roms")
+            self.assertEqual(spelled.name, "roms")
+            found = sleekmenu_prep.find_library(card, None)
+            self.assertEqual(found.rom_paths, ["roms/Alpha.z64"])
+            with mock.patch("os.listdir", lambda path: ["roms", "other"]):
+                self.assertEqual(library.spelled_on_disk(card, card / "ROMS").name, "roms")
+                self.assertEqual(library.spelled_on_disk(card, card / "ROMS" / "US").name, "US")
 
     def test_the_card_folders_are_laid_out_once(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -216,6 +265,21 @@ class EntryPointTests(unittest.TestCase):
         code = self.run_prep()
         self.assertEqual(code, 0)
         self.assertFalse((self.card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).exists())
+        self.assertIn("anywhere on the card", self.output)
+
+    def test_a_library_in_a_folder_of_its_own_name_is_catalogued_where_it_is(self):
+        """The comment that started this: games in `Games/` and no `ROMS`
+        at all. The catalog records `Games/...`, which the browser resolves
+        as sd:/Games/..., and no ROMS/ is made."""
+        shutil.rmtree(self.roms)
+        crc = write_rom(self.card / "Games" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+        self.assertEqual(crc, self.crc)
+        code = self.run_prep()
+        self.assertEqual(code, 0, self.output)
+        catalog = (self.card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).read_bytes()
+        self.assertIn(b"Games/Wave Race 64 (USA).z64", catalog)
+        self.assertFalse((self.card / "ROMS").exists())
+        self.assertIn("1 in Games/", self.output)
 
 
 class ArchiveTests(unittest.TestCase):

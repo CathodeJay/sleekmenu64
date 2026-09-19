@@ -68,6 +68,13 @@ class HostModuleTests(unittest.TestCase):
         build_and_run("launch-policy-test",
                       ["src/launch_policy.c", "tests/launch_policy_test.c"])
 
+    def test_host_card_scan(self):
+        """The no-catalog scan, over a real directory tree: games anywhere
+        on the card, and nothing that is not a game."""
+        build_and_run("catalog-scan-test",
+                      ["src/catalog.c", "tests/catalog_discover_test.c"],
+                      ["-Itests/stubs", "-D_DEFAULT_SOURCE"])
+
     def test_host_probe_module(self):
         build_and_run("x7-probe-test",
                       ["src/x7_probe.c", "tests/x7_probe_test.c"])

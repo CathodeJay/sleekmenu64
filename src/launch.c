@@ -97,9 +97,10 @@ static void set_status(sm_launch_result_t result) {
 }
 
 /* The path the launcher actually opened, in "sd:/..." form. A catalog stores
-   paths relative to the ROMS root and the resolver tries more than one
-   candidate, so this -- not the catalog's shorthand -- is what names the file
-   on the card, and what the backend is handed. */
+   paths relative to the card root (older ones to a ROMS folder) and the
+   resolver tries more than one candidate, so this -- not the catalog's
+   shorthand -- is what names the file on the card, and what the backend is
+   handed. */
 static char opened_path[SM_LAUNCH_PATH_SIZE];
 
 /* Read-only: nothing here rewrites a ROM. Records which candidate answered. */
