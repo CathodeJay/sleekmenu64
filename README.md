@@ -118,6 +118,9 @@ applies it. The header shows how many games match.
   Pro the cartridge handles saves itself and the stock menu writes them out
   at its next boot — so after playing from SleekMenu, let the EverDrive menu
   boot once before pulling the card.
+- **Clock.** A game that keeps time (Animal Forest) gets the cartridge's
+  clock as it does from the stock menu: set at launch on the X7, served by
+  the cartridge on the Pro.
 - **ROM formats.** `.z64` and `.v64` (byteswapped) dumps load; `.n64`
   word-swapped dumps are listed but refused, convert them to `.z64`. Size
   limit: 64 MiB on the X7, 126 MiB on the Pro.

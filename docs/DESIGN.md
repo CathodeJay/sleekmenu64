@@ -70,6 +70,7 @@ On the console the work is split into small modules:
 | `ui` | list, grid and coverflow views, filters, the launch card, the cheats page |
 | `launch_policy` | suffix, magic, size and boot-code checks before anything boots |
 | `flashcart` / `launch` | one interface over the two cartridges; the X7 backend streams the ROM through libcart, the Pro backend (`src/pro/`) has the cartridge's MCU copy it |
+| `x7_rtc` / `x7_save_reg` | the X7's clock and save configuration for the game about to run |
 | `save_io` / `save_sync` / `ed64_registry` | saves to and from `ED64/gamedata/`, and the record the EverDrive menu reads |
 | `cheats` / `cheat_pack` / `cheats_io` | finding a game's `.cht`, the record of what is on, the list handed to the boot code |
 
@@ -115,6 +116,18 @@ The jump itself is the boot handoff vendored from N64FlashcartMenu: it
 quiesces the RCP, copies the game's own boot code into the RSP's memory,
 installs the cheat engine when there is a list, and jumps. That code is AGPL
 and the reason the whole project is.
+
+**The clock.** A game that keeps time — Animal Forest and its translations —
+is flagged by the same lookup that resolves its save type. On the Pro the
+cartridge's MCU is told to serve its own clock and nothing more is needed.
+On the X7 the browser does what the stock menu does before such a game:
+reads the cartridge's DS1337 over I2C, sets the emulated clock with three
+Joybus writes (stop, time, start), and turns the clock on for the game in
+the same register write that selects its save memory, at the point of no
+return. The clock is off while the browser itself runs, so it is switched on
+for the three writes and off again; a clock that does not answer cancels the
+launch before the save is armed. The protocol was read out of the stock
+OS 3.11 with `tools/trace_x7_rtc.py`, which is where the evidence lives.
 
 **64DD.** On the Pro, `.ndd` images are listed like games. Selected on their
 own they boot from the drive's IPL, which the Pro menu keeps in
@@ -201,11 +214,13 @@ makes it resumable.
 Proven on hardware: the SD transport, a full ROM load verified byte for byte,
 the boot handoff, saves in both directions with the stock menu, and the
 return to the stock menu — on an EverDrive-64 X7 and an EverDrive-64 Pro.
+The X7's clock, with Animal Forest keeping time and reloading its save.
 
 Open:
 
 - Controller Pak (`.mpk`) backup and restore.
 - 64DD on hardware.
+- The Pro's clock in a game: the MCU is told to serve it; not yet watched.
 - Cheats seen to take effect in a game: the page and the matching work on
   hardware; the one in-game test so far used a file for the wrong region.
 - Cheats on CIC 6101 cartridges (see above).

@@ -15,7 +15,7 @@
        void bi_game_cfg_set(u8 type) { bi_reg_wr(REG_GAM_CFG, type); }
    Save transfers write the save-type ID verbatim (SAVE_OFF..SAVE_SRM128K).
    For launch, OS 3.11 also sets bit 0x1000 when RTC is requested. This bit
-   is absent from the older public bios.h; see docs/X7_RTC.md for evidence.
+   is absent from the older public bios.h; tools/trace_x7_rtc.py is the evidence.
 
    Deliberately NOT touched here: EDX_KEY. libcart's edx_init() writes 0xAA55
    once and never re-locks, so the register window is already open; writing

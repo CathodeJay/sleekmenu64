@@ -6,6 +6,36 @@ Executes the original MIPS launch, RTC conversion, and packet construction
 instructions. Hardware and unrelated menu routines are stubbed. This checks
 software behaviour; it does not emulate an X7 or validate physical hardware.
 No firmware is included or downloaded. Requires the optional unicorn package.
+
+This is the evidence behind src/x7_rtc.c. The stock OS launch routine sets
+bit 0x1000 of GAM_CFG for a game that keeps time, a bit the older public
+bios.h does not describe, and before that reads the DS1337 over I2C and
+sends three Joybus writes to the cartridge's emulated clock: stop and
+unlock block 0, write the time to block 2, start and lock block 0. The
+old 0x8010 RTC-set register is not used. Its RTC diagnostic enables the
+same bit before its own Joybus writes and clears it afterwards, which is
+why the driver does the same around the three commands.
+
+Running it against the official OS 3.11 (OS64.v64 from krikzz.com, checked
+by SHA-256 before any fixed address is trusted) exercises all seven save
+types with RTC off and on. Off produces no clock traffic and writes exactly
+the save type; on reads the DS1337, builds the three packets and writes
+save type | 0x1000. tests/x7_rtc_test.c holds the packets this printed.
+
+    python3 tools/trace_x7_rtc.py /path/to/ED64/OS64.v64
+
+Addresses in that build (virtual; ROM offset = address - 0x80000400 +
+0x1000):
+
+    0x80006B28  game launch and the per-game RTC branch
+    0x80006D20  read and initialise the RTC, select bit 0x1000
+    0x80001D60  read and normalise the DS1337 fields
+    0x800013E8  I2C read transaction
+    0x80010358  build the stop, time and start RTC writes
+    0x80010270  assemble a Joybus write packet
+    0x80000B90  write the full configuration to GAM_CFG
+    0x8000CAB0  enable RTC before the diagnostic's Joybus writes
+    0x8000CAC8  disable RTC after the diagnostic
 """
 import argparse
 import hashlib

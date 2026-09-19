@@ -10,7 +10,7 @@
 
 /* Separate from libcart's SD controller and direction latch. OS 3.11 reads
    the DS1337, writes Joybus RTC blocks, then enables GAM_CFG bit 0x1000.
-   See docs/X7_RTC.md and tools/trace_x7_rtc.py for the observed protocol. */
+   See tools/trace_x7_rtc.py for the observed protocol. */
 #define X7_I2C_CMD 0x1F800018u
 #define X7_I2C_DAT 0x1F80001Cu
 #define X7_I2C_POLL_LIMIT 10000u
