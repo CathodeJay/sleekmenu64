@@ -264,6 +264,43 @@ def summarize(document: dict) -> str:
     return line
 
 
+def short_cover_source(source: str) -> str:
+    """The cover's origin as a word or two for a table cell; the detail
+    pane has the whole phrase. What matters at a glance is whether the box
+    view will be full screen (high-res), the owner's, the collection's
+    small scan, another region's, or nothing."""
+    if source.startswith(provenance.COVER_LIBRETRO):
+        return "high-res" + (", edited" if source != provenance.COVER_LIBRETRO else "")
+    if provenance.is_yours(source):
+        return "yours"
+    if source == provenance.COVER_COLLECTION_REGION:
+        return "other region"
+    return source
+
+
+def short_text_source(source: str) -> str:
+    """Same for the description."""
+    if source == provenance.TEXT_COLLECTION_BY_CODE:
+        return "by code"
+    return source
+
+
+def waiting_line(card: Path | None, document: dict | None) -> str:
+    """The ROMs on the card that the catalog does not have -- games added
+    since the last Prepare, which the browser lists without a box until
+    the next one -- as a sentence for the tab's header, or ""."""
+    if card is None or document is None:
+        return ""
+    try:
+        new = added_since(card, library.walk(card))
+    except library.LibraryError:
+        return ""
+    if not new:
+        return ""
+    return (f"{new} ROM{'s' if new != 1 else ''} on the card {'are' if new != 1 else 'is'} not in "
+            f"it yet: the browser lists {'them' if new != 1 else 'it'} without a box until the next Prepare.")
+
+
 def box_view_line(game: dict) -> str:
     """What the console's full-screen box view will draw for a game."""
     cover = str((game.get("sources") or {}).get("cover", provenance.NONE))
@@ -306,7 +343,14 @@ class CatalogTab:
     """The card as the browser will show it, from sleekmenu/catalog.json:
     the folders as a tree, one row per game with where each field came
     from, and for the selected game the box exactly as the console draws
-    it -- decoded from covers.pak, never from the source picture."""
+    it -- decoded from covers.pak, never from the source picture.
+
+    Three regions: the tree, the selected game beside it as the console
+    shows it, and under the tree the owner's own art and text for that
+    game. The right column is a fixed width, wide enough for the box view's
+    sprite, so nothing there is ever clipped; the tree takes the rest."""
+
+    DETAIL_WIDTH = 300
 
     def __init__(self, parent, card_of):
         import tkinter as tk
@@ -319,6 +363,7 @@ class CatalogTab:
         self.photo = None
         self.only_mine = tk.BooleanVar(value=False)
         self.summary = tk.StringVar(value="No card picked.")
+        self.waiting = tk.StringVar()
         self.title = tk.StringVar()
         self.facts = tk.StringVar()
         self.sources = tk.StringVar()
@@ -332,94 +377,116 @@ class CatalogTab:
 
         frame = ttk.Frame(parent, padding=12)
         frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
         self.frame = frame
-        top = ttk.Frame(frame)
-        top.pack(fill="x")
-        ttk.Button(top, text="Reload", command=self.reload).pack(side="left")
-        ttk.Label(top, textvariable=self.summary, foreground="#555").pack(side="left", padx=8)
-        ttk.Checkbutton(top, text="Only what I changed", variable=self.only_mine,
-                        command=self.fill).pack(side="right")
 
-        panes = ttk.PanedWindow(frame, orient="horizontal")
-        panes.pack(fill="both", expand=True, pady=(8, 0))
-        left = ttk.Frame(panes)
+        top = ttk.Frame(frame)
+        top.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        ttk.Button(top, text="Reload", command=self.reload).pack(side="left")
+        ttk.Checkbutton(top, text="Only what I changed", variable=self.only_mine,
+                        command=self.fill).pack(side="left", padx=(12, 0))
+        lines = ttk.Frame(top)
+        lines.pack(side="left", fill="x", expand=True, padx=(12, 0))
+        summary = ttk.Label(lines, textvariable=self.summary, foreground="#555", justify="left")
+        summary.pack(anchor="w")
+        waiting = ttk.Label(lines, textvariable=self.waiting, foreground="#8a4b00", justify="left")
+        waiting.pack(anchor="w")
+
+        # -- the tree ---------------------------------------------------------
+        left = ttk.Frame(frame)
+        left.grid(row=1, column=0, sticky="nsew")
+        left.rowconfigure(0, weight=1)
+        left.columnconfigure(0, weight=1)
         columns = ("genre", "year", "publisher", "players", "region", "cover", "text")
         self.tree = ttk.Treeview(left, columns=columns, selectmode="browse")
         self.tree.heading("#0", text="Folder / game")
-        self.tree.column("#0", width=260, stretch=True)
-        for name, width in (("genre", 90), ("year", 50), ("publisher", 110), ("players", 60),
-                            ("region", 60), ("cover", 150), ("text", 160)):
-            self.tree.heading(name, text=name.capitalize() if name != "text" else "Description")
-            self.tree.column(name, width=width, stretch=False, anchor="w")
+        self.tree.column("#0", width=232, minwidth=160, stretch=True)
+        for name, heading, width in (("genre", "Genre", 76), ("year", "Year", 44),
+                                     ("publisher", "Publisher", 96), ("players", "Players", 58),
+                                     ("region", "Region", 66), ("cover", "Box", 96),
+                                     ("text", "Text", 64)):
+            self.tree.heading(name, text=heading)
+            self.tree.column(name, width=width, minwidth=width, stretch=False, anchor="w")
         scroll = ttk.Scrollbar(left, orient="vertical", command=self.tree.yview)
         across = ttk.Scrollbar(left, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=scroll.set, xscrollcommand=across.set)
         self.tree.grid(row=0, column=0, sticky="nsew")
         scroll.grid(row=0, column=1, sticky="ns")
         across.grid(row=1, column=0, sticky="ew")
-        left.rowconfigure(0, weight=1)
-        left.columnconfigure(0, weight=1)
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
-        panes.add(left, weight=3)
 
-        right = ttk.Frame(panes, padding=(12, 0, 0, 0), width=320)
-        # The edit panel and the notes are packed first, at the bottom, so a
-        # long description scrolls rather than pushing them out of the window.
-        edit = ttk.LabelFrame(right, text="Your own art and text", padding=8)
-        edit.pack(side="bottom", fill="x", pady=(10, 0))
-        notes = ttk.Label(right, textvariable=self.notes, foreground="#8a4b00", justify="left")
-        notes.pack(side="bottom", anchor="w", pady=(4, 0))
-        self.box = ttk.Label(right, text="", anchor="w")
-        self.box.pack(anchor="w")
-        wrapped = []
-        for variable, style in ((self.title, {"font": ("TkDefaultFont", 12, "bold")}),
-                                (self.facts, {}), (self.sources, {"foreground": "#555"})):
-            label = ttk.Label(right, textvariable=variable, justify="left", **style)
-            label.pack(anchor="w", pady=(6, 0) if variable is self.title else (2, 0))
-            wrapped.append(label)
-        self.description = tk.Text(right, height=5, width=30, wrap="word", state="disabled")
-        self.description.pack(fill="both", expand=True, pady=(8, 0))
-        wrapped.append(notes)
+        # -- the selected game, as the console shows it -----------------------
+        right = ttk.Frame(frame, padding=(12, 0, 0, 0), width=self.DETAIL_WIDTH)
+        right.grid(row=1, column=1, rowspan=2, sticky="nsew")
+        right.grid_propagate(False)
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(3, weight=1)
+        # The box is always the box view's size, a placeholder when there
+        # is none, so the title and the rest stay put as the selection moves.
+        width, height = make_sprite.LARGE_CANVAS_SIZE
+        self.placeholder = tk.PhotoImage(
+            data=make_sprite.to_ppm(width, height, bytes((35, 42, 52)) * (width * height)), format="PPM")
+        self.box = ttk.Label(right, image=self.placeholder, text="", compound="center",
+                             foreground="#8291a0", anchor="w")
+        self.box.grid(row=0, column=0, sticky="w")
+        wrap = self.DETAIL_WIDTH - 16
+        ttk.Label(right, textvariable=self.title, justify="left", wraplength=wrap,
+                  font=("TkDefaultFont", 12, "bold")).grid(row=1, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(right, textvariable=self.facts, justify="left", wraplength=wrap).grid(
+            row=2, column=0, sticky="w", pady=(2, 0))
+        self.description = tk.Text(right, height=4, width=20, wrap="word", state="disabled",
+                                   relief="flat", font="TkDefaultFont",
+                                   background=parent.winfo_toplevel().cget("background"))
+        self.description.grid(row=3, column=0, sticky="nsew", pady=(6, 0))
+        ttk.Label(right, textvariable=self.sources, foreground="#555", justify="left",
+                  wraplength=wrap).grid(row=4, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(right, textvariable=self.notes, foreground="#8a4b00", justify="left",
+                  wraplength=wrap).grid(row=5, column=0, sticky="w", pady=(4, 0))
+        self.detail = right
 
+        # -- the owner's own art and text, under the tree ---------------------
+        edit = ttk.LabelFrame(left, text="Your own art and text", padding=8)
+        edit.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         edit.columnconfigure(1, weight=1)
         ttk.Label(edit, text="Picture").grid(row=0, column=0, sticky="w")
         picture_entry = ttk.Entry(edit, textvariable=self.picture)
-        picture_entry.grid(row=0, column=1, sticky="ew", padx=4)
-        ttk.Button(edit, text="Browse…", command=self.browse_picture).grid(row=0, column=2)
+        picture_entry.grid(row=0, column=1, sticky="ew", padx=(6, 4))
+        ttk.Button(edit, text="Browse…", command=self.browse_picture).grid(row=0, column=2, sticky="w")
         self.drop_works = enable_drop(picture_entry, self.dropped)
         ttk.Label(edit, text="Title").grid(row=1, column=0, sticky="w", pady=(4, 0))
         ttk.Entry(edit, textvariable=self.own_title).grid(row=1, column=1, columnspan=2, sticky="ew",
-                                                          padx=(4, 0), pady=(4, 0))
+                                                          padx=(6, 0), pady=(4, 0))
         ttk.Label(edit, text="Text").grid(row=2, column=0, sticky="nw", pady=(4, 0))
-        self.own_text = tk.Text(edit, height=3, width=30, wrap="word")
-        self.own_text.grid(row=2, column=1, columnspan=2, sticky="ew", padx=(4, 0), pady=(4, 0))
+        self.own_text = tk.Text(edit, height=2, width=20, wrap="word", font="TkDefaultFont")
+        self.own_text.grid(row=2, column=1, columnspan=2, sticky="ew", padx=(6, 0), pady=(4, 0))
         scopes = ttk.Frame(edit)
-        scopes.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        scopes.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
         ttk.Radiobutton(scopes, text="This ROM only", variable=self.scope,
-                        value=custom_art.SCOPE_ROM, command=self.update_reach).pack(anchor="w")
+                        value=custom_art.SCOPE_ROM, command=self.update_reach).pack(side="left")
         self.by_code = ttk.Radiobutton(scopes, text="Every game with this code", variable=self.scope,
                                        value=custom_art.SCOPE_CODE, command=self.update_reach)
-        self.by_code.pack(anchor="w")
-        reach = ttk.Label(edit, textvariable=self.reach, foreground="#555", justify="left")
-        reach.grid(row=4, column=0, columnspan=3, sticky="w")
-        wrapped.append(reach)
+        self.by_code.pack(side="left", padx=(12, 0))
+        ttk.Label(edit, textvariable=self.reach, foreground="#555").grid(
+            row=4, column=0, columnspan=2, sticky="w")
         buttons = ttk.Frame(edit)
-        buttons.grid(row=5, column=0, columnspan=3, sticky="e", pady=(6, 0))
+        buttons.grid(row=3, column=2, rowspan=2, sticky="e", pady=(6, 0))
         self.remove_button = ttk.Button(buttons, text="Remove my edit", command=self.remove_edit)
         self.remove_button.pack(side="left", padx=(0, 6))
         self.save_button = ttk.Button(buttons, text="Save", command=self.save_edit)
         self.save_button.pack(side="left")
         edit_note = ttk.Label(edit, textvariable=self.edit_note, foreground="#555", justify="left")
-        edit_note.grid(row=6, column=0, columnspan=3, sticky="w", pady=(4, 0))
-        wrapped.append(edit_note)
+        edit_note.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
         self.edit = edit
 
-        def rewrap(event):
-            for label in wrapped:
-                label.configure(wraplength=max(120, event.width - 16))
-        right.bind("<Configure>", rewrap)
-        self.detail = right
-        panes.add(right, weight=2)
+        def rewrap_edit(event):
+            edit_note.configure(wraplength=max(200, event.width - 24))
+        left.bind("<Configure>", rewrap_edit)
+
+        def rewrap_top(event):
+            summary.configure(wraplength=max(200, event.width - 8))
+            waiting.configure(wraplength=max(200, event.width - 8))
+        lines.bind("<Configure>", rewrap_top)
 
     # -- loading -----------------------------------------------------------
 
@@ -441,6 +508,7 @@ class CatalogTab:
                 self.covers = card_catalog.Covers.open(card)
                 self.games = {str(game["path"]): game for game in self.document["games"]}
                 self.summary.set(summarize(self.document))
+        self.waiting.set(waiting_line(card, self.document))
         self.fill()
         self.show(None)
 
@@ -465,7 +533,8 @@ class CatalogTab:
                              values=(game.get("genre", ""), game.get("year") or "",
                                      game.get("publisher", ""), game.get("players") or "",
                                      "/".join(game.get("regions") or []),
-                                     sources.get("cover", ""), sources.get("description", "")))
+                                     short_cover_source(str(sources.get("cover", ""))),
+                                     short_text_source(str(sources.get("description", "")))))
 
     # -- the selected game ---------------------------------------------------
 
@@ -485,14 +554,16 @@ class CatalogTab:
             self.facts.set("")
             self.sources.set("")
             self.notes.set("")
-            self.box.configure(image="", text="")
+            self.box.configure(image=self.placeholder, text="")
             self.photo = None
+            self.edit.configure(text="Your own art and text")
         else:
             sources = game.get("sources") or {}
             self.title.set(str(game.get("title", "")))
             self.facts.set(facts_line(game))
-            self.sources.set(f"Cover: {sources.get('cover', '')} · Description: {sources.get('description', '')}"
-                             f" · Title: {sources.get('title', '')}\n{box_view_line(game)}")
+            self.sources.set(f"Cover: {sources.get('cover', '')}\nText: {sources.get('description', '')}"
+                             f"\nTitle: {sources.get('title', '')}\n{box_view_line(game)}")
+            self.edit.configure(text=f"Your own art and text for {game.get('title', '')}")
             self.description.insert("1.0", str(game.get("description") or ""))
             self.notes.set("\n".join(provenance.notes(game)))
             # The box view's sprite when the card has the large pack --
@@ -502,7 +573,7 @@ class CatalogTab:
             pixels = large or (self.covers.pixels(game) if self.covers is not None else None)
             if pixels is None:
                 self.photo = None
-                self.box.configure(image="", text="(no box)")
+                self.box.configure(image=self.placeholder, text="NO ART")
             else:
                 width, height, rgb = pixels
                 self.photo = self.tk.PhotoImage(data=make_sprite.to_ppm(width, height, rgb), format="PPM")
@@ -610,8 +681,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     root = tk.Tk()
     root.title(TITLE)
-    root.minsize(760, 560)
-    root.geometry("980x720")
+    root.minsize(960, 680)
+    root.geometry("1080x720")
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True)
     frame = ttk.Frame(notebook, padding=12)

@@ -79,7 +79,8 @@ built here, not on the console, so a game copied onto the card plays from
 the browser straight away but has no box or facts until the next run. The
 Catalog tab then shows the card as the browser will: the folders, every
 game with its genre, publisher, year and region, the box exactly as the
-console draws it, and where each of those came from. It is not code-signed, so the
+console draws it, where each of those came from, and how many ROMs on the
+card are still waiting for a Prepare. It is not code-signed, so the
 first launch warns: on macOS, right-click the app and choose Open (on macOS 15,
 System Settings → Privacy & Security → Open Anyway); on Windows, More info
 → Run anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
@@ -265,10 +266,10 @@ still wins; Stop ends it between two boxes. The Catalog tab counts the
 high-resolution boxes and says, for each game, what the box view will
 draw.
 
-**From the window.** Pick the game on the Catalog tab; under it, choose a
-picture (Browse, or drop one on the field when your Python has
-`tkinterdnd2`), type a title and a text, choose "This ROM only" or "Every
-game with this code", and press Save. That writes exactly the files above
+**From the window.** Pick the game on the Catalog tab; in the panel under
+the list, choose a picture (Browse, or drop one on the field when your
+Python has `tkinterdnd2`), type a title and a text, choose "This ROM only"
+or "Every game with this code", and press Save. That writes exactly the files above
 into `sleekmenu/art/` — the picture as it is, the sizes are made when you
 press Prepare — and the panel says how many games the edit reaches. Remove
 my edit deletes those files, and the next Prepare brings the original back,

@@ -111,6 +111,18 @@ class CatalogLineTests(unittest.TestCase):
                          "1 with your own art or text")
         self.assertEqual(sleekmenu_gui.summarize({"games": []}), "0 games")
 
+    def test_the_tree_cells_are_the_short_forms_of_where_a_field_came_from(self):
+        short = sleekmenu_gui.short_cover_source
+        self.assertEqual(short("libretro"), "high-res")
+        self.assertEqual(short("libretro, modified"), "high-res, edited")
+        self.assertEqual(short("yours (this ROM)"), "yours")
+        self.assertEqual(short("yours (code NSME)"), "yours")
+        self.assertEqual(short("collection (another region's box)"), "other region")
+        self.assertEqual(short("collection"), "collection")
+        self.assertEqual(short("none"), "none")
+        self.assertEqual(sleekmenu_gui.short_text_source("collection (by game code)"), "by code")
+        self.assertEqual(sleekmenu_gui.short_text_source("yours"), "yours")
+
     def test_the_box_view_line_says_what_the_console_will_draw(self):
         self.assertIn("high-resolution", sleekmenu_gui.box_view_line({"sources": {"cover": "libretro"}}))
         self.assertIn("high-resolution", sleekmenu_gui.box_view_line({"sources": {"cover": "libretro, modified"}}))
@@ -239,9 +251,19 @@ class WindowTests(unittest.TestCase):
             root.update()
             self.assertEqual(catalog.photo.width(), 96 * sleekmenu_gui.BOX_ZOOM)
             self.assertIn("parent game", catalog.notes.get())
+            # the tree's cells are the short forms; the pane has the whole phrase
+            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "cover"), "collection")
+            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "text"), "by code")
+            self.assertIn("Text: collection (by game code)", catalog.sources.get())
+            self.assertIn("Kaizo", catalog.edit.cget("text"))
             catalog.only_mine.set(True)
             catalog.fill()
             self.assertEqual(catalog.tree.get_children(""), (), "nothing on this card is the owner's")
+            # a game copied on since: the header says the browser lists it boxless
+            self.assertEqual(catalog.waiting.get(), "")
+            write_rom(card / "ROMS" / "New.z64", 0x55, 0x66, game_code="NW")
+            catalog.reload()
+            self.assertIn("1 ROM on the card is not in it yet", catalog.waiting.get())
             root.destroy()
 
     def test_the_games_folder_field_shows_what_the_card_remembers_and_an_empty_one_is_the_whole_card(self):

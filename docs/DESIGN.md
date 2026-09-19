@@ -60,6 +60,13 @@ always a file somewhere else, reverting one is deleting that file, and no
 manifest of the owner's changes exists to go stale when a file is dropped
 in by hand. The result lands in `sleekmenu/catalog.json` beside the packed
 catalog (`tools/card_catalog.py`); the console reads only the packed one.
+The tab is three regions: the tree of the card, with a word or two per
+cell for where the box and the text came from; beside it the selected game
+as the console shows it -- the box at the box view's size, or a placeholder
+of that size so nothing moves as the selection does, the facts, the text,
+then the whole provenance; and under the tree the owner's own art and text
+for that game. The right column is a fixed width, so the box is never
+clipped and the tree takes whatever is left.
 
 **The card is the EverDrive's.** The browser writes five files (see
 CARD_LAYOUT.md), never creates, renames or deletes anything else, and uses the
