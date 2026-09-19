@@ -55,22 +55,32 @@ bool catalog_matches(const sm_game_t *game, const sm_filter_t *filter) {
 /* --- everything the launch screen would reach ------------------------- */
 static surface_t screen;
 bool sm_cart_image_intact(void) { return true; }
-sm_launch_result_t launch_prepare(const char *path) { (void)path; return SM_LAUNCH_OK; }
+/* The prepared game, the way launch.c keeps it: set by prepare, cleared by
+   cancel, and what the card's Start checks before it plays. */
+static char fake_selected[256];
+sm_launch_result_t launch_prepare(const char *path) {
+    snprintf(fake_selected, sizeof(fake_selected), "%s", path);
+    return SM_LAUNCH_OK;
+}
 const char *launch_status_message(void) { return "ready"; }
-const char *launch_selected_path(void) { return ""; }
+const char *launch_selected_path(void) { return fake_selected; }
 /* The UI lends the launcher its history list at startup; nothing boots
    here, so the loan is simply taken and dropped. */
 void launch_set_history(sm_history_t *history) { (void)history; }
-void launch_cancel(void) {}
+void launch_cancel(void) { fake_selected[0] = '\0'; }
 sm_launch_result_t launch_probe(void) { return SM_LAUNCH_OK; }
+/* Launches are counted rather than made, and the launcher's verdict on the
+   selected file is whatever a test says it is. */
+static int fake_launches;
+static sm_launch_result_t fake_last_result = SM_LAUNCH_OK;
 sm_launch_result_t launch_rom(sm_launch_progress_cb cb, void *ctx) {
-    (void)cb; (void)ctx; return SM_LAUNCH_OK;
+    (void)cb; (void)ctx; fake_launches++; return SM_LAUNCH_OK;
 }
 sm_boot_mode_t launch_boot_mode(void) { return SM_BOOT_FAST; }
 void launch_set_boot_mode(sm_boot_mode_t mode) { (void)mode; }
 uint32_t launch_boot_crc(void) { return 0; }
 sm_cic_t launch_detected_cic(void) { return (sm_cic_t)0; }
-sm_launch_result_t launch_last_result(void) { return SM_LAUNCH_OK; }
+sm_launch_result_t launch_last_result(void) { return fake_last_result; }
 const char *launch_save_summary(void) { return ""; }
 bool launch_selected_is_disk(void) { return false; }
 const char *launch_sibling_disk(void) { return ""; }
@@ -1205,6 +1215,88 @@ int main(void) {
         frame(PRESS(back));
         assert(ui.screen == SM_SCREEN_LIBRARY);
         fake_cheats_available = false;
+    }
+
+    /* ---- Start plays from the list, A shows the card ----------------- */
+    {
+        static const row_t rows[] = {
+            {"Racing/Wave Race 64.z64", "Wave Race 64", "Racing", 0, "", 0, NULL},
+            {"Zelda.z64", "Zelda", "Action", 0, "", 0, NULL},
+        };
+        start(rows, 2u);
+        settle();
+        draw();
+        assert(sm_test_drew("START PLAY A INFO"));
+        fake_launches = 0;
+
+        /* Start on a folder: nothing to play, nothing happens. */
+        assert(ui.items[0] & SM_UI_FOLDER_BIT);
+        frame(PRESS(start));
+        assert(ui.screen == SM_SCREEN_LIBRARY && fake_launches == 0);
+
+        /* A on a game: the card, and no launch. */
+        frame(PRESS(down));
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 0);
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LIBRARY);
+
+        /* Start on a game: the card comes up as the progress screen and the
+           launch is made in the same press. */
+        frame(PRESS(start));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 1);
+        frame(PRESS(back));
+
+        /* A refused file stops at the card, where the refusal is written. */
+        fake_last_result = SM_LAUNCH_BAD_MAGIC;
+        frame(PRESS(start));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 1);
+        frame(PRESS(back));
+        fake_last_result = SM_LAUNCH_OK;
+
+        /* Cheats on that will not run: the card stays up with its red line,
+           and Start there is the second press that plays anyway. */
+        memset(&fake_cheats, 0, sizeof(fake_cheats));
+        fake_cheats.count = 1;
+        fake_cheats.cheats[0].pairs = 1;
+        fake_cheats.cheats[0].enabled = true;
+        fake_cheats_available = true;
+        fake_cheats_hook = SM_CHEATS_HOOK_NO_JUMP;
+        frame(PRESS(start));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 1);
+        draw();
+        assert(sm_test_drew("1 on, WILL NOT RUN"));
+        frame(PRESS(start));
+        assert(fake_launches == 2);
+        frame(PRESS(back));
+        /* The same cheats with a boot code they can hook: no warning, so
+           Start plays straight away. */
+        fake_cheats_hook = SM_CHEATS_HOOK_OK;
+        frame(PRESS(start));
+        assert(fake_launches == 3);
+        frame(PRESS(back));
+        /* And cheats present but all off never hold a launch. */
+        fake_cheats.cheats[0].enabled = false;
+        fake_cheats_hook = SM_CHEATS_HOOK_NO_JUMP;
+        frame(PRESS(start));
+        assert(fake_launches == 4);
+        frame(PRESS(back));
+        fake_cheats_available = false;
+        fake_cheats_hook = SM_CHEATS_HOOK_OK;
+
+        /* Coverflow and the grid answer Start the same way. */
+        frame(PRESS(toggle_view));            /* grid */
+        settle();
+        frame(PRESS(start));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 5);
+        frame(PRESS(back));
+        frame(PRESS(toggle_view));            /* coverflow */
+        settle();
+        draw();
+        assert(sm_test_drew("START PLAY A INFO"));
+        frame(PRESS(start));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 6);
+        frame(PRESS(back));
     }
 
     remove(SM_FAVORITES_PATH);

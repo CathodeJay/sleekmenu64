@@ -925,6 +925,51 @@ static uint32_t cheat_rows(const sm_layout_t *l) {
     return rows > 1 ? (uint32_t)rows : 1u;
 }
 
+/* What the card would say in red: cheats switched on that the boot code
+   cannot run. One place decides, so that Start from the list and the card's
+   own drawing can never disagree about whether there is something to read
+   before playing. A refusal from the launch policy is separate
+   (launch_last_result) and is checked beside this. */
+static bool card_warning(void) {
+    if (!launch_cheats_available()) return false;
+    return sm_cheats_enabled_count(launch_cheats()) && cheat_warning();
+}
+
+/* Prepare the launch for a game and show its card. Reached by A, and by
+   Start when it goes on to play: the card is the progress screen, so it
+   has to be up either way, with its cover and its facts. */
+static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, uint32_t item, const char *path) {
+    launch_prepare(path);
+    ui->status = launch_status_message();
+    ui->diagnostics = false;
+    /* The grid keeps its covers in slot_sprites and never touches
+       cover_sprite, which is what the launch card draws -- so coming here
+       from the grid showed a game with no box and "..." where its save type
+       should be. Both are wanted now, whichever view we arrived from, and
+       the settle delay does not apply: the card is already on screen and
+       waiting for it. */
+    if (!ui->cover_loaded || ui->cover_index != item)
+        load_selected_cover(ui, catalog);
+    if (!ui->selected_details_loaded)
+        load_selected_details(ui, catalog);
+    ui->screen = SM_SCREEN_LAUNCH_DETAILS;
+}
+
+/* Start, on the card or straight from the list: the same call, so history,
+   the registry and the save are handled in one place, inside launch_rom. */
+static void launch_from_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_t *layout) {
+    launch_draw_t draw = { ui, catalog, layout };
+    ui->load_done_kib = 0;
+    ui->load_total_kib = 0;
+    ui->load_verifying = false;
+    launch_rom(draw_launch_progress, &draw);
+    /* Only reached when the handoff did not happen. The bar has to go with
+       it, or a refusal is left sitting under a full progress bar that says
+       the opposite. */
+    ui->load_total_kib = 0;
+    ui->status = launch_status_message();
+}
+
 void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout) {
     if (!ui->initialized) {
         ui->initialized = true;
@@ -983,18 +1028,7 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
             launch_probe();
             ui->status = launch_status_message();
         }
-        if (actions.start && launch_selected_path()[0]) {
-            launch_draw_t draw = { ui, catalog, layout };
-            ui->load_done_kib = 0;
-            ui->load_total_kib = 0;
-            ui->load_verifying = false;
-            launch_rom(draw_launch_progress, &draw);
-            /* Only reached when the handoff did not happen. The bar has to go
-               with it, or a refusal is left sitting under a full progress bar
-               that says the opposite. */
-            ui->load_total_kib = 0;
-            ui->status = launch_status_message();
-        }
+        if (actions.start && launch_selected_path()[0]) launch_from_card(ui, catalog, layout);
         return;
     }
     if (ui->screen == SM_SCREEN_CHEATS) {
@@ -1122,27 +1156,22 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
         if (ui->view != SM_VIEW_GRID) ui->settle = SM_UI_SETTLE_FRAMES;
     }
     if (old_first != ui->first_visible) ui->settle = SM_UI_SETTLE_FRAMES;
-    if (actions.select) {
+    if (actions.select || actions.start) {
         uint32_t item = ui->items[ui->selected]; sm_game_t game;
         if ((item & SM_UI_FOLDER_BIT) && catalog_get(catalog, item & ~SM_UI_FOLDER_BIT, &game)) {
+            /* A folder opens on A. Start on a folder does nothing: there is
+               nothing to play. */
+            if (!actions.select) return;
             const char *part = relative_part(game.path, ui->folder); const char *slash = strchr(part, '/');
             size_t used = strlen(ui->folder), add = (size_t)(slash - part);
             if (used + (used ? 1 : 0) + add < sizeof(ui->folder)) { if (used) ui->folder[used++]='/'; memcpy(ui->folder+used,part,add); ui->folder[used+add]='\0'; rebuild(ui,catalog); }
         } else if (catalog_get(catalog, item, &game)) {
-            launch_prepare(game.path);
-            ui->status = launch_status_message();
-            ui->diagnostics = false;
-            /* The grid keeps its covers in slot_sprites and never touches
-               cover_sprite, which is what the launch card draws -- so coming
-               here from the grid showed a game with no box and "..." where its
-               save type should be. Both are wanted now, whichever view we
-               arrived from, and the settle delay does not apply: the card is
-               already on screen and waiting for it. */
-            if (!ui->cover_loaded || ui->cover_index != item)
-                load_selected_cover(ui, catalog);
-            if (!ui->selected_details_loaded)
-                load_selected_details(ui, catalog);
-            ui->screen = SM_SCREEN_LAUNCH_DETAILS;
+            open_card(ui, catalog, item, game.path);
+            /* Start plays without the stop at the card, unless the card has
+               something in red to say: then it stays up, exactly as it would
+               have after A, and Start there is the second press. */
+            if (actions.start && launch_last_result() == SM_LAUNCH_OK && !card_warning())
+                launch_from_card(ui, catalog, layout);
         }
     }
     if (actions.favorite) {
@@ -1257,10 +1286,12 @@ static const char *footer_hint(const sm_catalog_t *c, const sm_ui_t *ui) {
        otherwise name two different things in one line. */
     /* Coverflow answers to different buttons: the strip is gone, and L and R
        jump by initial instead of by page. */
+    /* Start plays, A shows the card; B is the one button nobody needs told
+       about, and dropping it is what makes the line fit at 54 characters. */
     if (ui->view == SM_VIEW_COVERFLOW)
-        return "A PLAY B UP L/R LETTER C^ VIEW Cv STAR Z FILTER";
+        return "START PLAY A INFO L/R LETTER C^ VIEW Cv STAR Z FILTER";
     if (ui->view != SM_VIEW_GRID)
-        return "A PLAY B UP C</C> TABS C^ VIEW Cv STAR Z FILTER";
+        return "START PLAY A INFO C</C> TABS C^ VIEW Cv STAR Z FILTER";
     if (ui->item_count) {
         uint32_t item = ui->items[ui->selected];
         /* A folder item carries the catalog index of the first game inside it,
@@ -1271,7 +1302,7 @@ static const char *footer_hint(const sm_catalog_t *c, const sm_ui_t *ui) {
             return line;
         }
     }
-    return "A PLAY B UP C</C> TABS C^ VIEW Cv STAR Z FILTER";
+    return "START PLAY A INFO C</C> TABS C^ VIEW Cv STAR Z FILTER";
 }
 
 static void draw_genre_tabs(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui) {

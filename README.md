@@ -55,7 +55,7 @@ and description, and writes `sleekmenu/catalog.ebc` and
 under a minute. Run it again whenever you add games.
 
 **5. Eject the card, put it in the cart, and start `SleekMenu64.z64` from the
-EverDrive menu.** Press A on a game for its details, Start to play. To get
+EverDrive menu.** Press Start on a game to play it, A for its details. To get
 back to the EverDrive menu, reset the console.
 
 What the tool writes, and what it leaves alone:
@@ -80,7 +80,7 @@ The tool never moves, renames or deletes anything on the card.
 | D-pad / stick | Move | — |
 | A | Open a folder, or a game's details | — |
 | B | Parent folder | Back to the list |
-| Start | — | Play |
+| Start | Play the game under the cursor | Play |
 | C-left / C-right | Previous / next genre tab | — |
 | C-up | List, grid or coverflow view | Fast or verified load |
 | C-down | Favourite | Cheats |
