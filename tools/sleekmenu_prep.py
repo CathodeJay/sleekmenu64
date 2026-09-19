@@ -278,7 +278,8 @@ class Options:
     fix_checksums: bool = False
     no_checksums: bool = False
     no_download: bool = False       # never reach for the collection, even when it is missing
-    hires: bool = False             # fetch high-resolution boxes from libretro before building
+    hires: bool | None = None       # fetch high-resolution boxes: True asks, False refuses, None
+                                    # is as the card remembers (it has some: keep them complete)
     no_large_covers: bool = False   # skip the box view's covers-large.pak
 
 
@@ -353,14 +354,15 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
 
         database_path = data_file("coverdb.csv", work)
         genres_path = data_file("genres.csv", work)
-        if options.hires and not options.dry_run:
+        wants_hires = options.hires if options.hires is not None else hires.remembered(custom_art.art_dir(card))
+        if wants_hires and not options.dry_run:
             # One file per game code, into sleekmenu/art/hires/, skipping
-            # what is there: a second run costs nothing.
+            # what is there: a second run costs nothing but the new games'.
             if options.no_download or fetch.offline_by_request():
                 log("hires:    not fetched; downloads are off")
             else:
                 hires.fetch_for_card(roms, rom_paths, database_path, custom_art.art_dir(card),
-                                     progress_factory, cancel, log)
+                                     progress_factory, cancel, log, asked=bool(options.hires))
         if source is None:
             log("metadata: no collection on the card; the card gets a catalog and no covers")
             log(f"          download {metadata_repo.RELEASE_ZIP_NAME} from "
@@ -426,7 +428,8 @@ def main(argv: list[str] | None = None) -> int:
                              "(about 90 KB a game)")
     parser.add_argument("--hires", action="store_true",
                         help="fetch a high-resolution box from libretro-thumbnails for every game the "
-                             "database knows, once (about 250 KB each), and build the covers from those")
+                             "database knows, once (about 250 KB each), and build the covers from those; "
+                             "a card that has them keeps them complete on every later run")
     parser.add_argument("--gui", action="store_true",
                         help="open the window instead of running in the terminal")
     args = parser.parse_args(argv)
@@ -446,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         return run(Options(card=args.card, roms=args.roms, metadata=args.metadata,
                            dry_run=args.dry_run, fix_checksums=args.fix_checksums,
                            no_checksums=args.no_checksums, no_download=args.no_download,
-                           hires=args.hires, no_large_covers=args.no_large_covers),
+                           hires=True if args.hires else None, no_large_covers=args.no_large_covers),
                    log=print, fail=lambda message: print(message, file=sys.stderr))
     except KeyboardInterrupt:
         # Ctrl-C during the fetch leaves no .part on the card; during a

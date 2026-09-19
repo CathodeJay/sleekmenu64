@@ -72,12 +72,15 @@ same tool with Python inside, one download per system:
 `SleekMenu-Prep-mac-arm64.zip` (Apple silicon), `SleekMenu-Prep-mac-intel.zip`,
 `SleekMenu-Prep-windows.exe`, `SleekMenu-Prep-linux`. Open it, pick the card
 (it is picked for you when it is the only removable disk), press Prepare;
-the box-art zip is fetched onto the card if it is not there, and Stop ends
-the run if it takes too long. The Catalog tab then shows the card as the
-browser will: the folders, every game with its genre, publisher, year and
-region, the box exactly as the console draws it, and where each of those
-came from. It is not code-signed, so the first
-launch warns: on macOS, right-click the app and choose Open (on macOS 15,
+the collection is fetched onto the card if it is not there, and Stop ends
+the run if it takes too long. The card line says how many games were added
+since the last Prepare, which is when a card needs one: the catalog is
+built here, not on the console, so a game copied onto the card shows up
+in the browser after the next run and not before. The Catalog tab then
+shows the card as the browser will: the folders, every game with its
+genre, publisher, year and region, the box exactly as the console draws
+it, and where each of those came from. It is not code-signed, so the
+first launch warns: on macOS, right-click the app and choose Open (on macOS 15,
 System Settings → Privacy & Security → Open Anyway); on Windows, More info
 → Run anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
 opens the same window.
@@ -240,14 +243,18 @@ like a new game does.
 enough for the console's 96×72 thumbnail and no more.
 [libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
 keeps a 512-pixel box for every retail cartridge; `--hires` (the window's
-"Fetch high-resolution boxes" box) fetches one for every game on the card
-the database knows, about 250 KB each, into `sleekmenu/art/hires/` by
-game code, and builds the covers from those — a 512-pixel box downscaled
-looks better than a 158-pixel one downscaled, and the box view (A on a
-game's details) draws them at full size. Only what is missing is
-fetched, so a second run costs nothing; a picture of your own still wins;
-Stop ends it between two boxes, and the report names the games libretro
-has no box for.
+"High-resolution boxes" box) fetches one for every game on the card the
+database knows, about 250 KB each, into `sleekmenu/art/hires/` by game
+code, and builds the covers from those — a 512-pixel box downscaled looks
+better than a 158-pixel one downscaled, and the box view (A on a game's
+details) draws them at full size. A card that has them keeps them
+complete: every later run fetches the boxes of the games added since,
+without being asked, and the window shows the box ticked. Only what is
+missing is fetched; a game libretro has no box for is noted and not asked
+about again unless you pass `--hires` yourself; a picture of your own
+still wins; Stop ends it between two boxes. The Catalog tab counts the
+high-resolution boxes and says, for each game, what the box view will
+draw.
 
 **From the window.** Pick the game on the Catalog tab; under it, choose a
 picture (Browse, or drop one on the field when your Python has

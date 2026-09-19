@@ -133,7 +133,11 @@ That manifest is how the tool tells a box it fetched (`libretro`) from one
 changed or put there by hand (`libretro, modified`), and the only record it
 keeps: downloads write nothing outside `hires/`, so a re-fetch cannot touch
 a picture of yours, and a `sleekmenu/art/NSME.png` of yours keeps beating a
-fetched `hires/NSME.png`.
+fetched `hires/NSME.png`. It also lists the codes libretro had no box for
+(`missing`, with the date), so a run that keeps the set complete does not
+ask about them again; `--hires` asked explicitly does. A card whose
+manifest exists keeps its boxes complete on every run: the games added
+since get theirs without the choice being repeated.
 
 **Your own pictures** come before the collection. For `Hacks/Star Road.z64`
 the tool looks for `Hacks/Star Road.png` (or `.jpg`) beside the ROM, then

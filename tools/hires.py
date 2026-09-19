@@ -102,22 +102,40 @@ def manifest_path(hires_folder: Path) -> Path:
     return hires_folder / MANIFEST
 
 
-def load_manifest(hires_folder: Path | None) -> dict:
+def load_document(hires_folder: Path | None) -> dict:
+    """The manifest as written: `boxes` (code -> name, url, sha256, date)
+    and `missing` (code -> date libretro was found to have no box for it).
+    Empty for no manifest, or one that will not read."""
     if hires_folder is None:
         return {}
     try:
         document = json.loads(manifest_path(hires_folder).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
-    boxes = document.get("boxes") if isinstance(document, dict) else None
-    return boxes if isinstance(boxes, dict) else {}
+    if not isinstance(document, dict):
+        return {}
+    return {key: value for key, value in document.items() if key in ("boxes", "missing")
+            and isinstance(value, dict)}
 
 
-def save_manifest(hires_folder: Path, boxes: dict) -> None:
+def load_manifest(hires_folder: Path | None) -> dict:
+    """The fetched boxes: code -> its record."""
+    return load_document(hires_folder).get("boxes", {})
+
+
+def save_manifest(hires_folder: Path, boxes: dict, missing: dict | None = None) -> None:
     hires_folder.mkdir(parents=True, exist_ok=True)
     manifest_path(hires_folder).write_text(
-        json.dumps({"schema_version": 1, "source": REPOSITORY_URL, "boxes": boxes},
-                   indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        json.dumps({"schema_version": 1, "source": REPOSITORY_URL, "boxes": boxes,
+                    "missing": missing or {}}, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def remembered(art_folder: Path | None) -> bool:
+    """Whether this card has fetched boxes before: the manifest is there.
+    A card that has them keeps them complete on every run, so a game added
+    later gets its box without the choice being made again."""
+    target = folder(art_folder)
+    return target is not None and manifest_path(target).is_file()
 
 
 def sha256_of(path: Path) -> str:
@@ -141,13 +159,18 @@ def origin(hires_folder: Path | None, path: Path) -> str:
 
 # -- what to fetch ---------------------------------------------------------------
 
-def plan(roms_root: Path, rom_paths: list[str], database: dict, art_folder: Path | None) -> list[Wanted]:
+def plan(roms_root: Path, rom_paths: list[str], database: dict, art_folder: Path | None,
+         retry_missing: bool = False) -> list[Wanted]:
     """One Wanted per game code on the card that the database knows and
     hires/ lacks. The names to try: the dump's own when the database knows
-    it by CRC, then every other name the database files under that code."""
+    it by CRC, then every other name the database files under that code.
+    A code the manifest records libretro as having no box for is left out
+    unless `retry_missing`: an explicit --hires asks again, a remembered
+    run does not spend sixty requests a time on the same absences."""
     target = folder(art_folder)
     if target is None:
         return []
+    known_missing = set() if retry_missing else set(load_document(target).get("missing", {}))
     index = identify.Index(database)
     listing = custom_art.Index()
     by_serial: dict[str, list[str]] = {}
@@ -161,6 +184,8 @@ def plan(roms_root: Path, rom_paths: list[str], database: dict, art_folder: Path
             continue
         code = header.product_code.upper()
         if not re.fullmatch(r"[A-Z0-9]{4}", code) or find(listing, target, code) is not None:
+            continue
+        if code in known_missing:
             continue
         entry, matched = index.identify(header)
         if entry is None:
@@ -197,7 +222,8 @@ def fetch_boxes(wanted: list[Wanted], hires_folder: Path, progress_factory=None,
     if not wanted:
         return report
     base_url = base_url or BASE_URL
-    boxes = load_manifest(hires_folder)
+    document = load_document(hires_folder)
+    boxes, missing = document.get("boxes", {}), document.get("missing", {})
     bar = progress_factory(len(wanted), "boxes") if progress_factory else None
     consecutive_failures = 0
     for item in wanted:
@@ -225,17 +251,20 @@ def fetch_boxes(wanted: list[Wanted], hires_folder: Path, progress_factory=None,
             if bar is not None:
                 bar.step(item.code)
             continue
+        stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
         if data is None or not data.startswith(PNG_SIGNATURE):
             report.missing.append(item.code)
+            missing[item.code] = stamp
+            save_manifest(hires_folder, boxes, missing)
         else:
             hires_folder.mkdir(parents=True, exist_ok=True)
             part = item.destination.with_name(item.destination.name + ".part")
             part.write_bytes(data)
             os.replace(part, item.destination)
             boxes[item.code] = {"name": found_name, "url": address(found_name, base_url),
-                                "sha256": hashlib.sha256(data).hexdigest(),
-                                "date": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
-            save_manifest(hires_folder, boxes)
+                                "sha256": hashlib.sha256(data).hexdigest(), "date": stamp}
+            missing.pop(item.code, None)
+            save_manifest(hires_folder, boxes, missing)
             report.fetched += 1
         if bar is not None:
             bar.step(item.code)
@@ -247,16 +276,19 @@ def fetch_boxes(wanted: list[Wanted], hires_folder: Path, progress_factory=None,
 
 
 def fetch_for_card(roms_root: Path, rom_paths: list[str], database_path: Path, art_folder: Path,
-                   progress_factory=None, cancel=None, log=None) -> Report:
+                   progress_factory=None, cancel=None, log=None, asked: bool = True) -> Report:
     """plan() then fetch_boxes(), with the report in the tool's own words.
-    A stop between two boxes surfaces as Cancelled, like every other."""
+    `asked` false is the remembered run: the card has boxes and keeps them
+    complete, without asking libretro again for the ones it lacks. A stop
+    between two boxes surfaces as Cancelled, like every other."""
     database = coverdb.load(database_path) if database_path.is_file() else {}
-    wanted = plan(roms_root, rom_paths, database, art_folder)
+    wanted = plan(roms_root, rom_paths, database, art_folder, retry_missing=asked)
     target = folder(art_folder)
     if log is not None:
-        log(f"hires:    {len(wanted)} boxes to fetch from libretro (about 250 KB each)"
+        how = "" if asked else " (the card has them; keeping them complete)"
+        log(f"hires:    {len(wanted)} boxes to fetch from libretro (about 250 KB each){how}"
             if wanted else "hires:    every box the database knows is already in "
-                           f"{target.parent.name}/{FOLDER}/")
+                           f"{target.parent.name}/{FOLDER}/{how}")
     report = fetch_boxes(wanted, target, progress_factory, cancel, log)
     if report.stopped:
         raise Cancelled("stopped while fetching boxes")

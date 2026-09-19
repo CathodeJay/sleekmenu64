@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from tests.rom_fixtures import write_rom
@@ -51,24 +52,39 @@ class VolumeTests(unittest.TestCase):
 class FieldTests(unittest.TestCase):
     def test_the_fields_become_the_runs_options(self):
         options = sleekmenu_gui.options_from("/Volumes/CARD", "", True, False)
-        self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD"), roms=sleekmenu_prep.WHOLE_CARD),
-                         "an empty games folder is the whole card, said so -- never 'as remembered'")
+        self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD"), roms=sleekmenu_prep.WHOLE_CARD,
+                                                         hires=False),
+                         "an empty games folder is the whole card and an unticked box is no fetch, "
+                         "said so -- never 'as remembered'")
         options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", False, True, hires=True,
-                                             roms=" ROMS/ ", large_covers=False)
+                                             roms=" ROMS/ ")
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
         self.assertEqual(options.roms, Path("ROMS"))
         self.assertTrue(options.no_checksums and options.fix_checksums and options.hires)
-        self.assertTrue(options.no_large_covers)
+        self.assertFalse(options.no_large_covers, "the window always builds the box view's pack")
 
     def test_a_card_is_described_in_one_line(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch)
-            self.assertEqual(sleekmenu_gui.describe_card(card), "no ROMs, box art: none on the card")
+            self.assertEqual(sleekmenu_gui.describe_card(card), "no ROMs, collection: not on the card")
             write_rom(card / "Games" / "A.z64", 1, 2)
             (card / "SleekMenu64.z64").write_bytes(b"\x80\x37\x12\x40")
             (card / "release-metadata.zip").write_bytes(b"PK")
             self.assertEqual(sleekmenu_gui.describe_card(card),
-                             "1 ROMs, SleekMenu64.z64 present, box art: release-metadata.zip")
+                             "1 ROMs, SleekMenu64.z64 present, collection: release-metadata.zip")
+
+    def test_the_card_line_counts_the_games_added_since_the_last_prepare(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "A.z64", 1, 2)
+            self.assertIsNone(sleekmenu_gui.added_since(card, ["ROMS/A.z64"]), "no catalog to compare with")
+            with contextlib.redirect_stdout(io.StringIO()), \
+                 unittest.mock.patch.dict(os.environ, {"SLEEKMENU_NO_DOWNLOAD": "1"}):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card, roms=Path("ROMS"))), 0)
+            self.assertNotIn("added since", sleekmenu_gui.describe_card(card))
+            write_rom(card / "ROMS" / "B.z64", 3, 4)
+            write_rom(card / "Other" / "C.z64", 5, 6)     # outside the chosen folder: not counted
+            self.assertIn("1 added since the last Prepare", sleekmenu_gui.describe_card(card))
 
 
 class CatalogLineTests(unittest.TestCase):
@@ -86,12 +102,21 @@ class CatalogLineTests(unittest.TestCase):
                          "For every game with code NSME: 2 on this card.")
         self.assertIn("only this one", sleekmenu_gui.edit_summary(games, games[2], "code"))
 
-    def test_the_summary_counts_the_games_and_what_was_changed(self):
+    def test_the_summary_counts_the_games_the_boxes_and_what_was_changed(self):
         document = {"built": "2026-09-19T16:33:58+00:00", "games": [
-            {"sources": {"cover": "collection"}}, {"sources": {"cover": "yours (this ROM)"}}]}
+            {"sources": {"cover": "collection"}}, {"sources": {"cover": "yours (this ROM)"}},
+            {"sources": {"cover": "libretro"}}, {"sources": {"cover": "none"}}]}
         self.assertEqual(sleekmenu_gui.summarize(document),
-                         "2 games, built 2026-09-19 16:33; 1 with your own art or text")
+                         "4 games, built 2026-09-19 16:33; 3 with a box, 1 of them high-resolution; "
+                         "1 with your own art or text")
         self.assertEqual(sleekmenu_gui.summarize({"games": []}), "0 games")
+
+    def test_the_box_view_line_says_what_the_console_will_draw(self):
+        self.assertIn("high-resolution", sleekmenu_gui.box_view_line({"sources": {"cover": "libretro"}}))
+        self.assertIn("high-resolution", sleekmenu_gui.box_view_line({"sources": {"cover": "libretro, modified"}}))
+        self.assertIn("your picture", sleekmenu_gui.box_view_line({"sources": {"cover": "yours (code NSME)"}}))
+        self.assertIn("small scan", sleekmenu_gui.box_view_line({"sources": {"cover": "collection"}}))
+        self.assertIn("no box", sleekmenu_gui.box_view_line({"sources": {"cover": "none"}}))
 
 
 class RunnerTests(unittest.TestCase):

@@ -34,7 +34,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import (card_catalog, card_layout, custom_art, library, make_sprite, metadata_repo,
+from tools import (card_catalog, card_layout, custom_art, hires, library, make_sprite, metadata_repo,
                    provenance, sleekmenu_prep)
 
 TITLE = "SleekMenu 64 — prepare a card"
@@ -113,6 +113,23 @@ def _windows_removable() -> list[Path]:
     return found
 
 
+def added_since(card: Path, roms: list[str]) -> int | None:
+    """ROMs on the card that the last Prepare did not catalogue -- games
+    added since -- or None when the card has no catalog to compare with.
+    The count is what tells a person the card needs a Prepare at all."""
+    try:
+        document = card_catalog.load(card)
+    except card_catalog.CatalogJsonError:
+        return None
+    if document is None:
+        return None
+    catalogued = {str(game.get("path", "")).casefold() for game in document["games"]}
+    folder = card_catalog.remembered_roms(card)
+    prefix = folder.casefold() + "/" if folder else ""
+    return sum(1 for path in roms if path.casefold().startswith(prefix)
+               and path.casefold() not in catalogued)
+
+
 def describe_card(card: Path) -> str:
     """One line about what is on a candidate card, for the picker."""
     try:
@@ -120,10 +137,13 @@ def describe_card(card: Path) -> str:
     except library.LibraryError:
         return "not a folder"
     parts = [f"{len(roms)} ROMs"] if roms else ["no ROMs"]
+    new = added_since(card, roms)
+    if new:
+        parts.append(f"{new} added since the last Prepare")
     if (card / card_layout.BROWSER_ROM).is_file():
         parts.append(card_layout.BROWSER_ROM + " present")
     collection = metadata_repo.find_on_card(card)
-    parts.append(f"box art: {collection.name}" if collection is not None else "box art: none on the card")
+    parts.append(f"collection: {collection.name}" if collection is not None else "collection: not on the card")
     return ", ".join(parts)
 
 
@@ -196,19 +216,20 @@ class Runner:
 
 
 def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums: bool,
-                 hires: bool = False, roms: str = "", large_covers: bool = True) -> sleekmenu_prep.Options:
+                 hires: bool = False, roms: str = "") -> sleekmenu_prep.Options:
     """The window's fields as the run takes them. An empty metadata field
     means whatever is on the card, as on the command line. An empty games
-    folder is the whole card, said so: the field shows what the card
-    remembers, so emptying it is a choice, not an omission."""
+    folder is the whole card, said so, and an unticked box is no fetch,
+    said so: both fields show what the card remembers, so clearing one is
+    a choice, not an omission. The box view's pack is always built from
+    the window; --no-large-covers is the terminal's."""
     return sleekmenu_prep.Options(
         card=Path(card) if card.strip() else None,
         metadata=Path(metadata) if metadata.strip() else None,
         roms=Path(roms.strip().strip("/")) if roms.strip().strip("/") else sleekmenu_prep.WHOLE_CARD,
         no_checksums=not check_checksums,
         fix_checksums=fix_checksums,
-        hires=hires,
-        no_large_covers=not large_covers,
+        hires=bool(hires),
     )
 
 
@@ -227,14 +248,32 @@ def facts_line(game: dict) -> str:
 
 
 def summarize(document: dict) -> str:
-    """The line above the tree."""
+    """The line above the tree: how many games, when, how many boxes are
+    high-resolution ones, how many the owner's own."""
     games = document.get("games", [])
     edited = sum(1 for game in games if provenance.edited(game.get("sources") or {}))
+    covers = [str((game.get("sources") or {}).get("cover", provenance.NONE)) for game in games]
+    boxed = sum(1 for cover in covers if cover != provenance.NONE)
+    high = sum(1 for cover in covers if cover.startswith(provenance.COVER_LIBRETRO))
     built = str(document.get("built", ""))[:16].replace("T", " ")
     line = f"{len(games)} games" + (f", built {built}" if built else "")
+    if boxed:
+        line += f"; {boxed} with a box, {high} of them high-resolution"
     if edited:
         line += f"; {edited} with your own art or text"
     return line
+
+
+def box_view_line(game: dict) -> str:
+    """What the console's full-screen box view will draw for a game."""
+    cover = str((game.get("sources") or {}).get("cover", provenance.NONE))
+    if cover.startswith(provenance.COVER_LIBRETRO):
+        return "Box view: high-resolution, from libretro"
+    if provenance.is_yours(cover):
+        return "Box view: your picture, fitted to the screen"
+    if cover == provenance.NONE:
+        return "Box view: no box"
+    return "Box view: the collection's small scan; fetch high-resolution boxes to fill the screen"
 
 
 def enable_drop(widget, on_files) -> bool:
@@ -453,7 +492,7 @@ class CatalogTab:
             self.title.set(str(game.get("title", "")))
             self.facts.set(facts_line(game))
             self.sources.set(f"Cover: {sources.get('cover', '')} · Description: {sources.get('description', '')}"
-                             f" · Title: {sources.get('title', '')}")
+                             f" · Title: {sources.get('title', '')}\n{box_view_line(game)}")
             self.description.insert("1.0", str(game.get("description") or ""))
             self.notes.set("\n".join(provenance.notes(game)))
             # The box view's sprite when the card has the large pack --
@@ -589,7 +628,6 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     check_var = tk.BooleanVar(value=True)
     fix_var = tk.BooleanVar(value=False)
     hires_var = tk.BooleanVar(value=False)
-    large_var = tk.BooleanVar(value=True)
     status_var = tk.StringVar(value="")
 
     ttk.Label(frame, text="Card").grid(row=0, column=0, sticky="w")
@@ -603,7 +641,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     ttk.Entry(frame, textvariable=roms_var).grid(row=2, column=1, sticky="ew", padx=6, pady=(10, 0))
     ttk.Label(frame, textvariable=roms_note, foreground="#555").grid(row=3, column=1, sticky="w", padx=6)
 
-    ttk.Label(frame, text="Box art").grid(row=4, column=0, sticky="w", pady=(10, 0))
+    ttk.Label(frame, text="Collection").grid(row=4, column=0, sticky="w", pady=(10, 0))
     ttk.Entry(frame, textvariable=metadata_var).grid(row=4, column=1, sticky="ew", padx=6, pady=(10, 0))
     note = ttk.Label(frame, textvariable=metadata_note, foreground="#555", cursor="hand2")
     note.grid(row=5, column=1, sticky="w", padx=6)
@@ -614,10 +652,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                     variable=check_var).pack(anchor="w")
     ttk.Checkbutton(options, text="Rewrite a stale checksum in the file itself",
                     variable=fix_var).pack(anchor="w")
-    ttk.Checkbutton(options, text="Fetch high-resolution boxes from libretro (about 250 KB a game, once)",
+    ttk.Checkbutton(options, text="High-resolution boxes for the box view: fetch the missing ones "
+                                  "from libretro (about 250 KB a game)",
                     variable=hires_var).pack(anchor="w")
-    ttk.Checkbutton(options, text="Build the large covers for the box view (about 90 KB a game)",
-                    variable=large_var).pack(anchor="w")
 
     bar = ttk.Progressbar(frame, mode="determinate")
     bar.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(12, 2))
@@ -663,6 +700,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             roms_var.set(remembered)
             roms_note.set(f"Chosen last time; only {remembered}/ is scanned. Empty the field for the whole card."
                           if remembered else ROMS_HINT)
+            # A card that has fetched boxes keeps them complete: the box is
+            # what the card remembers, and unticking it is a choice.
+            hires_var.set(bool(card) and Path(card).is_dir()
+                          and hires.remembered(custom_art.art_dir(Path(card))))
         if not card or not Path(card).is_dir():
             card_note.set("Pick the card, or plug it in and press Refresh.")
             metadata_note.set("")
@@ -672,7 +713,11 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         if metadata_var.get().strip():
             metadata_note.set("Using the file above.")
         elif collection is not None:
-            metadata_note.set(f"{collection.name} found on the card.")
+            metadata_note.set(f"{collection.name} found on the card: the box scans and descriptions.")
+        elif (Path(card) / card_layout.CARD_FOLDER / card_layout.COVER_PACK_NAME).is_file():
+            metadata_note.set("The card has its covers, but the collection they came from is no longer on "
+                              f"it: Prepare fetches {metadata_repo.RELEASE_ZIP_NAME} (about 52 MB) from "
+                              "GitHub (click to see), or choose a copy with Browse.")
         else:
             metadata_note.set(f"Not on the card: Prepare fetches {metadata_repo.RELEASE_ZIP_NAME} "
                               "(about 52 MB) from GitHub (click to see), or choose a copy with Browse.")
@@ -764,7 +809,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         prepare.configure(state="disabled")
         stop.configure(state="normal")
         runner = Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get(),
-                                     hires_var.get(), roms_var.get(), large_var.get()))
+                                     hires_var.get(), roms_var.get()))
         state["runner"] = runner
         runner.start()
         root.after(100, poll)

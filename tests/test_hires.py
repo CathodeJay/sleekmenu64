@@ -165,11 +165,30 @@ class CardTests(unittest.TestCase):
             self.assertIn("(1 high-resolution)", log.text())
             self.assertTrue((self.hires / "NSME.png").is_file())
             self.assertFalse((self.hires / "NWRE.png").exists())
-            # a second run has nothing to fetch and asks the server nothing
+            # a second explicit run has nothing new to fetch; it asks libretro
+            # about the missing one again, since it was asked to
             server.requests.clear()
             code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, hires=True), log=log, fail=log)
             self.assertEqual(code, 0)
-            self.assertEqual([r for r in server.requests if "Named_Boxarts" in r and "Mario" in r], [])
+            self.assertEqual([r for r in server.requests if "Mario" in r], [])
+            self.assertTrue(any("Wave" in r for r in server.requests), "asked again: --hires retries")
+            # a run that says nothing about boxes remembers the card has them:
+            # a game added since gets its box, the known absence is not retried
+            manifest = json.loads((self.hires / hires.MANIFEST).read_text())
+            self.assertIn("NWRE", manifest["missing"])
+            fzero = row("F-Zero X (USA)")
+            write_rom(self.card / "ROMS" / "F-Zero X (USA).z64", int(fzero.crc[:8], 16), int(fzero.crc[8:], 16),
+                      game_code=fzero.serial[1:3])
+            server.routes[route("F-Zero X (USA)")] = (200, box_png((90, 90, 200, 255)))
+            server.requests.clear()
+            log = Log()
+            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card), log=log, fail=log)
+            self.assertEqual(code, 0, log.text())
+            self.assertIn("keeping them complete", log.text())
+            self.assertTrue((self.hires / "NFZE.png").is_file(), "the fixture header spells the code NFZE")
+            self.assertFalse(any("Wave" in r for r in server.requests), "a known absence is not asked again")
+            # and a card that never fetched boxes is left alone
+            self.assertFalse(hires.remembered(custom_art.art_dir(Path(self.temporary.name))))
         document = card_catalog.load(self.card)
         games = {game["path"]: game for game in document["games"]}
         self.assertEqual(games["ROMS/Super Mario 64 (USA).z64"]["sources"]["cover"], provenance.COVER_LIBRETRO)
