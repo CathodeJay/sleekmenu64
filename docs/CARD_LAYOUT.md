@@ -14,6 +14,7 @@ this is the reference.
 /<any other folder>/...     or anywhere else on the card        yours
 
 /sleekmenu/catalog.ebc      titles, genre, publisher, year     written by the tool
+/sleekmenu/catalog.json     the same, with every field's source  written by the tool
 /sleekmenu/covers.pak       every cover, one file              written by the tool
 /sleekmenu/favorites.txt    one ROM path per line              written by the browser
 /sleekmenu/history.txt      the last fifteen launches          written by the browser
@@ -51,6 +52,20 @@ touches the network. The prep tool creates the `sleekmenu/` folder and
 writes `catalog.ebc` and `covers.pak` into it, and fetches
 `release-metadata.zip` to the card root when the card has no collection;
 everything else it reads in place.
+
+## Where every field came from
+
+`sleekmenu/catalog.json` is the catalog as the tool built it, kept legible
+beside the packed one: the same games and fields, plus for each game a
+`sources` object naming, for the cover, the title, the description, the
+genre, the publisher, the year and the players, which of the four sources
+answered — `collection`, `collection (another region's box)`,
+`collection (by game code)`, `database`, `file name`, `yours (this ROM)`,
+`yours (code NSME)`, `yours`, or `none` — and `identified`: how the
+database knew the dump (`crc`, `serial`, `serial without region`, or
+nothing). The window's Catalog tab reads it; so does `make refresh`. The
+browser never does: `catalog.ebc` carries the result and nothing about
+where it came from. The words are fixed in `tools/provenance.py`.
 
 ## How a game finds its box
 

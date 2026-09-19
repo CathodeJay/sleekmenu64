@@ -39,7 +39,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import coverdb, custom_art, genre_map, headers, identify, library, rom_header
+from tools import coverdb, custom_art, genre_map, headers, identify, library, provenance, rom_header
 from tools.metadata_repo import MetadataRepo, RepoError
 
 DEFAULT_COVERDB = Path(__file__).resolve().parent.parent / "data" / "coverdb.csv"
@@ -105,15 +105,32 @@ def publisher_of(author: str) -> str:
     return author.rsplit("|", 1)[-1].strip()
 
 
+def _sources(origins: dict[str, str], rom_path: str, relative: PurePosixPath, cover: str | None,
+             **fields: str) -> dict[str, str]:
+    """The `sources` object of one record: every field named, the cover's
+    word from the cover plan when it had one."""
+    sources = dict.fromkeys(provenance.FIELDS, provenance.NONE)
+    sources.update(fields)
+    origin = origins.get(rom_path.casefold()) or origins.get(str(relative).casefold())
+    sources["cover"] = origin if origin else (provenance.COVER_COLLECTION if cover else provenance.NONE)
+    return sources
+
+
 def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = DEFAULT_COVERDB,
           genres: Path | None = DEFAULT_GENRES, overrides: Path | None = None,
           covers: dict[str, str] | None = None, repo: MetadataRepo | None = None,
-          rom_paths: list[str] | None = None) -> tuple[dict, Counter]:
+          rom_paths: list[str] | None = None,
+          cover_origins: dict[str, str] | None = None) -> tuple[dict, Counter]:
+    """Every record carries `sources`, one tools/provenance.py label per
+    field, and `identified`: how the database knew the dump ("crc",
+    "serial", "serial without region" or ""). `cover_origins` is the cover
+    plan's word on each ROM's picture, keyed like `covers`."""
     database = coverdb.load(coverdb_path) if coverdb_path and coverdb_path.is_file() else {}
     index = identify.Index(database)
     mapping = genre_map.load(genres)
     patches = load_overrides(overrides)
     covers = {key.casefold(): value for key, value in (covers or {}).items()}
+    origins = {key.casefold(): value for key, value in (cover_origins or {}).items()}
     root = relative_root(roms, sd_root)
 
     if rom_paths is None:
@@ -147,6 +164,9 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
             cover = covers.get(rom_path.casefold()) or covers.get(str(relative).casefold())
             if cover:
                 record["cover"] = cover
+            record["identified"] = ""
+            record["sources"] = _sources(origins, rom_path, relative, cover,
+                                         title=provenance.TITLE_FILE_NAME)
             records.append(record)
             continue
         header = read_header(path)
@@ -156,11 +176,16 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         how[f"format {header.form}"] += 1
 
         entry, matched = index.identify(header)
+        facts = dict.fromkeys(("genre", "publisher", "year", "players"), provenance.NONE)
         if entry is not None:
             how[f"database by {matched}"] += 1
             genre, publisher = entry.genre, entry.publisher
             year, players = entry.year, entry.players
             regions = list(entry.regions) or rom_header.regions_for(header, relative.name)
+            for name, value in (("genre", genre), ("publisher", publisher), ("year", year),
+                                ("players", players)):
+                if value:
+                    facts[name] = provenance.DATABASE
         else:
             how["database knows nothing"] += 1
             genre = publisher = ""
@@ -168,25 +193,37 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
             regions = rom_header.regions_for(header, relative.name)
 
         description = ""
+        text_source = provenance.NONE
         if repo is not None:
             info = repo.info(header.product_code)
             if info is not None:
                 how["collection has metadata"] += 1
+                if not publisher and publisher_of(info.author):
+                    facts["publisher"] = provenance.COLLECTION
+                if not year and info.year:
+                    facts["year"] = provenance.COLLECTION
+                if not players and info.players:
+                    facts["players"] = provenance.COLLECTION
                 publisher = publisher or publisher_of(info.author)
                 year = year or info.year
                 players = players or info.players
             description = repo.description(header.product_code)
             if description:
                 how["collection has a description"] += 1
+                text_source = (provenance.TEXT_COLLECTION if matched == "crc"
+                               else provenance.TEXT_COLLECTION_BY_CODE)
         # Text of the card owner's own wins over the collection's: a hack
         # has its parent's description otherwise, which describes the wrong
         # game.
         title = relative.stem
+        title_source = provenance.TITLE_FILE_NAME
         own = custom_art.find_text(art_index, roms, rom_path, art_folder)
         if own is not None:
             how["own text"] += 1
-            description = own.description or description
-            title = own.title or title
+            if own.description:
+                description, text_source = own.description, provenance.YOURS
+            if own.title:
+                title, title_source = own.title, provenance.YOURS
 
         record = {
             # The header CRC pair and game code, so a correction to
@@ -208,6 +245,9 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         cover = covers.get(rom_path.casefold()) or covers.get(str(relative).casefold())
         if cover:
             record["cover"] = cover
+        record["identified"] = matched
+        record["sources"] = _sources(origins, rom_path, relative, cover, title=title_source,
+                                     description=text_source, **facts)
         records.append(record)
 
     # Consolidation happens last, so overrides are written in whichever
@@ -228,6 +268,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         patch = patches.get(record["path"].casefold())
         if patch:
             record.update({k: v for k, v in patch.items() if k in OVERRIDABLE})
+            record["sources"].update({k: provenance.OVERRIDE for k in patch if k in provenance.FIELDS})
             how["override"] += 1
 
     attribution = ("read from the ROM headers and data/coverdb.csv"

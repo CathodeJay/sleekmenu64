@@ -160,7 +160,7 @@ curate:
 # artefact. Boxes are additive: nothing already matched is dropped.
 refresh:
 	@if [ -z "$(METADATA_JSON)" ]; then \
-		echo "refresh requires METADATA_JSON=/path/to/metadata.json [METADATA=release-metadata.zip]"; exit 1; \
+		echo "refresh requires METADATA_JSON=/path/to/sleekmenu/catalog.json [METADATA=release-metadata.zip]"; exit 1; \
 	fi
 	$(PYTHON) tools/refresh_catalog.py "$(METADATA_JSON)" \
 		--coverdb "$(COVERDB)" \

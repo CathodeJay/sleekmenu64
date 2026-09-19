@@ -141,6 +141,17 @@ def read_index(blob: bytes) -> list[PackEntry]:
     return entries
 
 
+def read_cover(blob: bytes, name: str) -> bytes | None:
+    """One sprite out of a pack, by the name the catalog gives it; None when
+    the pack has no such cover. The index is walked the way the console
+    walks it, by hash."""
+    wanted = cover_hash(name)
+    for entry in read_index(blob):
+        if entry.hash == wanted:
+            return blob[entry.offset:entry.offset + entry.length]
+    return None
+
+
 def pack_directory(source: Path, destination: Path) -> tuple[int, int]:
     """Every .sprite in a directory, keyed by filename as the catalog names it."""
     sprites = sorted(source.glob("*.sprite"), key=lambda p: (p.name.casefold(), p.name))

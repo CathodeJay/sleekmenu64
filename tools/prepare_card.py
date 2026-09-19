@@ -35,12 +35,12 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import (build_catalog, build_metadata, cover_pack, coverdb, custom_art, library,
-                   make_sprite, pack_covers)
+from tools import (build_catalog, build_metadata, card_catalog, cover_pack, coverdb, custom_art,
+                   library, make_sprite, pack_covers)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 from tools.card_layout import (  # noqa: F401  (re-exported for callers)
-    CARD_FOLDER, COVERS_FOLDER, COVER_PACK_NAME, CATALOG_NAME)
+    CARD_FOLDER, COVERS_FOLDER, COVER_PACK_NAME, CATALOG_NAME, CATALOG_JSON_NAME)
 
 
 class PrepareError(ValueError):
@@ -125,7 +125,7 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
 
     metadata_path = work / "metadata.json"
     document, how = build_metadata.build(roms, card, database_path, genres, overrides,
-                                         covers, repo, rom_paths)
+                                         covers, repo, rom_paths, cover_origins=planned.origins)
     metadata_path.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     summary["games"] = len(document["games"])
     with_meta = sum(1 for game in document["games"]
@@ -146,6 +146,8 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
         destination.mkdir(parents=True, exist_ok=True)
         shutil.copy2(catalog, destination / CATALOG_NAME)
         written.append(f"{CARD_FOLDER}/{CATALOG_NAME}")
+        card_catalog.write(card, document)
+        written.append(f"{CARD_FOLDER}/{CATALOG_JSON_NAME}")
         # summary["sprites"] is 0 when nothing in the library has a box; there
         # is no pack and no loose sprite to copy, and that is not a failure.
         if summary.get("sprites"):

@@ -117,6 +117,33 @@ def encode(image, tiles: tuple[int, int] | None = None) -> bytes:
     return header + bytes(body) + b"\0" * padding + _extended_block(width, height)
 
 
+def decode(payload: bytes) -> tuple[int, int, bytes]:
+    """The inverse of encode(), for looking at a sprite the console will
+    draw: width, height, and the pixels as packed RGB bytes, row by row.
+    Only the uncompressed RGBA16 this module writes is read; the alpha bit
+    is dropped, since a cover is opaque."""
+    if len(payload) < 8:
+        raise SpriteError("not a sprite: shorter than its header")
+    width, height, _depth, fmt, _h, _v = struct.unpack_from(">HHBBBB", payload, 0)
+    if fmt & ~SPRITE_FLAGS_EXT != FMT_RGBA16:
+        raise SpriteError(f"not an RGBA16 sprite: format {fmt & ~SPRITE_FLAGS_EXT}")
+    count = width * height
+    if len(payload) < 8 + count * 2:
+        raise SpriteError("sprite is shorter than its pixels")
+    pixels = struct.unpack_from(f">{count}H", payload, 8)
+    rgb = bytearray(count * 3)
+    for i, value in enumerate(pixels):
+        rgb[i * 3] = (value >> 11) << 3
+        rgb[i * 3 + 1] = ((value >> 6) & 0x1F) << 3
+        rgb[i * 3 + 2] = ((value >> 1) & 0x1F) << 3
+    return width, height, bytes(rgb)
+
+
+def to_ppm(width: int, height: int, rgb: bytes) -> bytes:
+    """Decoded pixels as a binary PPM, which Tk draws without Pillow."""
+    return f"P6 {width} {height} 255\n".encode("ascii") + rgb
+
+
 def fit_image(image, canvas: tuple[int, int] = CANVAS_SIZE,
               matte: tuple[int, int, int, int] = MATTE_RGBA, width_scale: float = 1.0):
     """Fit an image inside the sprite canvas without changing its aspect

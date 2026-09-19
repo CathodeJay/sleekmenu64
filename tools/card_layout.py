@@ -22,6 +22,10 @@ BROWSER_ROM = "SleekMenu64.z64"
 COVERS_FOLDER = "covers"
 COVER_PACK_NAME = "covers.pak"
 CATALOG_NAME = "catalog.ebc"
+#: Under CARD_FOLDER: the catalog as the tool built it, with where every
+#: field came from (tools/card_catalog.py). Read by the tool's window and by
+#: `make refresh`, never by the browser.
+CATALOG_JSON_NAME = "catalog.json"
 #: Under CARD_FOLDER: the card owner's own pictures and text, by ROM name
 #: or game code (tools/custom_art.py). Read by the tool, never the browser.
 ART_FOLDER = "art"

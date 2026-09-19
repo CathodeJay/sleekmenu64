@@ -47,6 +47,18 @@ proven there by preparing a card from the frozen binary. They are not
 code-signed: that is a yearly fee per platform, and the README says what to
 click instead.
 
+**Where a field came from is where its file is.** The window's catalog
+tab says for every game which source answered for its box, title, text and
+facts, and it derives that from nothing hidden: a picture is the owner's
+because it sits in `sleekmenu/art/` (or beside the ROM), the collection's
+because it came out of the zip, and the facts are the database's or the
+collection's by which lookup found them (`tools/provenance.py`). Originals
+are never edited in place — the zip is read where it is — so an edit is
+always a file somewhere else, reverting one is deleting that file, and no
+manifest of the owner's changes exists to go stale when a file is dropped
+in by hand. The result lands in `sleekmenu/catalog.json` beside the packed
+catalog (`tools/card_catalog.py`); the console reads only the packed one.
+
 **The card is the EverDrive's.** The browser writes five files (see
 CARD_LAYOUT.md), never creates, renames or deletes anything else, and uses the
 EverDrive menu's own save files and records so the two menus can be used
@@ -84,6 +96,9 @@ and `description.txt` fill in the rest.
 Covers are converted by `tools/make_sprite.py`, which writes libdragon's
 sprite format itself; `tests/test_make_sprite.py` checks its output byte for
 byte against the real `mksprite`. No toolchain anywhere in the art path.
+The same module decodes a sprite back to pixels, which is how the window
+shows a box: out of `covers.pak`, exactly as the console will draw it,
+never from the picture it was made from.
 
 ## The browser
 
@@ -245,7 +260,7 @@ make curate ARGS="set-genre re:'zelda.*ocarina' 'Action-Adventure'"
 Re-apply every correction, and a newer collection, to a card already built:
 
 ```sh
-make refresh METADATA_JSON=build/card/metadata.json METADATA=release-metadata.zip CARD=/Volumes/CARD
+make refresh METADATA_JSON=/Volumes/CARD/sleekmenu/catalog.json METADATA=release-metadata.zip CARD=/Volumes/CARD
 ```
 
 Genres are re-derived from `data/coverdb.csv` and `data/genres.csv` on every

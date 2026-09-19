@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # Runnable as a script as well as importable -- see tools/__init__.py.
@@ -25,7 +25,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import custom_art, headers, library, make_sprite
+from tools import custom_art, headers, library, make_sprite, provenance
 from tools.custom_art import Custom
 from tools.metadata_repo import Found, MetadataRepo, RepoError
 
@@ -40,11 +40,21 @@ class Plan:
     sources: dict[str, "Found | Custom"]   # sprite name -> where its picture is
     without: list[str]                     # ROM paths with no box anywhere
     custom: int = 0                        # ROMs whose box is the card owner's own
+    origins: dict[str, str] = field(default_factory=dict)   # ROM path -> tools/provenance.py label
 
 
 def sprite_name(key: str) -> str:
     """"N/S/M/E" -> "NSME.sprite"; the neutral "N/S/M" -> "NSM.sprite"."""
     return key.replace("/", "") + ".sprite"
+
+
+def collection_origin(found: Found, code: str) -> str:
+    """Whether the collection answered with this cartridge's own box (its
+    region's, or the region-neutral one) or with another region's."""
+    key = found.key.replace("/", "").upper()
+    if key == code.upper() or len(key) == 3:
+        return provenance.COVER_COLLECTION
+    return provenance.COVER_COLLECTION_REGION
 
 
 def plan(roms_root: Path, rom_paths: list[str], repo: MetadataRepo | None,
@@ -53,10 +63,12 @@ def plan(roms_root: Path, rom_paths: list[str], repo: MetadataRepo | None,
     the card owner's own picture first (tools/custom_art.py), the
     collection second. A picture named after a game code takes the
     collection's sprite name for that code and so replaces the
-    collection's box for every ROM that carries it."""
+    collection's box for every ROM that carries it. `origins` says which
+    of the two answered, per ROM, in tools/provenance.py's words."""
     covers: dict[str, str] = {}
     sources: dict[str, Found | Custom] = {}
     without: list[str] = []
+    origins: dict[str, str] = {}
     custom = 0
     index = custom_art.Index()
     for rom_path in rom_paths:
@@ -66,17 +78,21 @@ def plan(roms_root: Path, rom_paths: list[str], repo: MetadataRepo | None,
         if own is not None:
             covers[rom_path] = own.sprite
             sources[own.sprite] = own
+            origins[rom_path] = (provenance.yours_code(code) if own.sprite == custom_art.code_sprite(code)
+                                 else provenance.COVER_YOURS_ROM)
             custom += 1
             continue
         found = repo.art(code) if repo is not None and header is not None else None
         if found is None:
             without.append(rom_path)
+            origins[rom_path] = provenance.NONE
             continue
         name = sprite_name(found.key)
         covers[rom_path] = name
         if not isinstance(sources.get(name), Custom):
             sources.setdefault(name, found)
-    return Plan(covers, sources, without, custom)
+        origins[rom_path] = collection_origin(found, code)
+    return Plan(covers, sources, without, custom, origins)
 
 
 def pack(planned: Plan, repo: MetadataRepo | None, destination: Path, dry_run: bool = False,
@@ -90,11 +106,11 @@ def pack(planned: Plan, repo: MetadataRepo | None, destination: Path, dry_run: b
     for name in sorted(planned.sources):
         if not dry_run:
             found = planned.sources[name]
-            if isinstance(found, Custom):
-                make_sprite.convert(found.path, destination / name)
-            else:
+            if isinstance(found, Found):
                 make_sprite.convert_bytes(repo.read(found), destination / name, found.path,
                                           width_scale=repo.width_scale)
+            else:
+                make_sprite.convert(found.path, destination / name)
         written += 1
         if progress is not None:
             progress.step(name)

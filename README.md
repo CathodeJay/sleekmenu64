@@ -66,7 +66,10 @@ same tool with Python inside, one download per system:
 `SleekMenu-Prep-windows.exe`, `SleekMenu-Prep-linux`. Open it, pick the card
 (it is picked for you when it is the only removable disk), press Prepare;
 the box-art zip is fetched onto the card if it is not there, and Stop ends
-the run if it takes too long. It is not code-signed, so the first
+the run if it takes too long. The Catalog tab then shows the card as the
+browser will: the folders, every game with its genre, publisher, year and
+region, the box exactly as the console draws it, and where each of those
+came from. It is not code-signed, so the first
 launch warns: on macOS, right-click the app and choose Open (on macOS 15,
 System Settings → Privacy & Security → Open Anyway); on Windows, More info
 → Run anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
@@ -81,6 +84,7 @@ What the tool writes, and what it leaves alone:
 ```text
 /release-metadata.zip      the box-art collection, fetched once and read in place
 /sleekmenu/catalog.ebc     titles, genre, publisher, year, descriptions
+/sleekmenu/catalog.json    the same, readable, with where every field came from
 /sleekmenu/covers.pak      every cover in one file
 /sleekmenu/favorites.txt   written by the browser as you star games
 /sleekmenu/history.txt     the last fifteen games you launched
@@ -215,6 +219,12 @@ ROM or in `sleekmenu/art/` — becomes the description on the launch card,
 and a first line of `Title: Super Mario Star Road` renames the game in the
 list. Pictures and text are read when the tool runs, so a new one needs a
 re-run of the tool, like a new game does.
+
+The window's Catalog tab says, for every game, where its box, title and
+text came from — the collection, another region's scan, the database, or
+your own file — and "Only what I changed" lists the games you gave a
+picture or text of your own. The same is in `sleekmenu/catalog.json` on
+the card, beside the catalog the console reads.
 
 ## Building from source
 

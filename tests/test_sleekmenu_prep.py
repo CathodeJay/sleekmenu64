@@ -220,7 +220,8 @@ class EntryPointTests(unittest.TestCase):
         self.assertIn(b"A description of NWRE.", (out / card_layout.CATALOG_NAME).read_bytes())
         # and nothing was unpacked onto the card
         self.assertEqual(sorted(p.name for p in out.iterdir()),
-                         [card_layout.CATALOG_NAME, card_layout.COVER_PACK_NAME])
+                         [card_layout.CATALOG_NAME, card_layout.CATALOG_JSON_NAME,
+                          card_layout.COVER_PACK_NAME])
 
     def test_a_collection_unpacked_for_another_menu_is_honoured(self):
         write_collection(self.card / "menu", "NWRE")
