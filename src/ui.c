@@ -925,6 +925,119 @@ static uint32_t cheat_rows(const sm_layout_t *l) {
     return rows > 1 ? (uint32_t)rows : 1u;
 }
 
+/* The box back's window. 9 px per line, as draw_wrapped draws it; up to
+   32 lines rendered, which is a longer paragraph than the collection
+   holds; a 2 s pause before the text moves on its own and a 2 s hold at
+   the end; 1 px every 4 frames, about a line every 0.6 s. */
+enum { DESC_LINE = 9, DESC_MAX_LINES = 32, DESC_PAUSE_FRAMES = 120,
+       DESC_HOLD_FRAMES = 120, DESC_FRAMES_PER_PIXEL = 4 };
+
+/* Where the box back sits on the card: under the cover and the facts,
+   above the prompts. The facts column is a fixed run of rows plus one for
+   each of the three that appear only when there is something to say, so
+   the drawing code and the scroll agree on the window without either
+   measuring the other. */
+static void desc_window(const sm_ui_t *ui, const sm_layout_t *l, int *top, int *height) {
+    int y = l->safe_top + SM_HEADER_HEIGHT + 6;
+    int info_y = y + 12 + 11 + 11 + 15 + 11 + 11;
+    if (launch_sibling_disk()[0]) info_y += 11;
+    if (launch_cheats_available()) info_y += 11;
+    if (ui->selected_features) info_y += 11;
+    *top = (info_y > y + SM_COVER_HEIGHT ? info_y : y + SM_COVER_HEIGHT) + 6;
+    *height = (l->footer_top - 26 - 4) - *top;
+    if (*height < 0) *height = 0;
+}
+
+static int desc_max_offset(const sm_ui_t *ui, const sm_layout_t *l) {
+    int top, height;
+    desc_window(ui, l, &top, &height);
+    int overflow = ui->desc_lines * DESC_LINE - height;
+    return overflow > 0 ? overflow : 0;
+}
+
+/* The whole paragraph, once, into the card's own surface: the same wrap
+   as before, with room for all of it rather than the five lines that fit
+   the card. Drawn against the screen's background so the window copied
+   out of it is indistinguishable from text drawn in place. */
+static void render_description(sm_ui_t *ui, const sm_layout_t *l, const char *text) {
+    ui->desc_lines = 0;
+    ui->desc_offset = 0;
+    ui->desc_idle = 0;
+    ui->desc_manual = false;
+    if (!ui->desc_surface.buffer || !text || !text[0]) return;
+    graphics_fill_screen(&ui->desc_surface, graphics_make_color(8, 12, 20, 255));
+    graphics_set_color(graphics_make_color(190, 200, 214, 255), 0);
+    ui->desc_lines = draw_wrapped(&ui->desc_surface, 0, 0, DESC_LINE, text,
+        (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH, DESC_MAX_LINES);
+}
+
+/* One frame of the window's motion, on the card. Up and down move a line
+   and end the automatic scroll for this visit; left alone, the text waits,
+   creeps to the end, waits again, and starts over. */
+static void scroll_description(sm_ui_t *ui, const sm_layout_t *l, sm_actions_t actions) {
+    int max = desc_max_offset(ui, l);
+    if (!max) return;
+    if (actions.up || actions.down) {
+        ui->desc_manual = true;
+        ui->desc_offset += actions.down ? DESC_LINE : -DESC_LINE;
+        if (ui->desc_offset < 0) ui->desc_offset = 0;
+        if (ui->desc_offset > max) ui->desc_offset = max;
+        return;
+    }
+    if (ui->desc_manual) return;
+    ui->desc_idle++;
+    if (ui->desc_idle <= DESC_PAUSE_FRAMES) return;
+    if (ui->desc_offset < max) {
+        if ((ui->desc_idle - DESC_PAUSE_FRAMES) % DESC_FRAMES_PER_PIXEL == 0) ui->desc_offset++;
+        return;
+    }
+    if (ui->desc_idle > DESC_PAUSE_FRAMES + (unsigned)max * DESC_FRAMES_PER_PIXEL + DESC_HOLD_FRAMES) {
+        ui->desc_offset = 0;
+        ui->desc_idle = 0;
+    }
+}
+
+/* The window, copied a row at a time onto the card, and a thin bar at the
+   right edge while there is more than the window shows. Falls back to
+   drawing the text in place, unscrolled, if the two surfaces ever differ
+   in depth. */
+static void draw_description(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui, const char *text) {
+    int top, height, max;
+    desc_window(ui, l, &top, &height);
+    if (height < DESC_LINE) return;
+    if (!ui->desc_lines || !ui->desc_surface.buffer ||
+        surface_get_format(s) != surface_get_format(&ui->desc_surface)) {
+        graphics_set_color(graphics_make_color(190, 200, 214, 255), 0);
+        draw_wrapped(s, l->safe_left + 3, top, DESC_LINE, text,
+            (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH, height / DESC_LINE);
+        return;
+    }
+    {
+        int rows = ui->desc_lines * DESC_LINE - ui->desc_offset;
+        int width = ui->desc_surface.width;
+        const uint8_t *src = (const uint8_t *)ui->desc_surface.buffer +
+            (size_t)ui->desc_offset * ui->desc_surface.stride;
+        uint8_t *dst = (uint8_t *)s->buffer + (size_t)top * s->stride + (size_t)(l->safe_left + 3) * 2u;
+        if (rows > height) rows = height;
+        if (rows > ui->desc_surface.height - ui->desc_offset) rows = ui->desc_surface.height - ui->desc_offset;
+        for (int r = 0; r < rows; r++) {
+            memcpy(dst, src, (size_t)width * 2u);
+            src += ui->desc_surface.stride;
+            dst += s->stride;
+        }
+    }
+    max = desc_max_offset(ui, l);
+    if (max > 0) {
+        int total = ui->desc_lines * DESC_LINE;
+        int thumb = height * height / total;
+        int travel = height - (thumb < 4 ? 4 : thumb);
+        if (thumb < 4) thumb = 4;
+        graphics_draw_box(s, l->safe_right - 2, top, 2, height, graphics_make_color(35, 42, 52, 255));
+        graphics_draw_box(s, l->safe_right - 2, top + travel * ui->desc_offset / max, 2, thumb,
+            graphics_make_color(150, 165, 185, 255));
+    }
+}
+
 /* What the card would say in red: cheats switched on that the boot code
    cannot run. One place decides, so that Start from the list and the card's
    own drawing can never disagree about whether there is something to read
@@ -938,10 +1051,12 @@ static bool card_warning(void) {
 /* Prepare the launch for a game and show its card. Reached by A, and by
    Start when it goes on to play: the card is the progress screen, so it
    has to be up either way, with its cover and its facts. */
-static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, uint32_t item, const char *path) {
-    launch_prepare(path);
+static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_t *layout,
+    uint32_t item, const sm_game_t *game) {
+    launch_prepare(game->path);
     ui->status = launch_status_message();
     ui->diagnostics = false;
+    render_description(ui, layout, game->description);
     /* The grid keeps its covers in slot_sprites and never touches
        cover_sprite, which is what the launch card draws -- so coming here
        from the grid showed a game with no box and "..." where its save type
@@ -993,6 +1108,10 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
         }
         find_library_root(catalog, ui->root, sizeof(ui->root));
         snprintf(ui->folder, sizeof(ui->folder), "%s", ui->root);
+        /* The card's text surface, once: the safe width less the margin,
+           tall enough for every line render_description can produce. */
+        ui->desc_surface = surface_alloc(FMT_RGBA16,
+            (uint16_t)(layout->safe_right - layout->safe_left - 6), DESC_LINE * DESC_MAX_LINES);
         rebuild(ui, catalog);
     }
     ensure_genre_tabs(ui, catalog);
@@ -1029,6 +1148,7 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
             ui->status = launch_status_message();
         }
         if (actions.start && launch_selected_path()[0]) launch_from_card(ui, catalog, layout);
+        if (!ui->diagnostics) scroll_description(ui, layout, actions);
         return;
     }
     if (ui->screen == SM_SCREEN_CHEATS) {
@@ -1166,7 +1286,7 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
             size_t used = strlen(ui->folder), add = (size_t)(slash - part);
             if (used + (used ? 1 : 0) + add < sizeof(ui->folder)) { if (used) ui->folder[used++]='/'; memcpy(ui->folder+used,part,add); ui->folder[used+add]='\0'; rebuild(ui,catalog); }
         } else if (catalog_get(catalog, item, &game)) {
-            open_card(ui, catalog, item, game.path);
+            open_card(ui, catalog, layout, item, &game);
             /* Start plays without the stop at the card, unless the card has
                something in red to say: then it stays up, exactly as it would
                have after A, and Start there is the second press. */
@@ -2091,16 +2211,9 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
         }
 
         /* The box back, under the cover and the facts, in the space that was
-           empty. It stops short of the prompts; what does not fit ends in an
-           ellipsis. NTSC gives it five or six lines, PAL a dozen. */
-        if (have && game.description[0]) {
-            int top = (info_y > y + SM_COVER_HEIGHT ? info_y : y + SM_COVER_HEIGHT) + 6;
-            int bottom = l->footer_top - 26 - 4;
-            int max_lines = (bottom - top) / 9;
-            graphics_set_color(graphics_make_color(190, 200, 214, 255), 0);
-            draw_wrapped(s, l->safe_left + 3, top, 9, game.description,
-                (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH, max_lines);
-        }
+           empty. It stops short of the prompts; NTSC shows five or six lines
+           at a time, PAL a dozen, and the rest scrolls into view. */
+        if (have && game.description[0]) draw_description(s, l, ui, game.description);
     }
 
     y = l->footer_top - 26;
@@ -2272,4 +2385,6 @@ void ui_close(sm_ui_t *ui) {
     unload_cover(ui);
     unload_slots(ui);
     sm_cover_pack_close(&ui->covers);
+    if (ui->desc_surface.buffer) surface_free(&ui->desc_surface);
+    ui->desc_lines = 0;
 }

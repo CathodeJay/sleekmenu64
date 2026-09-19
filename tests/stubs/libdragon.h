@@ -52,6 +52,23 @@ static inline tex_format_t surface_get_format(const surface_t *s) {
     return (tex_format_t)(s->flags & 0x1F);
 }
 
+/* An owned pixel buffer, as libdragon's surface_alloc gives one: the
+   browser renders the card's text into one and copies rows out of it. */
+static inline surface_t surface_alloc(tex_format_t format, uint16_t width, uint16_t height) {
+    surface_t s;
+    s.flags = (uint32_t)format;
+    s.width = width;
+    s.height = height;
+    s.stride = (uint16_t)(width * 2u);
+    s.buffer = calloc((size_t)width * height, 2u);
+    return s;
+}
+
+static inline void surface_free(surface_t *s) {
+    free(s->buffer);
+    s->buffer = NULL;
+}
+
 /* --- what the test observes ------------------------------------------- */
 #define SM_TEST_TEXT_MAX 256
 extern char sm_test_text[SM_TEST_TEXT_MAX][96];

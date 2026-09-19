@@ -1047,9 +1047,10 @@ int main(void) {
     /* ---- the description on the launch card ------------------------ */
     {
         /* A box back is a paragraph, and the card has a band of empty
-           space under the cover. It goes there, wrapped on spaces to the
-           safe width, cut with an ellipsis where it runs out of room --
-           never clipped mid-word, never over the prompts. */
+           space under the cover. It is rendered whole when the card opens,
+           wrapped on spaces to the safe width and never clipped mid-word,
+           and shown through a window that scrolls: on its own after a
+           pause, by hand with up and down, never over the prompts. */
         static const row_t rows[] = {
             {"a.z64", "Alpha", "Racing", 0, "", 0,
              "Mario is super in a whole new way! Combining the finest 3-D graphics "
@@ -1060,14 +1061,18 @@ int main(void) {
              "arch nemesis - Bowser, King of the Koopas! And then some more words "
              "so that it certainly does not fit on the card."},
             {"b.z64", "Beta", "Racing", 0, "", 0, NULL},
+            {"c.z64", "Gamma", "Racing", 0, "", 0, "Short and sweet."},
         };
-        int lines, i;
-        start(rows, 2u);
+        int lines, i, max, was;
+        start(rows, 3u);
+        sm_test_reset();
         frame(PRESS(select));
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
-        draw();
-        /* It is there, in pieces no wider than the safe area... */
+        /* Rendered on opening, all of it, in pieces no wider than the safe
+           area, each ending on a word. */
         assert(sm_test_drew("Mario is super in a whole new way!"));
+        assert(sm_test_drew("certainly does not fit"));
+        assert(!sm_test_drew("..."));
         lines = 0;
         for (i = 0; i < sm_test_text_count; i++) {
             const char *text = sm_test_text[i];
@@ -1075,25 +1080,61 @@ int main(void) {
                 strstr(text, "obstacle") || strstr(text, "standard") ||
                 strstr(text, "Power Stars") || strstr(text, "explosive")) {
                 assert((int)strlen(text) * SM_FONT_WIDTH <= layout.safe_right - layout.safe_left);
-                /* ...never split inside a word: a line ends on a word or on
-                   the ellipsis. */
                 assert(text[strlen(text) - 1] != ' ');
                 lines++;
             }
         }
-        assert(lines >= 4);
-        /* ...and it ends in an ellipsis, because it did not all fit. */
-        assert(sm_test_drew("..."));
-        assert(!sm_test_drew("certainly does not fit"));
-        /* The prompts under it are untouched. */
-        assert(sm_test_drew("START"));
+        assert(lines >= 4 && ui.desc_lines >= 7);
+        assert(ui.desc_surface.buffer != NULL);
+        /* More lines than the NTSC card shows, so there is somewhere to go. */
+        max = ui.desc_lines * 9 - (layout.footer_top - 30 - (layout.safe_top + SM_HEADER_HEIGHT + 6 + 72 + 6));
+        assert(max > 0);
+        draw();
+        assert(sm_test_drew("START"));            /* the prompts are untouched */
+        assert(sm_test_box_count > 0);            /* the bar at the edge */
 
-        /* A game with nothing to say draws nothing extra. */
+        /* Left alone: nothing for two seconds, then a pixel every four
+           frames, up to the end, a hold, and back to the top. */
+        assert(ui.desc_offset == 0);
+        idle(120);
+        assert(ui.desc_offset == 0);
+        idle(4);
+        assert(ui.desc_offset == 1);
+        idle(4 * max + 8);
+        assert(ui.desc_offset == max);
+        idle(120 + 4);
+        assert(ui.desc_offset == 0 && ui.desc_idle < 20);
+
+        /* By hand: a line at a time, clamped, and the automatic scroll is
+           off for the rest of the visit. */
+        frame(PRESS(down));
+        assert(ui.desc_offset == 9 && ui.desc_manual);
+        was = ui.desc_offset;
+        idle(300);
+        assert(ui.desc_offset == was);
+        for (i = 0; i < 40; i++) frame(PRESS(down));
+        assert(ui.desc_offset == max);
+        for (i = 0; i < 40; i++) frame(PRESS(up));
+        assert(ui.desc_offset == 0);
+
+        /* The next card starts over. A game with nothing to say draws
+           nothing extra; a short one never moves. */
+        frame(PRESS(back));
+        frame(PRESS(down));
+        sm_test_reset();
+        frame(PRESS(select));
+        assert(ui.desc_lines == 0 && !ui.desc_manual);
+        draw();
+        assert(!sm_test_drew("Mario"));
         frame(PRESS(back));
         frame(PRESS(down));
         frame(PRESS(select));
-        draw();
-        assert(!sm_test_drew("..."));
+        assert(ui.desc_lines == 1);
+        idle(400);
+        assert(ui.desc_offset == 0);
+        frame(PRESS(down));
+        assert(ui.desc_offset == 0);
+        frame(PRESS(back));
     }
 
     /* ---- the cheats page ---------------------------------------------- */

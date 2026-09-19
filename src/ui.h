@@ -144,6 +144,15 @@ typedef struct {
     uint32_t load_total_kib;
     bool load_verifying;
     unsigned settle;
+    /* The box back on the launch card, rendered whole into its own surface
+       when the card opens, and shown through a window that moves a pixel
+       at a time: on its own after a pause, or by hand with up and down.
+       The software renderer has no clipping, so the window is a row copy. */
+    surface_t desc_surface;
+    int desc_lines;           /* wrapped lines rendered; 0 means nothing to show */
+    int desc_offset;          /* the pixel row at the top of the window */
+    unsigned desc_idle;       /* frames since the card opened or the last press */
+    bool desc_manual;         /* up or down was pressed: no automatic scroll this visit */
     /* Favourites live on the card, not in the catalog, so C-down can set one
        and it survives both a power cycle and a rebuilt catalog. */
     sm_favorites_t favorites;

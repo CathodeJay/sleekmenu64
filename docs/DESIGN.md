@@ -105,6 +105,14 @@ one. Covers live in a single `covers.pak` because opening a file by name on a
 FAT card walks the folder from the start, and with long names that is over
 100 KB of reading per picture.
 
+**The box back.** The description on the launch card is rendered whole,
+once, into a surface of its own when the card opens, and the card shows a
+window of it copied a row at a time: the software renderer has no clipping,
+and a row copy is one. Left alone the window waits two seconds, creeps a
+pixel every four frames to the end, holds, and starts over; up and down
+move it a line and end the automatic scroll for that visit. A bar at the
+right edge says how much there is.
+
 **Font.** Spleen 5x8, vendored as its BDF and rasterised at build time. The
 video interface's resampling filter stays on: turning it off at 16 bits per
 pixel and 320 pixels across trips a hardware bug on NTSC consoles, and

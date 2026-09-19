@@ -77,7 +77,7 @@ The tool never moves, renames or deletes anything on the card.
 
 | Control | Browsing | Launch details |
 |---|---|---|
-| D-pad / stick | Move | — |
+| D-pad / stick | Move | Scroll the description |
 | A | Open a folder, or a game's details | — |
 | B | Parent folder | Back to the list |
 | Start | Play the game under the cursor | Play |
