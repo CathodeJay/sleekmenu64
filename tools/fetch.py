@@ -59,7 +59,7 @@ def offline_by_request() -> bool:
     return bool(os.environ.get(OFFLINE_VARIABLE))
 
 
-def _open(url: str):
+def open_url(url: str):
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     return urllib.request.urlopen(request, timeout=TIMEOUT)
 
@@ -72,7 +72,7 @@ def release_addresses(api_url: str = API_URL, latest_url: str = LATEST_URL,
     (offline, rate-limited) costs one address, not the download."""
     addresses = [latest_url]
     try:
-        with _open(api_url) as response:
+        with open_url(api_url) as response:
             releases = json.loads(response.read().decode("utf-8"))
         for release in releases if isinstance(releases, list) else []:
             for asset in release.get("assets", []):
@@ -99,7 +99,7 @@ def download(url: str, destination: Path, progress_factory=None, cancel=None,
     destination.parent.mkdir(parents=True, exist_ok=True)
     complete = False
     try:
-        with _open(url) as response:
+        with open_url(url) as response:
             total = int(response.headers.get("Content-Length") or 0)
             bar = progress_factory(max(1, (total + CHUNK - 1) // CHUNK), label) if progress_factory else None
             received = 0

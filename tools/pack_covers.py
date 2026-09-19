@@ -25,7 +25,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import custom_art, headers, library, make_sprite, provenance
+from tools import custom_art, headers, hires, library, make_sprite, provenance
 from tools.custom_art import Custom
 from tools.metadata_repo import Found, MetadataRepo, RepoError
 
@@ -37,10 +37,11 @@ class CoverPackError(ValueError):
 @dataclass(frozen=True)
 class Plan:
     covers: dict[str, str]                 # ROM path -> sprite name
-    sources: dict[str, "Found | Custom"]   # sprite name -> where its picture is
+    sources: dict[str, object]             # sprite name -> where its picture is: Found, Custom or Hires
     without: list[str]                     # ROM paths with no box anywhere
     custom: int = 0                        # ROMs whose box is the card owner's own
     origins: dict[str, str] = field(default_factory=dict)   # ROM path -> tools/provenance.py label
+    hires: int = 0                         # ROMs whose box is a fetched high-resolution one
 
 
 def sprite_name(key: str) -> str:
@@ -60,17 +61,19 @@ def collection_origin(found: Found, code: str) -> str:
 def plan(roms_root: Path, rom_paths: list[str], repo: MetadataRepo | None,
          art_folder: Path | None = None) -> Plan:
     """Which sprite each ROM gets, and which picture each sprite comes from:
-    the card owner's own picture first (tools/custom_art.py), the
-    collection second. A picture named after a game code takes the
-    collection's sprite name for that code and so replaces the
+    the card owner's own picture first (tools/custom_art.py), a fetched
+    high-resolution box second (tools/hires.py), the collection last. A
+    picture named after a game code -- the owner's or a fetched one --
+    takes the collection's sprite name for that code and so replaces the
     collection's box for every ROM that carries it. `origins` says which
-    of the two answered, per ROM, in tools/provenance.py's words."""
+    answered, per ROM, in tools/provenance.py's words."""
     covers: dict[str, str] = {}
-    sources: dict[str, Found | Custom] = {}
+    sources: dict[str, object] = {}
     without: list[str] = []
     origins: dict[str, str] = {}
-    custom = 0
+    custom = high = 0
     index = custom_art.Index()
+    hires_folder = hires.folder(art_folder)
     for rom_path in rom_paths:
         header = headers.read(roms_root / rom_path)
         code = header.product_code if header is not None else ""
@@ -82,6 +85,14 @@ def plan(roms_root: Path, rom_paths: list[str], repo: MetadataRepo | None,
                                  else provenance.COVER_YOURS_ROM)
             custom += 1
             continue
+        big = hires.find(index, hires_folder, code)
+        if big is not None:
+            covers[rom_path] = big.sprite
+            if not isinstance(sources.get(big.sprite), Custom):
+                sources[big.sprite] = big
+            origins[rom_path] = hires.origin(hires_folder, big.path)
+            high += 1
+            continue
         found = repo.art(code) if repo is not None and header is not None else None
         if found is None:
             without.append(rom_path)
@@ -89,10 +100,10 @@ def plan(roms_root: Path, rom_paths: list[str], repo: MetadataRepo | None,
             continue
         name = sprite_name(found.key)
         covers[rom_path] = name
-        if not isinstance(sources.get(name), Custom):
+        if not isinstance(sources.get(name), (Custom, hires.Hires)):
             sources.setdefault(name, found)
         origins[rom_path] = collection_origin(found, code)
-    return Plan(covers, sources, without, custom, origins)
+    return Plan(covers, sources, without, custom, origins, high)
 
 
 def pack(planned: Plan, repo: MetadataRepo | None, destination: Path, dry_run: bool = False,

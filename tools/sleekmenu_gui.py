@@ -194,7 +194,8 @@ class Runner:
                 return out
 
 
-def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums: bool) -> sleekmenu_prep.Options:
+def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums: bool,
+                 hires: bool = False) -> sleekmenu_prep.Options:
     """The window's fields as the run takes them. An empty metadata field
     means whatever is on the card, as on the command line."""
     return sleekmenu_prep.Options(
@@ -202,6 +203,7 @@ def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums:
         metadata=Path(metadata) if metadata.strip() else None,
         no_checksums=not check_checksums,
         fix_checksums=fix_checksums,
+        hires=hires,
     )
 
 
@@ -574,6 +576,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     metadata_note = tk.StringVar()
     check_var = tk.BooleanVar(value=True)
     fix_var = tk.BooleanVar(value=False)
+    hires_var = tk.BooleanVar(value=False)
     status_var = tk.StringVar(value="")
 
     ttk.Label(frame, text="Card").grid(row=0, column=0, sticky="w")
@@ -594,6 +597,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                     variable=check_var).pack(anchor="w")
     ttk.Checkbutton(options, text="Rewrite a stale checksum in the file itself",
                     variable=fix_var).pack(anchor="w")
+    ttk.Checkbutton(options, text="Fetch high-resolution boxes from libretro (about 250 KB a game, once)",
+                    variable=hires_var).pack(anchor="w")
 
     bar = ttk.Progressbar(frame, mode="determinate")
     bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(12, 2))
@@ -719,7 +724,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         bar["value"] = 0
         prepare.configure(state="disabled")
         stop.configure(state="normal")
-        runner = Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get()))
+        runner = Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get(),
+                                     hires_var.get()))
         state["runner"] = runner
         runner.start()
         root.after(100, poll)

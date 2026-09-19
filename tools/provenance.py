@@ -70,7 +70,8 @@ def notes(game: dict) -> list[str]:
     if cover == COVER_COLLECTION_REGION:
         out.append("The box is another region's scan; the collection has none for this one.")
     elif cover == COVER_LIBRETRO_MODIFIED:
-        out.append("The high-resolution box was fetched from libretro and has been changed since.")
+        out.append("The box in sleekmenu/art/hires/ is not the one the tool fetched from libretro: "
+                   "changed since, or put there by hand.")
     elif cover == NONE:
         out.append("No box anywhere: the browser draws a placeholder.")
     if text == TEXT_COLLECTION_BY_CODE:

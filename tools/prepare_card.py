@@ -93,9 +93,10 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             json.dumps({"schema_version": 1, "unmatched": planned.without}, indent=2) + "\n",
             encoding="utf-8")
         summary.update(covers=len(covers), without_art=len(planned.without),
-                       custom_art=planned.custom)
+                       custom_art=planned.custom, hires=planned.hires)
         log(f"covers:   {len(covers)} ROMs have a box"
             + (f" ({planned.custom} from your own art)" if planned.custom else "")
+            + (f" ({planned.hires} high-resolution)" if planned.hires else "")
             + f", {len(planned.without)} do not")
 
         # Progress follows the log: a caller that silenced one wants neither.

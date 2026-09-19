@@ -223,6 +223,19 @@ code — becomes the description on the launch card, and a first line of
 text are read when the tool runs, so a new one needs a re-run of the tool,
 like a new game does.
 
+**High-resolution boxes.** The collection's scans are 158 pixels wide,
+enough for the console's 96×72 thumbnail and no more.
+[libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
+keeps a 512-pixel box for every retail cartridge; `--hires` (the window's
+"Fetch high-resolution boxes" box) fetches one for every game on the card
+the database knows, about 250 KB each, into `sleekmenu/art/hires/` by
+game code, and builds the covers from those — a 512-pixel box downscaled
+looks better than a 158-pixel one downscaled, and the large view of a
+later release will draw them at full size. Only what is missing is
+fetched, so a second run costs nothing; a picture of your own still wins;
+Stop ends it between two boxes, and the report names the games libretro
+has no box for.
+
 **From the window.** Pick the game on the Catalog tab; under it, choose a
 picture (Browse, or drop one on the field when your Python has
 `tkinterdnd2`), type a title and a text, choose "This ROM only" or "Every

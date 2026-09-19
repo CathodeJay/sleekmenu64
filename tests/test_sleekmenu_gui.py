@@ -52,9 +52,9 @@ class FieldTests(unittest.TestCase):
     def test_the_fields_become_the_runs_options(self):
         options = sleekmenu_gui.options_from("/Volumes/CARD", "", True, False)
         self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD")))
-        options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", False, True)
+        options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", False, True, hires=True)
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
-        self.assertTrue(options.no_checksums and options.fix_checksums)
+        self.assertTrue(options.no_checksums and options.fix_checksums and options.hires)
 
     def test_a_card_is_described_in_one_line(self):
         with tempfile.TemporaryDirectory() as scratch:

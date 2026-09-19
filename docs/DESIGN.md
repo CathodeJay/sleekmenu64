@@ -19,8 +19,10 @@ and the matching of games to art and text in detail.
 descriptions and the ROMs are yours, on your card, and the console never
 touches the network. The only data shipped is `data/coverdb.csv` (titles,
 genre, publisher, year, players; CC BY-SA 4.0), which holds no images. The
-tool that prepares the card fetches one thing, once: the box-art collection,
-from its own releases page onto a card that lacks it (`tools/fetch.py`). It
+tool that prepares the card fetches two things, each once and each onto
+the card: the box-art collection, from its own releases page, when the
+card lacks it (`tools/fetch.py`), and, only when asked, high-resolution
+boxes from libretro-thumbnails (`tools/hires.py`). The collection's zip
 lands through a `.part` file and is kept only once it opens as a collection
 with boxes in it, so an interrupted download never passes for one; three
 addresses are tried, since GitHub's `releases/latest/download/` answers only
@@ -85,7 +87,15 @@ A picture of the card owner's own, named after the ROM file beside it or in
 `sleekmenu/art/`, comes before the collection, and a `.txt` the same way
 becomes the description: that is how a hack stops wearing its parent's box
 and homebrew gets one at all (`tools/custom_art.py`; CARD_LAYOUT.md has the
-rules).
+rules). Between the two sits a high-resolution box fetched on request from
+libretro-thumbnails (`tools/hires.py`): 512 pixels wide against the
+collection's 158, filed by game code in `sleekmenu/art/hires/`, found by
+the No-Intro name the database knows for the dump — every name under the
+code is tried, the dump's own first, and on a real card every one of the
+718 codes the database knows resolves to a file there. Downloads write
+only into `hires/` and keep their own manifest; the owner's edits write
+only outside it; so neither can overwrite the other and the manifest can
+say whether a fetched file is still what was fetched.
 
 Text comes from `data/coverdb.csv`, keyed by the CRC pair in the ROM header —
 what the dump *is*, not what it is named. The game code is used only as a

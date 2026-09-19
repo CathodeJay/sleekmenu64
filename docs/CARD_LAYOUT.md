@@ -13,6 +13,8 @@ this is the reference.
 /ROMS/...                   your games, in any folders          yours
 /<any other folder>/...     or anywhere else on the card        yours
 
+/sleekmenu/art/...          your own pictures and text         yours, or the window's
+/sleekmenu/art/hires/...    512-pixel boxes, one per game code  fetched by the tool (--hires)
 /sleekmenu/catalog.ebc      titles, genre, publisher, year     written by the tool
 /sleekmenu/catalog.json     the same, with every field's source  written by the tool
 /sleekmenu/covers.pak       every cover, one file              written by the tool
@@ -60,8 +62,9 @@ beside the packed one: the same games and fields, plus for each game a
 `sources` object naming, for the cover, the title, the description, the
 genre, the publisher, the year and the players, which of the four sources
 answered — `collection`, `collection (another region's box)`,
-`collection (by game code)`, `database`, `file name`, `yours (this ROM)`,
-`yours (code NSME)`, `yours`, or `none` — and `identified`: how the
+`collection (by game code)`, `libretro`, `libretro, modified`, `database`,
+`file name`, `yours (this ROM)`, `yours (code NSME)`, `yours`, or `none` —
+and `identified`: how the
 database knew the dump (`crc`, `serial`, `serial without region`, or
 nothing). The window's Catalog tab reads it; so does `make refresh`. The
 browser never does: `catalog.ebc` carries the result and nothing about
@@ -98,6 +101,17 @@ ED64/metadata/                    the EverDrive-64 Pro menu's layout (edmeta)
 ```
 
 `--metadata PATH` names a zip or folder anywhere else.
+
+**A high-resolution box** comes before the collection and after your own
+pictures. `--hires` fetches `Named_Boxarts/<No-Intro name>.png` from
+libretro-thumbnails for every game code on the card the database knows,
+into `sleekmenu/art/hires/<CODE>.png`, skipping what is there, and records
+each in `sleekmenu/art/hires/downloads.json` (address, date, SHA-256).
+That manifest is how the tool tells a box it fetched (`libretro`) from one
+changed or put there by hand (`libretro, modified`), and the only record it
+keeps: downloads write nothing outside `hires/`, so a re-fetch cannot touch
+a picture of yours, and a `sleekmenu/art/NSME.png` of yours keeps beating a
+fetched `hires/NSME.png`.
 
 **Your own pictures** come before the collection. For `Hacks/Star Road.z64`
 the tool looks for `Hacks/Star Road.png` (or `.jpg`) beside the ROM, then

@@ -86,8 +86,12 @@ EverDrive-64 Pro's own menu draw on — from the user's card, and converts the
 boxes their library needs. A card that lacks the collection gets it fetched
 from that project's own releases page, by the user's machine, onto the
 user's card: the same download the collection's page offers, made for them.
-That is the line this project holds: it never hosts a picture, never ships
-one, and never claims a licence over one. The collection's dedication covers
-its own contribution; the scans themselves remain the publishers'. A card
-prepared with the tool carries them the way a card prepared for either of
-those menus does; passing that card on is the user's act, not ours.
+On request (`--hires`) it does the same with the 512-pixel boxes of
+[libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64),
+fetched one by one from that repository onto the user's card and recorded
+there with their address. That is the line this project holds: it never
+hosts a picture, never ships one, and never claims a licence over one. The
+collection's dedication covers its own contribution; the scans themselves,
+there and at libretro, remain the publishers'. A card prepared with the
+tool carries them the way a card prepared for either of those menus, or for
+RetroArch, does; passing that card on is the user's act, not ours.
