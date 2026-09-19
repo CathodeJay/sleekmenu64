@@ -94,7 +94,9 @@ What the tool writes, and what it leaves alone:
 
 Both the catalog and the covers are optional: with no catalog the browser
 scans the card and shows filenames, with no covers it draws a placeholder.
-The tool never moves, renames or deletes anything on the card.
+The tool never moves, renames or deletes anything on the card, apart from
+a picture or text of your own in `sleekmenu/art/` when you press Remove my
+edit in the window.
 
 ## Controls
 
@@ -215,16 +217,26 @@ sleekmenu/art/NSME.png              by game code: every ROM with that code
 
 PNG or JPEG, any size; it is fitted like the scans are, and the name can be
 in any case. A text file the same way — `SM64 Star Road.txt` beside the
-ROM or in `sleekmenu/art/` — becomes the description on the launch card,
-and a first line of `Title: Super Mario Star Road` renames the game in the
-list. Pictures and text are read when the tool runs, so a new one needs a
-re-run of the tool, like a new game does.
+ROM or in `sleekmenu/art/`, or `NSME.txt` there for every game with that
+code — becomes the description on the launch card, and a first line of
+`Title: Super Mario Star Road` renames the game in the list. Pictures and
+text are read when the tool runs, so a new one needs a re-run of the tool,
+like a new game does.
 
-The window's Catalog tab says, for every game, where its box, title and
-text came from — the collection, another region's scan, the database, or
-your own file — and "Only what I changed" lists the games you gave a
-picture or text of your own. The same is in `sleekmenu/catalog.json` on
-the card, beside the catalog the console reads.
+**From the window.** Pick the game on the Catalog tab; under it, choose a
+picture (Browse, or drop one on the field when your Python has
+`tkinterdnd2`), type a title and a text, choose "This ROM only" or "Every
+game with this code", and press Save. That writes exactly the files above
+into `sleekmenu/art/` — the picture as it is, the sizes are made when you
+press Prepare — and the panel says how many games the edit reaches. Remove
+my edit deletes those files, and the next Prepare brings the original back,
+because the original was never touched.
+
+The Catalog tab says, for every game, where its box, title and text came
+from — the collection, another region's scan, the database, or your own
+file — and "Only what I changed" lists the games you gave a picture or
+text of your own. The same is in `sleekmenu/catalog.json` on the card,
+beside the catalog the console reads.
 
 ## Building from source
 

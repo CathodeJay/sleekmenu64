@@ -13,12 +13,15 @@ file's name, in three places, first match wins:
 
 and only then the collection. PNG or JPEG, any size; the picture is fitted
 the way the scans are. Text the same way: `<ROM name>.txt` beside the ROM or
-in `sleekmenu/art/` is the description on the launch card, and a first line
-of `Title: ...` renames the game. Names match whatever the case, since a
-card is not a case-sensitive place.
+in `sleekmenu/art/`, or `<game code>.txt` there, is the description on the
+launch card, and a first line of `Title: ...` renames the game. Names match
+whatever the case, since a card is not a case-sensitive place.
 
 Read when the tool runs, never by the browser: a new picture needs a re-run
-of the tool, like a new game does.
+of the tool, like a new game does. The window writes these same files from
+its catalog tab (save() and remove() below) and nothing else: the picture
+is copied as it is, the sizes are derived at build time, and reverting an
+edit is deleting the file, since the original was never touched.
 """
 
 from __future__ import annotations
@@ -108,11 +111,14 @@ class Text:
     description: str    # whitespace collapsed, the way the collection's is
 
 
-def find_text(index: Index, roms_root: Path, rom_path: str, art_folder: Path | None) -> Text | None:
-    """The `.txt` for this ROM, beside it or in the art folder."""
+def find_text(index: Index, roms_root: Path, rom_path: str, art_folder: Path | None,
+              code: str = "") -> Text | None:
+    """The `.txt` for this ROM: beside it, in the art folder by its name,
+    or in the art folder by its game code."""
     stem = PurePosixPath(rom_path).stem
     found = index.lookup((roms_root / rom_path).parent, stem + TEXT_SUFFIX) \
-        or index.lookup(art_folder, stem + TEXT_SUFFIX)
+        or index.lookup(art_folder, stem + TEXT_SUFFIX) \
+        or (index.lookup(art_folder, code + TEXT_SUFFIX) if code else None)
     if found is None:
         return None
     try:
@@ -128,3 +134,113 @@ def find_text(index: Index, roms_root: Path, rom_path: str, art_folder: Path | N
             lines = lines[1:]
     description = " ".join(" ".join(lines).split())
     return Text(title, description)
+
+
+# -- the window's edits --------------------------------------------------------
+
+SCOPE_ROM = "rom"      # this ROM only: files named after it
+SCOPE_CODE = "code"    # every ROM with this game code: files named after the code
+
+
+class EditError(ValueError):
+    pass
+
+
+def key_for(game: dict, scope: str) -> str:
+    """The file stem an edit is saved under."""
+    if scope == SCOPE_CODE:
+        code = str(game.get("code") or "")
+        if not code.strip("\0 "):
+            raise EditError("this ROM carries no game code; save for this ROM only")
+        return code
+    return PurePosixPath(str(game["path"])).stem
+
+
+def save(card: Path, game: dict, picture: Path | None, title: str, description: str,
+         scope: str = SCOPE_ROM) -> list[Path]:
+    """Write the owner's picture and text for a game into sleekmenu/art/,
+    under the ROM's name or its game code. The picture is copied as it is
+    (PNG or JPEG; anything else is refused), replacing one of the other
+    suffix so the lookup cannot find a stale file first. The text file is
+    written when there is a title or a description, and removed when both
+    are empty. Returns the files written or removed."""
+    folder = art_dir(card)
+    key = key_for(game, scope)
+    touched: list[Path] = []
+    if picture is not None:
+        suffix = picture.suffix.casefold()
+        if suffix == ".jpeg":
+            suffix = ".jpg"
+        if suffix not in (".png", ".jpg"):
+            raise EditError(f"not a PNG or JPEG: {picture.name}")
+        try:
+            from PIL import Image
+            with Image.open(picture) as image:
+                image.verify()
+        except ImportError:
+            pass
+        except (OSError, ValueError) as error:
+            raise EditError(f"cannot read {picture.name}: {error}") from error
+        folder.mkdir(parents=True, exist_ok=True)
+        index = Index()
+        for other in ART_SUFFIXES:
+            stale = index.lookup(folder, key + other)
+            if stale is not None and stale.suffix.casefold() != suffix:
+                stale.unlink()
+                touched.append(stale)
+        target = folder / (key + suffix)
+        target.write_bytes(picture.read_bytes())
+        touched.append(target)
+    title, description = title.strip(), " ".join(description.split())
+    text_file = Index().lookup(folder, key + TEXT_SUFFIX) or folder / (key + TEXT_SUFFIX)
+    if title or description:
+        folder.mkdir(parents=True, exist_ok=True)
+        lines = [f"Title: {title}", ""] if title else []
+        lines.append(description)
+        text_file.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+        touched.append(text_file)
+    elif text_file.exists() and picture is None:
+        text_file.unlink()
+        touched.append(text_file)
+    return touched
+
+
+def edits_of(card: Path, roms_root: Path, game: dict) -> tuple[list[Path], list[Path]]:
+    """The owner's files this game currently uses: those in sleekmenu/art/,
+    which the window may remove, and those beside the ROM, which it only
+    names."""
+    folder = art_dir(card)
+    index = Index()
+    rom_path = str(game["path"])
+    code = str(game.get("code") or "")
+    removable: list[Path] = []
+    beside: list[Path] = []
+    art = find_art(index, roms_root, rom_path, folder, code)
+    if art is not None:
+        (removable if art.path.parent == folder else beside).append(art.path)
+    stem = PurePosixPath(rom_path).stem
+    text = (index.lookup((roms_root / rom_path).parent, stem + TEXT_SUFFIX)
+            or index.lookup(folder, stem + TEXT_SUFFIX)
+            or (index.lookup(folder, code + TEXT_SUFFIX) if code else None))
+    if text is not None:
+        (removable if text.parent == folder else beside).append(text)
+    return removable, beside
+
+
+def remove(card: Path, roms_root: Path, game: dict) -> list[Path]:
+    """Delete the owner's files in sleekmenu/art/ that this game uses, so
+    the original comes back at the next Prepare. Files beside the ROM are
+    left alone. Returns what was deleted."""
+    removable, _beside = edits_of(card, roms_root, game)
+    for path in removable:
+        path.unlink()
+    return removable
+
+
+def sharing_code(games: list[dict], game: dict) -> int:
+    """How many games on the card carry this game's code, itself included:
+    what an edit saved by code reaches."""
+    code = str(game.get("code") or "")
+    if not code.strip("\0 "):
+        return 1
+    return sum(1 for other in games if str(other.get("code") or "") == code)

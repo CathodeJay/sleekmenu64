@@ -157,3 +157,78 @@ class CardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EditTests(unittest.TestCase):
+    """What the window writes and removes on the catalog tab: the same
+    files a person would drop into sleekmenu/art/ by hand."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.card = Path(self.temporary.name)
+        self.roms = self.card / "ROMS"
+        self.art = self.card / "sleekmenu" / "art"
+        # Catalog paths are relative to the card, so the card is the root
+        # every lookup is made against.
+        write_rom(self.roms / "Hacks" / "Star Road.z64", 1, 2, game_code="SM")
+        write_rom(self.roms / "Mario.z64", 3, 4, game_code="SM")
+        self.hack = {"path": "ROMS/Hacks/Star Road.z64", "code": "NSME", "title": "Star Road"}
+        self.mario = {"path": "ROMS/Mario.z64", "code": "NSME", "title": "Mario"}
+        self.source = picture(self.card / "downloads" / "box.JPG")
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_save_for_this_rom_copies_the_picture_and_writes_the_text(self):
+        touched = custom_art.save(self.card, self.hack, self.source, " Super Mario Star Road ",
+                                  "A hack.\n\nWith  two paragraphs.")
+        self.assertEqual(sorted(p.name for p in touched), ["Star Road.jpg", "Star Road.txt"])
+        self.assertEqual((self.art / "Star Road.jpg").read_bytes(), self.source.read_bytes(), "copied as it is")
+        self.assertEqual((self.art / "Star Road.txt").read_text(),
+                         "Title: Super Mario Star Road\n\nA hack. With two paragraphs.\n")
+        found = custom_art.find_art(custom_art.Index(), self.card, "ROMS/Hacks/Star Road.z64", self.art, "NSME")
+        self.assertEqual(found.path, self.art / "Star Road.jpg")
+        text = custom_art.find_text(custom_art.Index(), self.card, "ROMS/Hacks/Star Road.z64", self.art, "NSME")
+        self.assertEqual((text.title, text.description), ("Super Mario Star Road", "A hack. With two paragraphs."))
+
+    def test_save_by_code_reaches_every_rom_with_it_and_text_by_code_is_found(self):
+        self.assertEqual(custom_art.sharing_code([self.hack, self.mario], self.hack), 2)
+        custom_art.save(self.card, self.mario, None, "", "The one everyone has.", scope=custom_art.SCOPE_CODE)
+        self.assertTrue((self.art / "NSME.txt").is_file())
+        for rom_path in ("ROMS/Mario.z64", "ROMS/Hacks/Star Road.z64"):
+            text = custom_art.find_text(custom_art.Index(), self.card, rom_path, self.art, "NSME")
+            self.assertEqual(text.description, "The one everyone has.")
+        with self.assertRaises(custom_art.EditError):
+            custom_art.save(self.card, {"path": "ROMS/x.z64", "code": ""}, None, "t", "", scope=custom_art.SCOPE_CODE)
+
+    def test_a_new_picture_replaces_one_of_the_other_suffix(self):
+        custom_art.save(self.card, self.hack, self.source, "", "")
+        png = picture(self.card / "downloads" / "box.png")
+        touched = custom_art.save(self.card, self.hack, png, "", "")
+        self.assertEqual(sorted(p.name for p in touched), ["Star Road.jpg", "Star Road.png"])
+        self.assertFalse((self.art / "Star Road.jpg").exists())
+        self.assertTrue((self.art / "Star Road.png").is_file())
+
+    def test_a_file_that_is_not_a_picture_is_refused_and_nothing_is_written(self):
+        bad = self.card / "downloads" / "box.png"
+        bad.write_bytes(b"not a picture")
+        with self.assertRaises(custom_art.EditError):
+            custom_art.save(self.card, self.hack, bad, "", "")
+        with self.assertRaises(custom_art.EditError):
+            custom_art.save(self.card, self.hack, self.card / "downloads" / "box.gif", "", "")
+        self.assertFalse(self.art.exists())
+
+    def test_empty_text_removes_the_text_file_and_remove_deletes_only_the_art_folders_files(self):
+        custom_art.save(self.card, self.hack, self.source, "T", "D")
+        custom_art.save(self.card, self.hack, None, "", "")
+        self.assertFalse((self.art / "Star Road.txt").exists(), "cleared fields mean no text of yours")
+        self.assertTrue((self.art / "Star Road.jpg").is_file(), "the picture stays")
+        beside = picture(self.roms / "Hacks" / "Star Road.png")
+        removable, kept = custom_art.edits_of(self.card, self.card, self.hack)
+        self.assertEqual(kept, [beside], "beside the ROM wins, and is only named")
+        self.assertEqual(removable, [])
+        beside.unlink()
+        removable, kept = custom_art.edits_of(self.card, self.card, self.hack)
+        self.assertEqual(removable, [self.art / "Star Road.jpg"])
+        self.assertEqual(custom_art.remove(self.card, self.card, self.hack), [self.art / "Star Road.jpg"])
+        self.assertEqual(list(self.art.iterdir()), [])

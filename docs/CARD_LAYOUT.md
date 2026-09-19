@@ -105,8 +105,17 @@ the tool looks for `Hacks/Star Road.png` (or `.jpg`) beside the ROM, then
 replaces the collection's box for every ROM with that code. A per-ROM
 picture becomes a sprite named after a hash of the ROM's path, so two
 games of one name in two folders never share one; a code override takes the
-collection's sprite name for that code. `Star Road.txt` in either place is
-the description, and a first line `Title: ...` the title (`tools/custom_art.py`).
+collection's sprite name for that code. `Star Road.txt` in either place, or
+`NSME.txt` in `sleekmenu/art/`, is the description, and a first line
+`Title: ...` the title (`tools/custom_art.py`).
+
+The window's catalog tab writes these same files and no others: Save copies
+the chosen picture as it is into `sleekmenu/art/` under the ROM's name or
+its code and writes the `.txt` beside it; Remove my edit deletes the files
+in `sleekmenu/art/` the selected game uses, never one beside a ROM, which it
+only names. The two sizes a picture becomes are made at the next Prepare,
+so nothing is stored twice and a better picture later is one file to
+replace.
 
 ## How a game finds its text
 

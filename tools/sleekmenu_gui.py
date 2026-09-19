@@ -34,7 +34,8 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import card_catalog, card_layout, library, make_sprite, metadata_repo, provenance, sleekmenu_prep
+from tools import (card_catalog, card_layout, custom_art, library, make_sprite, metadata_repo,
+                   provenance, sleekmenu_prep)
 
 TITLE = "SleekMenu 64 — prepare a card"
 DOWNLOAD_URL = metadata_repo.RELEASES_URL
@@ -229,6 +230,32 @@ def summarize(document: dict) -> str:
     return line
 
 
+def enable_drop(widget, on_files) -> bool:
+    """Let files be dropped onto a widget, when tkinterdnd2 is installed
+    in this Python and its native library loads; False otherwise, and the
+    Browse button beside the widget is the same panel without the drop.
+    The frozen builds do not carry it: a native extension that fails to
+    load on some systems is not worth the feature depending on it."""
+    try:
+        from tkinterdnd2 import DND_FILES, TkinterDnD
+        TkinterDnD._require(widget.winfo_toplevel())
+        widget.drop_target_register(DND_FILES)
+        widget.dnd_bind("<<Drop>>", lambda event: on_files(list(widget.tk.splitlist(event.data))))
+    except Exception:  # noqa: BLE001 -- any failure means no drop, which is fine
+        return False
+    return True
+
+
+def edit_summary(games: list[dict], game: dict, scope: str) -> str:
+    """What saving would reach, in one line."""
+    if scope == custom_art.SCOPE_CODE:
+        count = custom_art.sharing_code(games, game)
+        code = str(game.get("code") or "")
+        return (f"For every game with code {code}: {count} on this card." if count > 1
+                else f"For every game with code {code}: only this one is on the card.")
+    return "For this ROM only."
+
+
 class CatalogTab:
     """The card as the browser will show it, from sleekmenu/catalog.json:
     the folders as a tree, one row per game with where each field came
@@ -250,6 +277,12 @@ class CatalogTab:
         self.facts = tk.StringVar()
         self.sources = tk.StringVar()
         self.notes = tk.StringVar()
+        # the edit panel: the owner's picture and text for the selected game
+        self.picture = tk.StringVar()
+        self.own_title = tk.StringVar()
+        self.scope = tk.StringVar(value=custom_art.SCOPE_ROM)
+        self.reach = tk.StringVar()
+        self.edit_note = tk.StringVar()
 
         frame = ttk.Frame(parent, padding=12)
         frame.pack(fill="both", expand=True)
@@ -284,6 +317,12 @@ class CatalogTab:
         panes.add(left, weight=3)
 
         right = ttk.Frame(panes, padding=(12, 0, 0, 0), width=320)
+        # The edit panel and the notes are packed first, at the bottom, so a
+        # long description scrolls rather than pushing them out of the window.
+        edit = ttk.LabelFrame(right, text="Your own art and text", padding=8)
+        edit.pack(side="bottom", fill="x", pady=(10, 0))
+        notes = ttk.Label(right, textvariable=self.notes, foreground="#8a4b00", justify="left")
+        notes.pack(side="bottom", anchor="w", pady=(4, 0))
         self.box = ttk.Label(right, text="", anchor="w")
         self.box.pack(anchor="w")
         wrapped = []
@@ -292,11 +331,42 @@ class CatalogTab:
             label = ttk.Label(right, textvariable=variable, justify="left", **style)
             label.pack(anchor="w", pady=(6, 0) if variable is self.title else (2, 0))
             wrapped.append(label)
-        self.description = tk.Text(right, height=8, width=30, wrap="word", state="disabled")
+        self.description = tk.Text(right, height=5, width=30, wrap="word", state="disabled")
         self.description.pack(fill="both", expand=True, pady=(8, 0))
-        notes = ttk.Label(right, textvariable=self.notes, foreground="#8a4b00", justify="left")
-        notes.pack(anchor="w", pady=(4, 0))
         wrapped.append(notes)
+
+        edit.columnconfigure(1, weight=1)
+        ttk.Label(edit, text="Picture").grid(row=0, column=0, sticky="w")
+        picture_entry = ttk.Entry(edit, textvariable=self.picture)
+        picture_entry.grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Button(edit, text="Browse…", command=self.browse_picture).grid(row=0, column=2)
+        self.drop_works = enable_drop(picture_entry, self.dropped)
+        ttk.Label(edit, text="Title").grid(row=1, column=0, sticky="w", pady=(4, 0))
+        ttk.Entry(edit, textvariable=self.own_title).grid(row=1, column=1, columnspan=2, sticky="ew",
+                                                          padx=(4, 0), pady=(4, 0))
+        ttk.Label(edit, text="Text").grid(row=2, column=0, sticky="nw", pady=(4, 0))
+        self.own_text = tk.Text(edit, height=3, width=30, wrap="word")
+        self.own_text.grid(row=2, column=1, columnspan=2, sticky="ew", padx=(4, 0), pady=(4, 0))
+        scopes = ttk.Frame(edit)
+        scopes.grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        ttk.Radiobutton(scopes, text="This ROM only", variable=self.scope,
+                        value=custom_art.SCOPE_ROM, command=self.update_reach).pack(anchor="w")
+        self.by_code = ttk.Radiobutton(scopes, text="Every game with this code", variable=self.scope,
+                                       value=custom_art.SCOPE_CODE, command=self.update_reach)
+        self.by_code.pack(anchor="w")
+        reach = ttk.Label(edit, textvariable=self.reach, foreground="#555", justify="left")
+        reach.grid(row=4, column=0, columnspan=3, sticky="w")
+        wrapped.append(reach)
+        buttons = ttk.Frame(edit)
+        buttons.grid(row=5, column=0, columnspan=3, sticky="e", pady=(6, 0))
+        self.remove_button = ttk.Button(buttons, text="Remove my edit", command=self.remove_edit)
+        self.remove_button.pack(side="left", padx=(0, 6))
+        self.save_button = ttk.Button(buttons, text="Save", command=self.save_edit)
+        self.save_button.pack(side="left")
+        edit_note = ttk.Label(edit, textvariable=self.edit_note, foreground="#555", justify="left")
+        edit_note.grid(row=6, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        wrapped.append(edit_note)
+        self.edit = edit
 
         def rewrap(event):
             for label in wrapped:
@@ -363,6 +433,7 @@ class CatalogTab:
     def show(self, game: dict | None) -> None:
         self.description.configure(state="normal")
         self.description.delete("1.0", "end")
+        self.fill_edit(game)
         if game is None:
             self.title.set("")
             self.facts.set("")
@@ -390,6 +461,91 @@ class CatalogTab:
         self.description.configure(state="disabled")
 
 
+    # -- the edit panel ------------------------------------------------------
+
+    def fill_edit(self, game: dict | None) -> None:
+        """The panel for a game: the title and text fields hold the owner's
+        own words when the catalog says they are, and nothing otherwise --
+        an empty field keeps what the card has."""
+        self.picture.set("")
+        self.own_text.delete("1.0", "end")
+        self.edit_note.set("")
+        sources = (game or {}).get("sources") or {}
+        self.own_title.set(str(game.get("title", "")) if sources.get("title") == provenance.YOURS else "")
+        if sources.get("description") == provenance.YOURS:
+            self.own_text.insert("1.0", str(game.get("description") or ""))
+        enabled = "normal" if game is not None else "disabled"
+        for widget in (self.save_button, self.remove_button, self.by_code):
+            widget.configure(state=enabled)
+        if game is not None:
+            code = str(game.get("code") or "")
+            self.by_code.configure(text=f"Every game with code {code}" if code.strip("\0 ")
+                                   else "Every game with this code", state="normal" if code.strip("\0 ")
+                                   else "disabled")
+            if sources.get("cover", "").startswith("yours (code"):
+                self.scope.set(custom_art.SCOPE_CODE)
+            else:
+                self.scope.set(custom_art.SCOPE_ROM)
+            removable, beside = custom_art.edits_of(self.card_of(), self.card_of(), game) \
+                if self.card_of() is not None else ([], [])
+            self.remove_button.configure(state="normal" if removable else "disabled")
+            if beside and not removable:
+                self.edit_note.set("This game's picture or text sits beside the ROM; to undo it, "
+                                   "remove that file yourself.")
+        self.update_reach()
+
+    def update_reach(self) -> None:
+        game = self.selected()
+        if game is None or self.document is None:
+            self.reach.set("")
+            return
+        self.reach.set(edit_summary(self.document["games"], game, self.scope.get()))
+
+    def browse_picture(self) -> None:
+        from tkinter import filedialog
+        chosen = filedialog.askopenfilename(
+            title="A box picture", filetypes=[("PNG or JPEG", "*.png *.jpg *.jpeg"), ("All files", "*")])
+        if chosen:
+            self.picture.set(chosen)
+
+    def dropped(self, files: list[str]) -> None:
+        if files:
+            self.picture.set(files[0])
+
+    def save_edit(self) -> None:
+        game, card = self.selected(), self.card_of()
+        if game is None or card is None:
+            return
+        picture = Path(self.picture.get().strip()) if self.picture.get().strip() else None
+        try:
+            touched = custom_art.save(card, game, picture, self.own_title.get(),
+                                      self.own_text.get("1.0", "end"), self.scope.get())
+        except (custom_art.EditError, OSError) as error:
+            self.edit_note.set(f"Not saved: {error}")
+            return
+        names = ", ".join(path.name for path in touched) or "nothing to write"
+        self.edit_note.set(f"Saved {names} in {card_layout.CARD_FOLDER}/{card_layout.ART_FOLDER}/. "
+                           "Press Prepare to rebuild the catalog and covers.")
+        self.remove_button.configure(state="normal" if touched else "disabled")
+
+    def remove_edit(self) -> None:
+        game, card = self.selected(), self.card_of()
+        if game is None or card is None:
+            return
+        try:
+            removed = custom_art.remove(card, card, game)
+        except OSError as error:
+            self.edit_note.set(f"Not removed: {error}")
+            return
+        self.picture.set("")
+        self.own_title.set("")
+        self.own_text.delete("1.0", "end")
+        self.remove_button.configure(state="disabled")
+        self.edit_note.set(("Removed " + ", ".join(path.name for path in removed) + ". " if removed
+                            else "Nothing of yours to remove. ")
+                           + "Press Prepare to bring the original back.")
+
+
 # -- the window -------------------------------------------------------------
 
 def build(smoke: bool = False, card: str = "", metadata: str = ""):
@@ -403,7 +559,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     root = tk.Tk()
     root.title(TITLE)
-    root.minsize(760, 520)
+    root.minsize(760, 560)
+    root.geometry("980x720")
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True)
     frame = ttk.Frame(notebook, padding=12)

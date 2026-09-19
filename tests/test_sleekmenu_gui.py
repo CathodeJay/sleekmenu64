@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 
 from tests.rom_fixtures import write_rom
+from tests.test_custom_art import picture
 from tests.test_sleekmenu_prep import stay_offline, write_collection
 from tools import sleekmenu_gui, sleekmenu_prep
 
@@ -73,6 +74,13 @@ class CatalogLineTests(unittest.TestCase):
         self.assertEqual(sleekmenu_gui.facts_line({"players": 1}), "1 player")
         self.assertEqual(sleekmenu_gui.facts_line({"year": 0, "players": 0}),
                          "no genre, publisher, year or players known")
+
+    def test_the_edit_panel_says_what_a_save_reaches(self):
+        games = [{"code": "NSME"}, {"code": "NSME"}, {"code": "NWRE"}]
+        self.assertEqual(sleekmenu_gui.edit_summary(games, games[0], "rom"), "For this ROM only.")
+        self.assertEqual(sleekmenu_gui.edit_summary(games, games[0], "code"),
+                         "For every game with code NSME: 2 on this card.")
+        self.assertIn("only this one", sleekmenu_gui.edit_summary(games, games[2], "code"))
 
     def test_the_summary_counts_the_games_and_what_was_changed(self):
         document = {"built": "2026-09-19T16:33:58+00:00", "games": [
@@ -190,6 +198,36 @@ class WindowTests(unittest.TestCase):
             catalog.only_mine.set(True)
             catalog.fill()
             self.assertEqual(catalog.tree.get_children(""), (), "nothing on this card is the owner's")
+            root.destroy()
+
+    def test_the_edit_panel_writes_and_removes_the_owners_files(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Hacks" / "Kaizo.z64", 0x33, 0x44, game_code="WR")
+            picture(card / "box.png")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            catalog = root.sleekmenu_state["catalog"]
+            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            root.update()
+            self.assertEqual(str(catalog.remove_button["state"]), "disabled", "nothing of the owner's yet")
+            catalog.picture.set(str(card / "box.png"))
+            catalog.own_title.set("Kaizo Race")
+            catalog.own_text.insert("1.0", "Hard.")
+            catalog.save_edit()
+            self.assertTrue((card / "sleekmenu" / "art" / "Kaizo.png").is_file())
+            self.assertEqual((card / "sleekmenu" / "art" / "Kaizo.txt").read_text(), "Title: Kaizo Race\n\nHard.\n")
+            self.assertIn("Press Prepare", catalog.edit_note.get())
+            self.assertEqual(str(catalog.remove_button["state"]), "normal")
+            catalog.remove_edit()
+            self.assertFalse((card / "sleekmenu" / "art" / "Kaizo.png").exists())
+            self.assertFalse((card / "sleekmenu" / "art" / "Kaizo.txt").exists())
+            self.assertIn("Removed", catalog.edit_note.get())
+            catalog.picture.set(str(card / "ROMS" / "Hacks" / "Kaizo.z64"))
+            catalog.save_edit()
+            self.assertTrue(catalog.edit_note.get().startswith("Not saved"), "a ROM is not a picture")
             root.destroy()
 
 

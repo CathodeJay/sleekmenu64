@@ -217,7 +217,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         # game.
         title = relative.stem
         title_source = provenance.TITLE_FILE_NAME
-        own = custom_art.find_text(art_index, roms, rom_path, art_folder)
+        own = custom_art.find_text(art_index, roms, rom_path, art_folder, header.product_code)
         if own is not None:
             how["own text"] += 1
             if own.description:
