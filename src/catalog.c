@@ -162,14 +162,16 @@ static bool hidden_name(const char *name) {
 }
 
 /* Folders known to hold no games, so a scan of the whole card need not walk
-   them: the browser's own, the firmware's, the N64FlashcartMenu's (its menu
-   ROM is a .n64 file), an unpacked art collection (thousands of entries),
-   and the one Windows keeps on every removable disk. tools/card_layout.py
-   has the same list; the two must agree or the tool and the browser would
-   disagree about what is on the card. */
+   them: the browser's own, the firmware's and any copy of it (ED64.bk2 holds
+   the firmware's apps and 64DD IPLs, ROM-shaped files that are not games),
+   the N64FlashcartMenu's (its menu ROM is a .n64 file), an unpacked art
+   collection (thousands of entries), and the one Windows keeps on every
+   removable disk. tools/card_layout.py has the same rule; the two must agree
+   or the tool and the browser would disagree about what is on the card. */
 static bool excluded_directory(const char *path) {
     const char *name = path_basename(path);
     return hidden_name(name) || !strcasecmp(name, SM_FIRMWARE_FOLDER) ||
+           !strncasecmp(name, SM_FIRMWARE_FOLDER ".", sizeof(SM_FIRMWARE_FOLDER)) ||
            !strcasecmp(name, SM_CARD_FOLDER) || !strcasecmp(name, "menu") ||
            !strcasecmp(name, "metadata") || !strcasecmp(name, "System Volume Information");
 }

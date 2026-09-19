@@ -12,6 +12,7 @@ this is the reference.
 /release-metadata.zip       box art and descriptions           fetched by the tool
 /ROMS/...                   your games, in any folders          yours
 /<any other folder>/...     or anywhere else on the card        yours
+                            (or one chosen folder: --roms, or the window's Games folder)
 
 /sleekmenu/art/...          your own pictures and text         yours, or the window's
 /sleekmenu/art/hires/...    512-pixel boxes, one per game code  fetched by the tool (--hires)
@@ -58,7 +59,9 @@ everything else it reads in place.
 ## Where every field came from
 
 `sleekmenu/catalog.json` is the catalog as the tool built it, kept legible
-beside the packed one: the same games and fields, plus for each game a
+beside the packed one: the same games and fields, a `roms` key naming the
+folder the games were taken from (empty for the whole card) so the next run
+scans the same one without being told, plus for each game a
 `sources` object naming, for the cover, the title, the description, the
 genre, the publisher, the year and the players, which of the four sources
 answered — `collection`, `collection (another region's box)`,
@@ -69,6 +72,24 @@ database knew the dump (`crc`, `serial`, `serial without region`, or
 nothing). The window's Catalog tab reads it; so does `make refresh`. The
 browser never does: `catalog.ebc` carries the result and nothing about
 where it came from. The words are fixed in `tools/provenance.py`.
+
+## Where the games are looked for
+
+The whole card, minus the folders known to hold no games: the browser's
+own, the firmware's and any copy of it (`ED64.bk2` holds the firmware's apps
+and 64DD IPLs, ROM-shaped files that are not games), `menu/`, `metadata/`,
+`System Volume Information`, and anything hidden. The browser's own scan,
+for a card with no catalog, uses the same rule (`src/catalog.c`,
+`tools/card_layout.py`).
+
+Or one folder, chosen: `--roms ROMS`, or the window's Games folder. Then
+only it is walked, the catalog records paths from the card root as always
+(`ROMS/...`), so the browser opens inside it, and the report counts and
+names the ROM-shaped files elsewhere on the card that were left out. The
+choice is kept in `catalog.json` and holds on the next run; `--roms .` or
+an empty field is the whole card again. A chosen folder that does not
+exist is an error; a remembered one that has gone is a note and the whole
+card.
 
 ## How a game finds its box
 

@@ -51,9 +51,12 @@ class VolumeTests(unittest.TestCase):
 class FieldTests(unittest.TestCase):
     def test_the_fields_become_the_runs_options(self):
         options = sleekmenu_gui.options_from("/Volumes/CARD", "", True, False)
-        self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD")))
-        options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", False, True, hires=True)
+        self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD"), roms=sleekmenu_prep.WHOLE_CARD),
+                         "an empty games folder is the whole card, said so -- never 'as remembered'")
+        options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", False, True, hires=True,
+                                             roms=" ROMS/ ")
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
+        self.assertEqual(options.roms, Path("ROMS"))
         self.assertTrue(options.no_checksums and options.fix_checksums and options.hires)
 
     def test_a_card_is_described_in_one_line(self):
@@ -207,6 +210,27 @@ class WindowTests(unittest.TestCase):
             catalog.only_mine.set(True)
             catalog.fill()
             self.assertEqual(catalog.tree.get_children(""), (), "nothing on this card is the owner's")
+            root.destroy()
+
+    def test_the_games_folder_field_shows_what_the_card_remembers_and_an_empty_one_is_the_whole_card(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_rom(card / "Other" / "Loose.z64", 5, 6)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card, roms=Path("ROMS"))), 0)
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            self.assertEqual(state["catalog"].games.keys(), {"ROMS/Wave Race 64 (USA).z64"})
+            self.assertEqual(state["fields"]["roms"].get(), "ROMS", "prefilled from catalog.json")
+            state["fields"]["roms"].set("")
+            state["start"]()
+            while root.sleekmenu_state["runner"] is not None:
+                root.update()
+            self.assertEqual(root.sleekmenu_state["last_code"], 0)
+            self.assertIn("Other/Loose.z64", root.sleekmenu_state["catalog"].games, "the whole card again")
+            self.assertEqual(sleekmenu_prep.card_catalog.remembered_roms(card), "")
             root.destroy()
 
     def test_the_edit_panel_writes_and_removes_the_owners_files(self):

@@ -136,7 +136,10 @@ letter instead. Every step animates over six frames.
 **Browsing.** Folders first, then games; B goes up. The games can be in any
 folder on the card, and when every one of them is under the same folder the
 tree opens inside it and B stops there: a card with its whole library in
-`ROMS/` does not start on a list with one entry in it. C-left/right walk the
+`ROMS/` does not start on a list with one entry in it. That is also how a
+folder chosen in the tool becomes where the menu opens: the tool scans only
+that folder, every path in the catalog starts with it, and the browser
+needs no setting of its own. C-left/right walk the
 genre tabs. Z opens the filter (genre, region, players, publisher, year,
 favourites, combined with AND). Two flat shortlists sit at the front of the
 tab strip: favourites (C-down, kept in `sleekmenu/favorites.txt`) and the

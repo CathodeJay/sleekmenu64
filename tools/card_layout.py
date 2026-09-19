@@ -44,3 +44,13 @@ def hidden(name: str) -> bool:
     """Bookkeeping the operating systems leave on a card: `._Game.z64`
     AppleDouble twins, `.Trashes`, `.Spotlight-V100`, `$RECYCLE.BIN`."""
     return name.startswith((".", "$"))
+
+
+def excluded_directory(name: str, excluded=EXCLUDED_DIRECTORIES) -> bool:
+    """Whether a folder is one a library scan never enters: hidden, in the
+    list above, or a copy of the firmware folder -- `ED64.bk2`, `ED64.old`
+    -- which holds the firmware's apps and 64DD IPLs, ROM-shaped files that
+    are not games. src/catalog.c applies the same rule."""
+    folded = name.casefold()
+    return (hidden(name) or (excluded is not None and folded in excluded)
+            or folded.startswith(FIRMWARE_FOLDER.casefold() + "."))

@@ -56,11 +56,8 @@ def walk(root: Path, suffixes=LIBRARY_SUFFIXES, excluded=card_layout.EXCLUDED_DI
         raise LibraryError(f"not a folder: {root}")
     found: list[str] = []
     for directory, names, files in os.walk(root):
-        names[:] = sorted(
-            (name for name in names
-             if not card_layout.hidden(name) and (excluded is None or name.casefold() not in excluded)),
-            key=str.casefold,
-        )
+        names[:] = sorted((name for name in names if not card_layout.excluded_directory(name, excluded)),
+                          key=str.casefold)
         base = Path(directory)
         for filename in sorted(files, key=str.casefold):
             if card_layout.hidden(filename) or filename.casefold() == card_layout.BROWSER_ROM.casefold():
@@ -68,6 +65,15 @@ def walk(root: Path, suffixes=LIBRARY_SUFFIXES, excluded=card_layout.EXCLUDED_DI
             if Path(filename).suffix.casefold() in suffixes:
                 found.append((base / filename).relative_to(root).as_posix())
     return sorted(found, key=lambda value: (value.casefold(), value))
+
+
+def outside(card: Path, folder: str) -> list[str]:
+    """ROM-shaped files on the card that are not under `folder` (a path
+    relative to the card, forward slashes): what a scan of that folder
+    alone leaves out. A directory walk, no header read, so it costs
+    seconds on a card of thousands."""
+    prefix = folder.rstrip("/").casefold() + "/"
+    return [path for path in walk(card) if not path.casefold().startswith(prefix)]
 
 
 def spelled_on_disk(card: Path, folder: Path) -> Path:

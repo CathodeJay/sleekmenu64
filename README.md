@@ -60,6 +60,13 @@ box and description, and writes `sleekmenu/catalog.ebc` and
 `sleekmenu/covers.pak` beside itself. A card of three thousand games takes
 under a minute. Run it again whenever you add games.
 
+To catalog one folder instead of the whole card — your games are in `ROMS`
+and you keep other things elsewhere — name it: `python3 sleekmenu-prep.pyz
+--roms ROMS`, or the Games folder field in the window. Only that folder is
+scanned, the browser opens inside it, the report names any ROM-shaped file
+elsewhere that was left out, and the choice holds on the next run without
+being repeated. `--roms .`, or an empty field, is the whole card again.
+
 **No Python? Use the window instead.** The releases page also carries the
 same tool with Python inside, one download per system:
 `SleekMenu-Prep-mac-arm64.zip` (Apple silicon), `SleekMenu-Prep-mac-intel.zip`,

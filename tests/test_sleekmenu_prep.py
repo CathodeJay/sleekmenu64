@@ -29,7 +29,7 @@ from unittest import mock
 from PIL import Image
 
 from tests.rom_fixtures import write_rom
-from tools import build_prep, card_layout, coverdb, fetch, library, sleekmenu_prep
+from tools import build_prep, card_catalog, card_layout, coverdb, fetch, library, sleekmenu_prep
 
 ROOT = Path(__file__).resolve().parent.parent
 PNG_BYTES = None
@@ -313,6 +313,58 @@ class EntryPointTests(unittest.TestCase):
         self.assertIn("0 with a header that does not match", self.output)
         code = self.run_prep("--no-checksums")
         self.assertNotIn("checksum:", self.output)
+
+    def test_a_chosen_folder_is_scanned_alone_and_remembered_until_the_whole_card_is_asked_for(self):
+        """--roms ROMS: only ROMS/ is catalogued, what is elsewhere is
+        counted and named, and the choice holds on the next plain run --
+        the archive is run from the card with no arguments. `--roms .` is
+        the whole card again, and forgets."""
+        write_rom(self.card / "Other" / "Loose.z64", 5, 6)
+        code = self.run_prep("--roms", "roms")           # typed in the wrong case, on purpose
+        self.assertEqual(code, 0, self.output)
+        self.assertIn("under ROMS/ (chosen)", self.output)
+        self.assertIn("1 ROM-shaped file elsewhere on the card left out: Other/Loose.z64", self.output)
+        catalog = (self.card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).read_bytes()
+        self.assertIn(b"ROMS/Wave Race 64 (USA).z64", catalog)
+        self.assertNotIn(b"Other/Loose.z64", catalog)
+        self.assertEqual(card_catalog.remembered_roms(self.card), "ROMS")
+
+        code = self.run_prep()
+        self.assertEqual(code, 0, self.output)
+        self.assertIn("under ROMS/ (remembered)", self.output)
+        self.assertIn("--roms .", self.output)
+        catalog = (self.card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).read_bytes()
+        self.assertNotIn(b"Other/Loose.z64", catalog)
+
+        code = self.run_prep("--roms", ".")
+        self.assertEqual(code, 0, self.output)
+        self.assertIn("(whole card)", self.output)
+        catalog = (self.card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).read_bytes()
+        self.assertIn(b"Other/Loose.z64", catalog)
+        self.assertEqual(card_catalog.remembered_roms(self.card), "")
+        code = self.run_prep()
+        self.assertNotIn("remembered", self.output)
+
+        # a remembered folder that has since gone is a note, not an error
+        self.run_prep("--roms", "Other")
+        shutil.rmtree(self.card / "Other")
+        code = self.run_prep()
+        self.assertEqual(code, 0, self.output)
+        self.assertIn("chosen last time is gone", self.output)
+        self.assertEqual(self.run_prep("--roms", "/somewhere/else"), 2, "outside the card: an error")
+
+    def test_a_copy_of_the_firmware_folder_is_not_a_games_folder(self):
+        """ED64.bk2 -- a backup of the firmware folder -- holds the
+        firmware's apps and 64DD IPLs, ROM-shaped files with real headers,
+        and a whole-card scan used to catalogue them."""
+        write_rom(self.card / "ED64.bk2" / "edapp" / "nes" / "app.n64", 7, 8, game_code="ED")
+        write_rom(self.card / "ED64" / "OS64.v64", 9, 10)
+        code = self.run_prep()
+        self.assertEqual(code, 0, self.output)
+        catalog = (self.card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).read_bytes()
+        self.assertNotIn(b"ED64.bk2", catalog)
+        self.assertNotIn(b"OS64", catalog)
+        self.assertEqual(library.outside(self.card, "ROMS"), [])
 
     def test_a_library_in_a_folder_of_its_own_name_is_catalogued_where_it_is(self):
         """The comment that started this: games in `Games/` and no `ROMS`

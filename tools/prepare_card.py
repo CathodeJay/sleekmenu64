@@ -58,7 +58,7 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             work: Path | None = None, dry_run: bool = False,
             loose_covers: bool = False, genres: Path | None = None,
             log=print, progress_stream=None, rom_paths: list[str] | None = None,
-            progress_factory=None) -> dict:
+            progress_factory=None, roms_folder: str = "") -> dict:
     _check_directory(roms, "ROM folder")
     _check_directory(card, "card")
     try:
@@ -147,7 +147,7 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
         destination.mkdir(parents=True, exist_ok=True)
         shutil.copy2(catalog, destination / CATALOG_NAME)
         written.append(f"{CARD_FOLDER}/{CATALOG_NAME}")
-        card_catalog.write(card, document)
+        card_catalog.write(card, document, roms_folder)
         written.append(f"{CARD_FOLDER}/{CATALOG_JSON_NAME}")
         # summary["sprites"] is 0 when nothing in the library has a box; there
         # is no pack and no loose sprite to copy, and that is not a failure.

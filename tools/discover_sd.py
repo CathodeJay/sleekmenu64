@@ -93,7 +93,7 @@ def scan(sd_root: Path, metadata_path: Path | None = None,
     covers = _covers_by_path(cover_map_path)
     games: list[dict[str, object]] = []
     for directory, names, files in os.walk(sd_root):
-        names[:] = sorted(name for name in names if name.casefold() not in EXCLUDED_DIRECTORIES)
+        names[:] = sorted(name for name in names if not card_layout.excluded_directory(name))
         base = Path(directory)
         for filename in sorted(files):
             if Path(filename).suffix.casefold() not in build_catalog.ROM_SUFFIXES:

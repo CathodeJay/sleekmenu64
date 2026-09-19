@@ -96,6 +96,8 @@ int main(void) {
     make_file("._Loose.z64");                     /* macOS twin */
     make_file("notes.txt");
     make_dir("ED64");             make_file("ED64/OS64.v64");
+    make_dir("ED64.bk2");         make_dir("ED64.bk2/edapp");
+    make_file("ED64.bk2/edapp/app.n64");          /* a copy of the firmware folder */
     make_dir("sleekmenu");        make_file("sleekmenu/stale.z64");
     make_dir("menu");             make_file("menu/sc64menu.n64");
     make_dir("metadata");         make_file("metadata/art.z64");
@@ -116,6 +118,7 @@ int main(void) {
     assert(!listed(&catalog, "SleekMenu64.z64"));
     assert(!listed(&catalog, "._Loose.z64"));
     assert(!listed(&catalog, "menu/sc64menu.n64"));
+    assert(!listed(&catalog, "ED64.bk2/edapp/app.n64"));
     catalog_close(&catalog);
 
     /* A card with nothing on it is an error with a message, not a crash. */

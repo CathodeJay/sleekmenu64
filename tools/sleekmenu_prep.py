@@ -51,12 +51,16 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools import (build_catalog, card_layout, cover_pack, coverdb, custom_art, fetch, headers, hires,
-                   library, make_sprite, metadata_repo, n64_checksum, pack_covers, prepare_card, progress)
+from tools import (build_catalog, card_catalog, card_layout, cover_pack, coverdb, custom_art, fetch,
+                   headers, hires, library, make_sprite, metadata_repo, n64_checksum, pack_covers,
+                   prepare_card, progress)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 
 BUNDLED_PACKAGE = "sleekmenu_data"     # exists only inside the built archive
+#: `--roms .`: every game on the card, said out loud -- which also forgets a
+#: folder remembered from an earlier run.
+WHOLE_CARD = Path(".")
 
 
 class PrepError(Exception):
@@ -88,9 +92,12 @@ def find_card(explicit: Path | None) -> Path:
 
 @dataclass(frozen=True)
 class Library:
-    root: Path              # what the ROM paths are relative to: the card, or --roms
+    root: Path              # what the ROM paths are relative to: the card, or the chosen folder
     rom_paths: list[str]    # every ROM under it, as library.walk lists them
     created: Path | None    # the ROMS/ folder made for a card with no games yet
+    chosen: str = ""        # the folder relative to the card, as the card spells it; "" = whole card
+    how: str = ""           # "chosen", "remembered", or why it is the whole card
+    outside: tuple = ()     # ROM-shaped files elsewhere on the card, left out of a chosen folder
 
 
 def find_library(card: Path, explicit: Path | None, create: bool = True) -> Library:
@@ -100,21 +107,46 @@ def find_library(card: Path, explicit: Path | None, create: bool = True) -> Libr
     work, and the catalog spells each folder the way the card does. A card
     with no games at all gets a ROMS/ folder and a message saying where the
     games go, which is more use than an error naming a folder the person
-    has not heard of. An explicit --roms that does not exist is still an
-    error: that one was typed."""
-    if explicit is not None:
+    has not heard of.
+
+    A folder can be chosen instead -- `--roms`, or the window's Games
+    folder -- and then only it is scanned: what is elsewhere on the card is
+    counted and named, not catalogued. The choice is written into
+    catalog.json and holds on the next run without being repeated, which
+    is what running the archive from the card with no arguments needs;
+    `--roms .` (an empty field in the window) is the whole card again. A
+    chosen folder that does not exist is an error: that one was typed. A
+    remembered one that is gone is a note, and the whole card."""
+    how = "chosen"
+    if explicit is None:
+        remembered = card_catalog.remembered_roms(card)
+        if remembered and (card / remembered).is_dir():
+            explicit, how = card / remembered, "remembered"
+        elif remembered:
+            how = f"whole card: the folder {remembered}/ chosen last time is gone"
+    if explicit is not None and not explicit.is_absolute():
+        explicit = card / explicit
+    if explicit is not None and explicit.resolve() != card.resolve():
         root = library.spelled_on_disk(card, explicit)
         if not root.is_dir():
             raise PrepError(f"--roms {explicit} is not a folder")
-        return Library(root, library.walk(root), None)
+        try:
+            chosen = root.resolve().relative_to(card.resolve()).as_posix()
+        except ValueError as error:
+            raise PrepError(f"--roms {explicit} is not inside the card {card}") from error
+        return Library(root, library.walk(root), None, chosen, how, tuple(library.outside(card, chosen)))
+    if explicit is not None:
+        how = "whole card"
+    elif not how.startswith("whole card"):
+        how = ""
     rom_paths = library.walk(card)
     if rom_paths:
-        return Library(card, rom_paths, None)
+        return Library(card, rom_paths, None, "", how)
     roms = card / "ROMS"
     if roms.is_dir() or not create:
-        return Library(card, [], None)
+        return Library(card, [], None, "", how)
     roms.mkdir(parents=True)
-    return Library(card, [], roms)
+    return Library(card, [], roms, "", how)
 
 
 def describe_library(found: Library) -> str:
@@ -271,7 +303,15 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
 
     roms, rom_paths = found.root, found.rom_paths
     log(f"card:     {card}")
-    log(f"roms:     {describe_library(found)}" + (f" under {roms}" if roms != card else ""))
+    log(f"roms:     {describe_library(found)}"
+        + (f" under {found.chosen}/ ({found.how})" if found.chosen else (f" ({found.how})" if found.how else "")))
+    if found.outside:
+        shown = ", ".join(found.outside[:5]) + (", ..." if len(found.outside) > 5 else "")
+        log(f"          {len(found.outside)} ROM-shaped file{'s' if len(found.outside) != 1 else ''} elsewhere "
+            f"on the card left out: {shown}")
+    if found.how == "remembered":
+        log(f"          the folder was chosen last time; --roms . (or an empty Games folder in the window) "
+            "scans the whole card again")
     if not options.dry_run:
         for folder in lay_out(card):
             log(f"created   {folder.relative_to(card)}/")
@@ -334,7 +374,8 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         summary = prepare_card.prepare(
             roms=roms, card=card, database_path=database_path, repo=repo,
             work=work / "build", dry_run=options.dry_run, genres=genres_path, log=log,
-            progress_stream=None, rom_paths=rom_paths, progress_factory=progress_factory)
+            progress_stream=None, rom_paths=rom_paths, progress_factory=progress_factory,
+            roms_folder=found.chosen)
     except progress.Cancelled as stop:
         fail(f"sleekmenu-prep: {stop}; the catalog and covers were not written")
         return 3
@@ -363,7 +404,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--card", type=Path, default=None,
                         help="card root (default: the folder this file is in)")
     parser.add_argument("--roms", type=Path, default=None,
-                        help="one folder to catalog (default: every game on the card)")
+                        help="the one folder to catalog, relative to the card; remembered for the next "
+                             "run (default: the folder chosen last time, else every game on the card; "
+                             "`--roms .` is the whole card again)")
     parser.add_argument("--metadata", type=Path, default=None,
                         help="the n64-flashcart-menu-metadata release zip or folder "
                              "(default: whichever is on the card)")

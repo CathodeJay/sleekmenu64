@@ -33,12 +33,15 @@ def path_on(card: Path) -> Path:
     return card / card_layout.CARD_FOLDER / card_layout.CATALOG_JSON_NAME
 
 
-def write(card: Path, document: dict) -> Path:
+def write(card: Path, document: dict, roms: str = "") -> Path:
     """The metadata document onto the card, stamped. The document is what
-    tools/build_metadata.py built: its records already carry `sources`."""
+    tools/build_metadata.py built: its records already carry `sources`.
+    `roms` is the folder the games were taken from, relative to the card,
+    or "" for the whole card; the next run reads it back."""
     out = dict(document)
     out["built"] = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     out["card_folder"] = card_layout.CARD_FOLDER
+    out["roms"] = roms
     target = path_on(card)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n", encoding="utf-8")
@@ -58,6 +61,18 @@ def load(card: Path) -> dict | None:
     if not isinstance(document, dict) or not isinstance(document.get("games"), list):
         raise CatalogJsonError(f"{target}: not a catalog")
     return document
+
+
+def remembered_roms(card: Path) -> str:
+    """The games folder the last run scanned, relative to the card, or ""
+    for the whole card or no catalog at all. Never an error: a broken
+    catalog.json is the run's to report, not the folder lookup's."""
+    try:
+        document = load(card)
+    except CatalogJsonError:
+        return ""
+    value = (document or {}).get("roms", "")
+    return str(value).strip("/") if isinstance(value, str) else ""
 
 
 def why_missing(card: Path) -> str:

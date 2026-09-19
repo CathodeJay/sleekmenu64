@@ -42,6 +42,7 @@ DOWNLOAD_URL = metadata_repo.RELEASES_URL
 #: The box is 96x72 on the console; twice that on a desktop screen is
 #: legible without pretending to be the source picture.
 BOX_ZOOM = 2
+ROMS_HINT = "Empty: every game on the card. Or one folder, and only it is scanned; the menu opens there."
 
 
 def available() -> bool:
@@ -195,12 +196,15 @@ class Runner:
 
 
 def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums: bool,
-                 hires: bool = False) -> sleekmenu_prep.Options:
+                 hires: bool = False, roms: str = "") -> sleekmenu_prep.Options:
     """The window's fields as the run takes them. An empty metadata field
-    means whatever is on the card, as on the command line."""
+    means whatever is on the card, as on the command line. An empty games
+    folder is the whole card, said so: the field shows what the card
+    remembers, so emptying it is a choice, not an omission."""
     return sleekmenu_prep.Options(
         card=Path(card) if card.strip() else None,
         metadata=Path(metadata) if metadata.strip() else None,
+        roms=Path(roms.strip().strip("/")) if roms.strip().strip("/") else sleekmenu_prep.WHOLE_CARD,
         no_checksums=not check_checksums,
         fix_checksums=fix_checksums,
         hires=hires,
@@ -572,6 +576,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state = {"runner": None}
     card_var = tk.StringVar()
     card_note = tk.StringVar(value="Pick the card, or plug it in and press Refresh.")
+    roms_var = tk.StringVar()
+    roms_note = tk.StringVar(value=ROMS_HINT)
     metadata_var = tk.StringVar()
     metadata_note = tk.StringVar()
     check_var = tk.BooleanVar(value=True)
@@ -586,13 +592,17 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     buttons.grid(row=0, column=2, sticky="e")
     ttk.Label(frame, textvariable=card_note, foreground="#555").grid(row=1, column=1, sticky="w", padx=6)
 
-    ttk.Label(frame, text="Box art").grid(row=2, column=0, sticky="w", pady=(10, 0))
-    ttk.Entry(frame, textvariable=metadata_var).grid(row=2, column=1, sticky="ew", padx=6, pady=(10, 0))
+    ttk.Label(frame, text="Games folder").grid(row=2, column=0, sticky="w", pady=(10, 0))
+    ttk.Entry(frame, textvariable=roms_var).grid(row=2, column=1, sticky="ew", padx=6, pady=(10, 0))
+    ttk.Label(frame, textvariable=roms_note, foreground="#555").grid(row=3, column=1, sticky="w", padx=6)
+
+    ttk.Label(frame, text="Box art").grid(row=4, column=0, sticky="w", pady=(10, 0))
+    ttk.Entry(frame, textvariable=metadata_var).grid(row=4, column=1, sticky="ew", padx=6, pady=(10, 0))
     note = ttk.Label(frame, textvariable=metadata_note, foreground="#555", cursor="hand2")
-    note.grid(row=3, column=1, sticky="w", padx=6)
+    note.grid(row=5, column=1, sticky="w", padx=6)
 
     options = ttk.Frame(frame)
-    options.grid(row=4, column=1, sticky="w", padx=6, pady=(10, 0))
+    options.grid(row=6, column=1, sticky="w", padx=6, pady=(10, 0))
     ttk.Checkbutton(options, text="Check hacks and homebrew for a stale header checksum",
                     variable=check_var).pack(anchor="w")
     ttk.Checkbutton(options, text="Rewrite a stale checksum in the file itself",
@@ -601,13 +611,13 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                     variable=hires_var).pack(anchor="w")
 
     bar = ttk.Progressbar(frame, mode="determinate")
-    bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(12, 2))
-    ttk.Label(frame, textvariable=status_var, foreground="#555").grid(row=6, column=0, columnspan=3, sticky="w")
+    bar.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(12, 2))
+    ttk.Label(frame, textvariable=status_var, foreground="#555").grid(row=8, column=0, columnspan=3, sticky="w")
     log = tk.Text(frame, height=12, wrap="word", state="disabled", font=("Menlo", 11) if sys.platform == "darwin" else ("Consolas", 10) if sys.platform == "win32" else ("monospace", 10))
-    log.grid(row=7, column=0, columnspan=3, sticky="nsew", pady=(4, 8))
-    frame.rowconfigure(7, weight=1)
+    log.grid(row=9, column=0, columnspan=3, sticky="nsew", pady=(4, 8))
+    frame.rowconfigure(9, weight=1)
     actions = ttk.Frame(frame)
-    actions.grid(row=8, column=2, sticky="e")
+    actions.grid(row=10, column=2, sticky="e")
     stop = ttk.Button(actions, text="Stop", state="disabled")
     stop.pack(side="left", padx=(0, 6))
     prepare = ttk.Button(actions, text="Prepare")
@@ -640,6 +650,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         if state.get("shown_card") != card:
             state["shown_card"] = card
             catalog.reload()
+            remembered = card_catalog.remembered_roms(Path(card)) if card and Path(card).is_dir() else ""
+            roms_var.set(remembered)
+            roms_note.set(f"Chosen last time; only {remembered}/ is scanned. Empty the field for the whole card."
+                          if remembered else ROMS_HINT)
         if not card or not Path(card).is_dir():
             card_note.set("Pick the card, or plug it in and press Refresh.")
             metadata_note.set("")
@@ -659,6 +673,22 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         if chosen:
             card_var.set(chosen)
             on_card_change()
+
+    def browse_roms() -> None:
+        card = current_card()
+        if card is None:
+            status_var.set("Pick the card first.")
+            return
+        chosen = filedialog.askdirectory(title="The folder your games are in", initialdir=str(card))
+        if not chosen:
+            return
+        try:
+            relative = Path(chosen).resolve().relative_to(card.resolve()).as_posix()
+        except ValueError:
+            roms_note.set("That folder is not on the card; the games must be on the card to launch.")
+            return
+        roms_var.set("" if relative == "." else relative)
+        roms_note.set(ROMS_HINT)
 
     def browse_metadata() -> None:
         chosen = filedialog.askopenfilename(
@@ -725,7 +755,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         prepare.configure(state="disabled")
         stop.configure(state="normal")
         runner = Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get(),
-                                     hires_var.get()))
+                                     hires_var.get(), roms_var.get()))
         state["runner"] = runner
         runner.start()
         root.after(100, poll)
@@ -740,7 +770,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     ttk.Button(buttons, text="Browse…", command=browse_card).pack(side="left")
     ttk.Button(buttons, text="Refresh", command=refresh_cards).pack(side="left", padx=(6, 0))
-    ttk.Button(frame, text="Browse…", command=browse_metadata).grid(row=2, column=2, sticky="e", pady=(10, 0))
+    ttk.Button(frame, text="Browse…", command=browse_roms).grid(row=2, column=2, sticky="e", pady=(10, 0))
+    ttk.Button(frame, text="Browse…", command=browse_metadata).grid(row=4, column=2, sticky="e", pady=(10, 0))
     note.bind("<Button-1>", open_download)
     card_box.bind("<<ComboboxSelected>>", on_card_change)
     card_var.trace_add("write", on_card_change)
@@ -753,6 +784,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     if metadata:
         metadata_var.set(metadata)
     state["last_code"] = None
+    # For the tests: the fields and the button, without walking widgets.
+    state["fields"] = {"card": card_var, "roms": roms_var, "metadata": metadata_var}
+    state["start"] = start
     root.sleekmenu_state = state  # type: ignore[attr-defined]
 
     if smoke and card:
