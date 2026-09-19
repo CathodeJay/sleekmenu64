@@ -7,6 +7,7 @@
 #include "display.h"
 #include "input.h"
 #include "favorites.h"
+#include "folder_scan.h"
 #include "history.h"
 #include "genre.h"
 #include "save_type.h"
@@ -175,10 +176,19 @@ typedef struct {
        cover. A card without it is a card without the view's large art, not
        an error. */
     sm_cover_pack_t covers_large;
+    /* The folder being browsed, read off the card for what the catalog
+       does not know: a game copied on since the card was prepared is
+       listed and playable, with its box and facts to follow once
+       sleekmenu-prep has run. What it finds becomes the catalog's extras;
+       the status line under the list says how many. */
+    sm_folder_scan_t scan;
+    char scan_status[64];
     bool initialized;
 } sm_ui_t;
 
-void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout);
+/* The catalog is not const because browsing a folder adds to it: see
+   sm_ui_t.scan. */
+void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout);
 void ui_draw(surface_t *surface, const sm_layout_t *layout, const sm_catalog_t *catalog, const sm_ui_t *ui);
 /* `note` is the line along the bottom. It is a parameter rather than a
    constant because the startup sequence has more than one phase now: telling

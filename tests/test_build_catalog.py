@@ -145,7 +145,8 @@ class ConsoleReaderTests(unittest.TestCase):
             junk = root / "junk.ebc"
             junk.write_bytes(b"not a catalog" * 8)
             binary = root / "catalog-test"
-            subprocess.run(self.HOST_CC + ["src/catalog.c", "tests/stubs/libdragon_stub.c",
+            subprocess.run(self.HOST_CC + ["src/catalog.c", "src/folder_scan.c",
+                                           "tests/stubs/libdragon_stub.c",
                                            "tests/catalog_test.c", "-o", str(binary)],
                            cwd=self.ROOT, check=True)
             subprocess.run([str(binary), str(good), str(older), str(junk)], check=True)

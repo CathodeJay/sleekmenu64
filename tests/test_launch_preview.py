@@ -72,7 +72,7 @@ class HostModuleTests(unittest.TestCase):
         """The no-catalog scan, over a real directory tree: games anywhere
         on the card, and nothing that is not a game."""
         build_and_run("catalog-scan-test",
-                      ["src/catalog.c", "tests/catalog_discover_test.c"],
+                      ["src/catalog.c", "src/folder_scan.c", "tests/catalog_discover_test.c"],
                       ["-Itests/stubs", "-D_DEFAULT_SOURCE"])
 
     def test_host_probe_module(self):
@@ -106,7 +106,7 @@ class HostModuleTests(unittest.TestCase):
         sources = ["tests/ui_host_test.c", "tests/stubs/libdragon_stub.c",
                    "src/ui.c", "src/genre.c", "src/favorites.c", "src/history.c",
                    "src/list_view.c", "src/save_type.c", "src/cover_pack.c",
-                   "src/rom_db.c"] + CHEATS_SOURCES
+                   "src/folder_scan.c", "src/rom_db.c"] + CHEATS_SOURCES
         for packed in (False, True):
             with self.subTest(covers="pack" if packed else "loose"), \
                  tempfile.TemporaryDirectory() as scratch:

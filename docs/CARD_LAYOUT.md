@@ -79,9 +79,12 @@ where it came from. The words are fixed in `tools/provenance.py`.
 The whole card, minus the folders known to hold no games: the browser's
 own, the firmware's and any copy of it (`ED64.bk2` holds the firmware's apps
 and 64DD IPLs, ROM-shaped files that are not games), `menu/`, `metadata/`,
-`System Volume Information`, and anything hidden. The browser's own scan,
-for a card with no catalog, uses the same rule (`src/catalog.c`,
-`tools/card_layout.py`).
+`System Volume Information`, and anything hidden. The browser's own scans
+use the same rule (`src/folder_scan.c`, `tools/card_layout.py`): the
+whole card at boot when there is no catalog, and otherwise the folder being
+browsed, read for the games the catalog does not have yet. Those are listed
+by file name and play; the next run of the tool gives them their box and
+facts. The tool's card line counts them as "added since the last Prepare".
 
 Or one folder, chosen: `--roms ROMS`, or the window's Games folder. Then
 only it is walked, the catalog records paths from the card root as always

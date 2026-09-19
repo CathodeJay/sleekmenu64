@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "card_paths.h"
 #include "catalog.h"
+#include "folder_scan.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -104,7 +105,8 @@ static const char *catalog_string(const sm_catalog_t *catalog, uint32_t offset) 
 }
 
 bool catalog_get(const sm_catalog_t *catalog, uint32_t index, sm_game_t *game) {
-    if (catalog == NULL || game == NULL || index >= catalog->count) return false;
+    if (catalog == NULL || game == NULL) return false;
+    if (index >= catalog->count) return sm_extras_get(&catalog->extras, index - catalog->count, game);
     if (catalog->discovery_mode) {
         game->title = catalog->discovered[index].title;
         game->path = catalog->discovered[index].path;
@@ -141,55 +143,9 @@ enum {
     SM_DISCOVERY_MAX_PENDING_DIRS = 1024,
 };
 
-/* Cartridge dumps and 64DD disk images alike: a disk is a game in the list,
-   and whether it can be started is the launcher's call, per cartridge. */
-static bool rom_suffix(const char *path) {
-    size_t length = strlen(path);
-    return length >= 4 && (!strcasecmp(path + length - 4, ".z64") ||
-        !strcasecmp(path + length - 4, ".v64") || !strcasecmp(path + length - 4, ".n64") ||
-        !strcasecmp(path + length - 4, ".ndd"));
-}
-
 static const char *path_basename(const char *path) {
     const char *slash = strrchr(path, '/');
     return slash == NULL ? path : slash + 1;
-}
-
-/* Bookkeeping the operating systems leave on a card -- "._Game.z64"
-   AppleDouble twins, ".Trashes", "$RECYCLE.BIN" -- by name shape. */
-static bool hidden_name(const char *name) {
-    return name[0] == '.' || name[0] == '$';
-}
-
-/* Folders known to hold no games, so a scan of the whole card need not walk
-   them: the browser's own, the firmware's and any copy of it (ED64.bk2 holds
-   the firmware's apps and 64DD IPLs, ROM-shaped files that are not games),
-   the N64FlashcartMenu's (its menu ROM is a .n64 file), an unpacked art
-   collection (thousands of entries), and the one Windows keeps on every
-   removable disk. tools/card_layout.py has the same rule; the two must agree
-   or the tool and the browser would disagree about what is on the card. */
-static bool excluded_directory(const char *path) {
-    const char *name = path_basename(path);
-    return hidden_name(name) || !strcasecmp(name, SM_FIRMWARE_FOLDER) ||
-           !strncasecmp(name, SM_FIRMWARE_FOLDER ".", sizeof(SM_FIRMWARE_FOLDER)) ||
-           !strcasecmp(name, SM_CARD_FOLDER) || !strcasecmp(name, "menu") ||
-           !strcasecmp(name, "metadata") || !strcasecmp(name, "System Volume Information");
-}
-
-static bool excluded_file(const char *name) {
-    return hidden_name(name) || !strcasecmp(name, SM_BROWSER_ROM);
-}
-
-static char *copy_title(const char *path) {
-    const char *name = path_basename(path);
-    size_t length = strlen(name);
-    if (length >= 4) length -= 4;
-    char *title = malloc(length + 1);
-    if (title == NULL) return NULL;
-    for (size_t i = 0; i < length; i++)
-        title[i] = (name[i] == '_' || name[i] == '-') ? ' ' : name[i];
-    title[length] = '\0';
-    return title;
 }
 
 static char *join_path(const char *directory, const char *name) {
@@ -274,7 +230,7 @@ bool catalog_discover_sd(sm_catalog_t *catalog, const char *root, char *error, s
 
         while (result == 0) {
             entries_inspected = count_one(entries_inspected);
-            if (entry.d_type == DT_DIR && !excluded_directory(entry.d_name)) {
+            if (entry.d_type == DT_DIR && !sm_folder_excluded(entry.d_name)) {
                 if (pending_count == SM_DISCOVERY_MAX_PENDING_DIRS) {
                     free(directory);
                     free_pending_directories(pending, pending_count);
@@ -291,7 +247,7 @@ bool catalog_discover_sd(sm_catalog_t *catalog, const char *root, char *error, s
                     return false;
                 }
                 pending[pending_count++] = child;
-            } else if (entry.d_type == DT_REG && rom_suffix(entry.d_name) && !excluded_file(entry.d_name)) {
+            } else if (entry.d_type == DT_REG && sm_name_is_rom(entry.d_name) && !sm_file_excluded(entry.d_name)) {
                 if (catalog->count == SM_DISCOVERY_MAX_GAMES) {
                     catalog->discovery_capped = true;
                 } else {
@@ -305,7 +261,7 @@ bool catalog_discover_sd(sm_catalog_t *catalog, const char *root, char *error, s
                     }
                     const char *relative = root_relative(full_path, root, root_length);
                     char *path = strdup(relative);
-                    char *title = copy_title(relative);
+                    char *title = sm_title_from_name(path_basename(relative));
                     free(full_path);
                     if (path == NULL || title == NULL) {
                         free(path);

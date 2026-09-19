@@ -123,6 +123,7 @@ On the console the work is split into small modules:
 | `display` | 320×240 NTSC or 320×288 PAL, 16-bit, TV-safe margins |
 | `input` | controller state mapped to actions |
 | `catalog` | bounded parsing and CRC check of the catalog |
+| `folder_scan` | the folder being browsed read off the card for what the catalog does not know; the name rules the whole-card scan shares |
 | `cover_pack` | binary-searched cover lookup in `covers.pak` |
 | `ui` | list, grid and coverflow views, filters, the launch card, the box view, the cheats page |
 | `launch_policy` | suffix, magic, size and boot-code checks before anything boots |
@@ -149,6 +150,27 @@ favourites, combined with AND). Two flat shortlists sit at the front of the
 tab strip: favourites (C-down, kept in `sleekmenu/favorites.txt`) and the
 last fifteen launches (`sleekmenu/history.txt`, written at the moment a boot
 is committed; replaying a game moves it up rather than adding it twice).
+
+**What the catalog does not know is read off the card.** The catalog is
+built on a computer, so a game copied on afterwards is not in it. Rather
+than wait for the next Prepare, the browser reads the folder it is in --
+thirty-two directory entries a frame, from the frame the list appears --
+and adds what the catalog lacks as *extras*: entries past the catalog's own
+count, served by the same `catalog_get`, so every view, the filters and
+favourites see them without knowing. A file gets its name for a title and
+`SM_EXTRA_DESCRIPTION` for a box back; a folder is an entry whose path ends
+in `/`, which is what lets it stand in for "the first game inside it"
+wherever a folder item is read. Each is moved to where its name sorts, since
+the catalog is in path order. Membership is one hash lookup per entry
+against the catalog's names in that folder, built once per read. A
+finished folder is kept for the session, four at a time, so stepping back
+into one lists its extras at once. Only one thing reads the card at a time:
+covers and headers wait for the read to finish, and the launch card, which
+reads the header and on the Pro lists the folder for a disk, takes the card
+over -- the read starts again from the top on the way back. The shortlists
+are card-wide and list no extras, because the card has only been read where
+the cursor has been; a card without a catalog was scanned whole at boot and
+reads nothing more.
 
 **Reading from the card is deferred.** Art on the card is slower than art
 inside a ROM, so nothing is read while the cursor moves: a cover and the

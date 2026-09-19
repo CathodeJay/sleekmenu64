@@ -718,15 +718,86 @@ static void rebuild_history(sm_ui_t *ui, const sm_catalog_t *catalog) {
         if (slots[i] != UINT32_MAX) ui->items[ui->item_count++] = slots[i];
 }
 
-static void rebuild(sm_ui_t *ui, const sm_catalog_t *catalog) {
+/* An extra -- a file the catalog does not know, found on the card -- sits
+   past the catalog's own entries, so it comes out of the loops below after
+   every catalogued game in its folder. Each is moved back to where its name
+   sorts: a game copied on last week belongs under its letter, not in a heap
+   at the bottom. The catalog is in path order, and within one folder that
+   is name order, so a path comparison is the same ordering. */
+static bool item_sorts_after(const sm_catalog_t *catalog, uint32_t item, uint32_t other) {
+    sm_game_t a, b;
+    if (!catalog_get(catalog, item & ~SM_UI_FOLDER_BIT, &a) ||
+        !catalog_get(catalog, other & ~SM_UI_FOLDER_BIT, &b)) return false;
+    return strcasecmp(a.path, b.path) > 0;
+}
+
+/* A merge of two sorted runs, the catalog's and the extras', from the back:
+   one pass, with only the extras copied aside. A thousand new files in a
+   folder of thousands is the case that decides this; an insertion sort
+   there is seconds on the console. */
+static void place_extras(sm_ui_t *ui, const sm_catalog_t *catalog, uint32_t begin, uint32_t end) {
+    static uint32_t aside[SM_SCAN_MAX_EXTRAS];
+    uint32_t first_extra = end, count, write;
+    while (first_extra > begin && (ui->items[first_extra - 1u] & ~SM_UI_FOLDER_BIT) >= catalog->count)
+        first_extra--;
+    count = end - first_extra;
+    if (!count || count > SM_SCAN_MAX_EXTRAS) return;
+    memcpy(aside, &ui->items[first_extra], count * sizeof(aside[0]));
+    write = end;
+    while (count) {
+        uint32_t extra = aside[count - 1u];
+        if (first_extra > begin && item_sorts_after(catalog, ui->items[first_extra - 1u], extra))
+            ui->items[--write] = ui->items[--first_extra];
+        else { ui->items[--write] = extra; count--; }
+    }
+}
+
+/* The folder the scan should describe: the one being browsed, or the one
+   put aside while a shortlist is up -- the shortlists themselves are
+   card-wide and never read a folder. */
+static const char *scan_folder(const sm_ui_t *ui) {
+    return ui->flat ? ui->folder_before_flat : ui->folder;
+}
+
+/* The status line's account of what the folder holds beyond the catalog,
+   after a read and again on coming back to the folder. Nothing at all when
+   there is nothing: the line is for the count, not for reassurance. */
+static void announce_extras(sm_ui_t *ui, const sm_catalog_t *catalog) {
+    const sm_extras_t *extras = &catalog->extras;
+    uint32_t files = 0;
+    for (uint32_t i = 0; i < extras->count; i++) files += extras->entries[i].folder ? 0u : 1u;
+    if (!extras->count) return;
+    if (extras->capped)
+        snprintf(ui->scan_status, sizeof(ui->scan_status),
+            "Over %u files not in the catalog: run sleekmenu-prep", (unsigned)SM_SCAN_MAX_EXTRAS);
+    else if (files)
+        snprintf(ui->scan_status, sizeof(ui->scan_status),
+            "%u file%s not in the catalog: sleekmenu-prep adds %s",
+            (unsigned)files, files == 1u ? "" : "s", files == 1u ? "it" : "them");
+    else
+        snprintf(ui->scan_status, sizeof(ui->scan_status),
+            "%u folder%s not in the catalog", (unsigned)extras->count,
+            extras->count == 1u ? "" : "s");
+    ui->status = ui->scan_status;
+}
+
+static void rebuild(sm_ui_t *ui, sm_catalog_t *catalog) {
+    uint32_t folders_end;
+    bool remembered = false;
     ui->item_count = 0;
+    /* The folder changed: what the card has here beyond the catalog is
+       either remembered from earlier and listed now, or read over the next
+       frames and listed then. A card with no catalog was scanned whole at
+       boot and has nothing to add. */
+    if (!catalog->discovery_mode && strcmp(scan_folder(ui), ui->scan.wanted))
+        remembered = sm_folder_scan_select(&ui->scan, catalog, scan_folder(ui));
     if (ui->genre_tab == SM_STRIP_HISTORY) {
         rebuild_history(ui, catalog);
         settle_on_a_new_list(ui);
         return;
     }
     if (!ui->flat) {
-        for (uint32_t i = 0; i < catalog->count && ui->item_count < SM_UI_MAX_ITEMS; i++) {
+        for (uint32_t i = 0; i < catalog_total(catalog) && ui->item_count < SM_UI_MAX_ITEMS; i++) {
             sm_game_t game;
             if (!catalog_get(catalog, i, &game) || !item_matches(ui, &game)) continue;
             const char *part = relative_part(game.path, ui->folder);
@@ -740,14 +811,41 @@ static void rebuild(sm_ui_t *ui, const sm_catalog_t *catalog) {
             }
         }
     }
-    for (uint32_t i = 0; i < catalog->count && ui->item_count < SM_UI_MAX_ITEMS; i++) {
+    folders_end = ui->item_count;
+    /* Extras are listed in their folder only. A shortlist is the whole card
+       at once, and the card has only been read where the cursor has been. */
+    for (uint32_t i = 0; i < (ui->flat ? catalog->count : catalog_total(catalog)) &&
+            ui->item_count < SM_UI_MAX_ITEMS; i++) {
         sm_game_t game;
         if (!catalog_get(catalog, i, &game) || !item_matches(ui, &game)) continue;
         const char *part = relative_part(game.path, ui->folder);
         if (!part) continue;
         if (ui->flat || !strchr(part, '/')) ui->items[ui->item_count++] = i;
     }
+    if (catalog->extras.count) {
+        place_extras(ui, catalog, 0, folders_end);
+        place_extras(ui, catalog, folders_end, ui->item_count);
+    }
     settle_on_a_new_list(ui);
+    if (remembered && !ui->flat) announce_extras(ui, catalog);
+}
+
+/* The list again after the card was read, with the cursor left where it
+   was. Item numbers are stable across this -- the catalog's do not move,
+   and there were no extras before -- so the selection is found by number.
+   No rebuild at all when nothing was found: the list is already right and
+   the cover under the cursor would be read back for nothing. */
+static void list_what_the_card_has(sm_ui_t *ui, sm_catalog_t *catalog, const sm_layout_t *layout) {
+    uint32_t keep = ui->item_count ? ui->items[ui->selected] : UINT32_MAX;
+    if (!catalog->extras.count || ui->flat) return;
+    rebuild(ui, catalog);
+    for (uint32_t i = 0; i < ui->item_count; i++) {
+        if (ui->items[i] != keep) continue;
+        ui->selected = i;
+        focus_selected(ui, layout);
+        break;
+    }
+    announce_extras(ui, catalog);
 }
 
 /* The tab strip describes the whole card, not the folder being browsed: a
@@ -788,7 +886,7 @@ static void ensure_genre_tabs(sm_ui_t *ui, const sm_catalog_t *catalog) {
 /* One subset at a time from the strip. The filter screen is still where a
    combination is built -- favourite racing games for two players -- and when
    one is active the strip marks the favourites tab as well as the genre. */
-static void apply_strip_tab(sm_ui_t *ui, const sm_catalog_t *catalog, uint32_t index) {
+static void apply_strip_tab(sm_ui_t *ui, sm_catalog_t *catalog, uint32_t index) {
     const sm_genre_tab_t *tab = strip_genre(ui, index);
     /* Both shortlists are flat. Standing in a folder and being shown only the
        favourites that happen to live in it is not a shortlist, and the same
@@ -811,7 +909,7 @@ static void apply_strip_tab(sm_ui_t *ui, const sm_catalog_t *catalog, uint32_t i
     rebuild(ui, catalog);
 }
 
-static void select_genre_tab(sm_ui_t *ui, const sm_catalog_t *catalog, int direction) {
+static void select_genre_tab(sm_ui_t *ui, sm_catalog_t *catalog, int direction) {
     uint32_t count = strip_count(ui);
     if (count < 2u) return;
     apply_strip_tab(ui, catalog,
@@ -861,7 +959,7 @@ static uint16_t next_year(const sm_catalog_t *catalog, uint16_t current, int dir
     return best;
 }
 
-static void change_filter(sm_ui_t *ui, const sm_catalog_t *catalog, int direction) {
+static void change_filter(sm_ui_t *ui, sm_catalog_t *catalog, int direction) {
     switch (ui->filter_row) {
         /* The same cursor the tab strip moves, so the two screens can never
            disagree about which genre is selected. */
@@ -1081,6 +1179,9 @@ static bool card_warning(void) {
    has to be up either way, with its cover and its facts. */
 static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_t *layout,
     uint32_t item, const sm_game_t *game) {
+    /* The launcher reads the header and, on a cartridge with a drive, lists
+       the folder for a disk: the card is its now. */
+    sm_folder_scan_yield(&ui->scan);
     launch_prepare(game->path);
     ui->status = launch_status_message();
     ui->diagnostics = false;
@@ -1113,7 +1214,7 @@ static void launch_from_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_
     ui->status = launch_status_message();
 }
 
-void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout) {
+void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout) {
     if (!ui->initialized) {
         ui->initialized = true;
         /* The first run has no file, so the catalog's own flags become the
@@ -1141,10 +1242,17 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
            tall enough for every line render_description can produce. */
         ui->desc_surface = surface_alloc(FMT_RGBA16,
             (uint16_t)(layout->safe_right - layout->safe_left - 6), DESC_LINE * DESC_MAX_LINES);
+        sm_folder_scan_init(&ui->scan);
         rebuild(ui, catalog);
     }
     ensure_genre_tabs(ui, catalog);
     ui->marquee++;
+    /* A few directory entries a frame while the list is up. The launch card
+       and everything past it read the card themselves, so the read waits
+       for the library and starts over if it was cut off. */
+    if ((ui->screen == SM_SCREEN_LIBRARY || ui->screen == SM_SCREEN_FILTERS) &&
+            sm_folder_scan_step(&ui->scan, catalog))
+        list_what_the_card_has(ui, catalog, layout);
     /* Before any early return. The settle delay and the launch card both bail
        out of this function, and a slide frozen half way through because the
        controller stopped is worse than no slide at all. */
@@ -1353,6 +1461,7 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
         if (item & SM_UI_FOLDER_BIT) ui->status = "Folders cannot be favourited";
         else if (catalog_get(catalog, item, &game)) {
             bool now = sm_favorites_toggle(&ui->favorites, game.path);
+            sm_folder_scan_yield(&ui->scan);
             if (!now && ui->favorites.full) ui->status = "Favourites are full";
             else if (!sm_favorites_save(&ui->favorites, SM_FAVORITES_PATH))
                 ui->status = "Could not write " SM_CARD_FOLDER "/favorites.txt";
@@ -1379,6 +1488,9 @@ void ui_update(sm_ui_t *ui, const sm_catalog_t *catalog, sm_actions_t actions, c
             sync_slots(ui, base, count);
     }
     if (ui->settle) { ui->settle--; return; }
+    /* Covers and headers wait for the folder read to finish, so that one
+       thing at a time has the card. It is a few frames on most folders. */
+    if (sm_folder_scan_busy(&ui->scan)) return;
     /* Both slot views draw from slot_sprites and never need cover_sprite until
        A is pressed, which the select handler covers. Loading it here as well
        would read the middle cover off the card a second time on every step,
@@ -1407,6 +1519,25 @@ static uint32_t genre_colour(const char *genre) {
 
 static void draw_chip(surface_t *s, int x, int y, const char *genre) {
     graphics_draw_box(s, x, y, 4, 4, genre_colour(genre));
+}
+
+/* A game the catalog does not know: on the card, not yet prepared. */
+static bool item_uncatalogued(const sm_catalog_t *c, uint32_t item) {
+    return !(item & SM_UI_FOLDER_BIT) && item >= c->count;
+}
+
+/* Its chip is an outline rather than a colour: the genre is not unknown,
+   nobody has looked yet. */
+static void draw_item_chip(surface_t *s, int x, int y, const sm_catalog_t *c, uint32_t item,
+    const char *genre) {
+    if (!item_uncatalogued(c, item)) { draw_chip(s, x, y, genre); return; }
+    {
+        uint32_t edge = graphics_make_color(150, 165, 185, 255);
+        graphics_draw_box(s, x, y, 4, 1, edge);
+        graphics_draw_box(s, x, y + 3, 4, 1, edge);
+        graphics_draw_box(s, x, y + 1, 1, 2, edge);
+        graphics_draw_box(s, x + 3, y + 1, 1, 2, edge);
+    }
 }
 
 /* A favourite has to be visible without filtering for them, or pressing the
@@ -1553,7 +1684,7 @@ static void draw_list(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
             graphics_draw_box(s, l->safe_left, y, 2, l->row_height,
                 graphics_make_color(245, 230, 160, 255));
         }
-        if (!(item & SM_UI_FOLDER_BIT)) draw_chip(s, l->safe_left + 6, y + 3, game.genre);
+        if (!(item & SM_UI_FOLDER_BIT)) draw_item_chip(s, l->safe_left + 6, y + 3, c, item, game.genre);
         graphics_set_color(selected ? graphics_make_color(255, 255, 255, 255)
             : (item & SM_UI_FOLDER_BIT) ? graphics_make_color(245, 230, 160, 255)
             : graphics_make_color(200, 208, 220, 255), 0);
@@ -1620,7 +1751,8 @@ static void draw_grid(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
             draw_truncated(s, x + 2, y + SM_UI_TILE_HEIGHT / 2 - 4, game.title,
                 (SM_UI_TILE_WIDTH - 4) / SM_FONT_WIDTH);
         }
-        if (!(ui->items[pos] & SM_UI_FOLDER_BIT)) draw_chip(s, x + 2, y + 2, game.genre);
+        if (!(ui->items[pos] & SM_UI_FOLDER_BIT))
+            draw_item_chip(s, x + 2, y + 2, c, ui->items[pos], game.genre);
         if (item_is_favorite(ui, ui->items[pos], &game))
             draw_star(s, x + SM_UI_TILE_WIDTH - 7, y + 2);
     }
@@ -1899,7 +2031,15 @@ static void draw_panel(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c
     }
 
     if (ui->cover_sprite) draw_cover(s, x, y, ui->cover_sprite);
-    else {
+    else if (item_uncatalogued(c, ui->items[ui->selected])) {
+        /* No box because nobody has looked, which is worth saying apart
+           from no box because there is none. */
+        graphics_draw_box(s, x, y, SM_COVER_WIDTH, SM_COVER_HEIGHT,
+            graphics_make_color(35, 42, 52, 255));
+        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+        graphics_draw_text(s, x + (SM_COVER_WIDTH - 6 * SM_FONT_WIDTH) / 2, y + 26, "NOT IN");
+        graphics_draw_text(s, x + (SM_COVER_WIDTH - 7 * SM_FONT_WIDTH) / 2, y + 36, "CATALOG");
+    } else {
         graphics_draw_box(s, x, y, SM_COVER_WIDTH, SM_COVER_HEIGHT,
             graphics_make_color(35, 42, 52, 255));
         graphics_set_color(graphics_make_color(130, 145, 160, 255), 0);
@@ -2341,6 +2481,10 @@ static void draw_box_view(surface_t *s, const sm_layout_t *l, const sm_catalog_t
                 ? "No large cover for this game"
                 : "No large covers on this card: run sleekmenu-prep again",
             chars);
+    } else if (!ui->box_sprite && have && item_uncatalogued(c, ui->items[ui->selected])) {
+        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+        draw_truncated(s, l->safe_left + 3, l->footer_top - SM_FONT_HEIGHT - 2,
+            "Not in the catalog yet: sleekmenu-prep adds its box", chars);
     }
 
     graphics_draw_box(s, l->safe_left, l->footer_top, width, SM_FOOTER_HEIGHT,
@@ -2497,6 +2641,7 @@ void ui_close(sm_ui_t *ui) {
     unload_cover(ui);
     unload_box(ui);
     unload_slots(ui);
+    sm_folder_scan_close(&ui->scan, NULL);
     sm_cover_pack_close(&ui->covers);
     sm_cover_pack_close(&ui->covers_large);
     if (ui->desc_surface.buffer) surface_free(&ui->desc_surface);

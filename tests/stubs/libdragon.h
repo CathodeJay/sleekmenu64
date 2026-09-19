@@ -84,7 +84,7 @@ bool sm_test_drew(const char *needle);
 
 /* --- the stubbed surface ----------------------------------------------- */
 static inline uint32_t graphics_make_color(int r, int g, int b, int a) {
-    return (uint32_t)((r << 24) | (g << 16) | (b << 8) | a);
+    return ((uint32_t)r << 24) | ((uint32_t)g << 16) | ((uint32_t)b << 8) | (uint32_t)a;
 }
 static inline void graphics_set_color(uint32_t f, uint32_t b) { (void)f; (void)b; }
 static inline void graphics_fill_screen(surface_t *s, uint32_t c) { (void)s; (void)c; }
@@ -101,10 +101,20 @@ surface_t sprite_get_pixels(sprite_t *sprite);
 
 #define assertf(expr, ...) do { if (!(expr)) { fprintf(stderr, __VA_ARGS__); abort(); } } while (0)
 
-/* --- the card's directory walk, for src/catalog.c ----------------------
-   The host never has a card; discovery is not exercised here, only refused
-   politely. What is exercised is catalog_load against a real file the Python
-   builder wrote. */
+/* --- the card's directory walk ------------------------------------------
+   The host never has a card. The whole-card discovery is exercised over a
+   real directory tree in tests/catalog_discover_test.c, with its own
+   dir_findfirst; here one folder can be given entries, for the browser's
+   read of the folder it is in. */
 #include "dir.h"
+
+typedef struct {
+    const char *name;
+    bool folder;
+} sm_test_dir_entry_t;
+/* The entries dir_findfirst(path) will list; any other path lists nothing. */
+void sm_test_dir_set(const char *path, const sm_test_dir_entry_t *entries, int count);
+/* How many times a folder was opened for listing. */
+extern int sm_test_dir_opens;
 
 #endif

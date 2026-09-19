@@ -74,12 +74,12 @@ same tool with Python inside, one download per system:
 (it is picked for you when it is the only removable disk), press Prepare;
 the collection is fetched onto the card if it is not there, and Stop ends
 the run if it takes too long. The card line says how many games were added
-since the last Prepare, which is when a card needs one: the catalog is
-built here, not on the console, so a game copied onto the card shows up
-in the browser after the next run and not before. The Catalog tab then
-shows the card as the browser will: the folders, every game with its
-genre, publisher, year and region, the box exactly as the console draws
-it, and where each of those came from. It is not code-signed, so the
+since the last Prepare, which is when a card wants one: the catalog is
+built here, not on the console, so a game copied onto the card plays from
+the browser straight away but has no box or facts until the next run. The
+Catalog tab then shows the card as the browser will: the folders, every
+game with its genre, publisher, year and region, the box exactly as the
+console draws it, and where each of those came from. It is not code-signed, so the
 first launch warns: on macOS, right-click the app and choose Open (on macOS 15,
 System Settings → Privacy & Security → Open Anyway); on Windows, More info
 → Run anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
@@ -175,6 +175,15 @@ applies it. The header shows how many games match.
   their own they boot from the drive's IPL, which the Pro's menu keeps in
   `ED64/64ddipl/`; a `.ndd` in the same folder as a cartridge ROM is attached
   to that ROM as its expansion disk. Experimental: not yet run on hardware.
+- **Games added after the last Prepare.** The browser reads the folder it
+  is in off the card and lists anything the catalog does not know — a game
+  you copied on last night, a folder of them — where its name sorts, under
+  its file name, with an outline where the genre chip would be and `NOT IN
+  CATALOG` where the box would be. It plays like any other; the status
+  line says how many are waiting, and the next Prepare gives them their
+  boxes and facts. Only the folders the browser shows are read: with the
+  whole library under one folder, a new folder beside it at the card root
+  is not seen until the card is prepared again.
 - **Not done yet.** Controller Pak (`.mpk`) backup and restore.
 
 ## Cheats

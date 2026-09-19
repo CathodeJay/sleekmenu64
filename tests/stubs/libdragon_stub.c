@@ -83,12 +83,34 @@ surface_t sprite_get_pixels(sprite_t *sprite) {
     return out;
 }
 
-int dir_findfirst(const char *path, dir_t *entry) {
-    (void)path; (void)entry;
-    return -1;
+/* One folder's worth of directory entries, served to whoever lists that
+   path; every other path is empty. The browser reads the folder it is in
+   for files the catalog does not know, and this is that folder. */
+static const sm_test_dir_entry_t *dir_entries;
+static int dir_entry_count;
+static int dir_position;
+static char dir_path[272];
+int sm_test_dir_opens;
+
+void sm_test_dir_set(const char *path, const sm_test_dir_entry_t *entries, int count) {
+    snprintf(dir_path, sizeof(dir_path), "%s", path ? path : "");
+    dir_entries = entries;
+    dir_entry_count = count;
+    dir_position = 0;
 }
 
 int dir_findnext(const char *path, dir_t *entry) {
-    (void)path; (void)entry;
-    return -1;
+    (void)path;
+    if (dir_position >= dir_entry_count) return -1;
+    snprintf(entry->d_name, sizeof(entry->d_name), "%s", dir_entries[dir_position].name);
+    entry->d_type = dir_entries[dir_position].folder ? DT_DIR : DT_REG;
+    dir_position++;
+    return 0;
+}
+
+int dir_findfirst(const char *path, dir_t *entry) {
+    sm_test_dir_opens++;
+    dir_position = 0;
+    if (!dir_entries || strcmp(path, dir_path)) return -1;
+    return dir_findnext(path, entry);
 }

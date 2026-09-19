@@ -31,6 +31,31 @@ typedef struct {
     uint8_t flags;
 } sm_game_t;
 
+/* A file or folder the card has in the folder being browsed that the
+   catalog does not (src/folder_scan.c). A folder's path ends in '/', so
+   that everything reading "the first game inside this folder" off a folder
+   item finds a component followed by a slash, as it would in the catalog. */
+typedef struct {
+    char *title;
+    char *path;
+    bool folder;
+} sm_extra_t;
+
+typedef struct {
+    sm_extra_t *entries;
+    uint32_t count;
+    uint32_t capacity;
+    /* The folder these were found in: catalog form, "" for the card root. */
+    char folder[256];
+    bool capped;   /* the folder had more than would be kept */
+} sm_extras_t;
+
+/* The launch card's text for a game the catalog does not know. */
+#define SM_EXTRA_DESCRIPTION \
+    "This file was added after the card was last prepared, so the catalog " \
+    "has no box or facts for it yet. Run sleekmenu-prep on a computer to add " \
+    "them. It launches like any other."
+
 typedef struct {
     void *data;
     size_t size;
@@ -38,7 +63,33 @@ typedef struct {
     sm_discovered_game_t *discovered;
     bool discovery_mode;
     bool discovery_capped;
+    /* What the folder being browsed has beyond the catalog, reached through
+       the indices past `count`. A view: the browser's folder scan owns the
+       entries and swaps them as the folder changes. */
+    sm_extras_t extras;
 } sm_catalog_t;
+
+static inline uint32_t catalog_total(const sm_catalog_t *catalog) {
+    return catalog->count + catalog->extras.count;
+}
+
+/* An extra as a game: its name for a title, nothing else known. */
+static inline bool sm_extras_get(const sm_extras_t *extras, uint32_t index, sm_game_t *game) {
+    const sm_extra_t *extra;
+    if (extras == NULL || game == NULL || index >= extras->count) return false;
+    extra = &extras->entries[index];
+    game->title = extra->title;
+    game->path = extra->path;
+    game->cover = "";
+    game->publisher = "";
+    game->genre = "";
+    game->description = extra->folder ? "" : SM_EXTRA_DESCRIPTION;
+    game->year = 0;
+    game->players = 0;
+    game->regions = 0;
+    game->flags = 0;
+    return game->title != NULL && game->path != NULL;
+}
 
 typedef struct {
     const char *folder_prefix;

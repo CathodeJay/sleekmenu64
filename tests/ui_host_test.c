@@ -30,8 +30,9 @@ static uint32_t ROW_COUNT;
 static sm_catalog_t CATALOG;
 
 bool catalog_get(const sm_catalog_t *catalog, uint32_t index, sm_game_t *game) {
-    (void)catalog;
-    if (index >= ROW_COUNT) return false;
+    /* Past the fixture's rows come the extras the browser found on the
+       card, exactly as the real catalog serves them. */
+    if (index >= ROW_COUNT) return sm_extras_get(&catalog->extras, index - ROW_COUNT, game);
     memset(game, 0, sizeof(*game));
     game->title = ROWS[index].title;
     game->path = ROWS[index].path;
@@ -188,6 +189,10 @@ static void make_cover(void) {
     if (file) { fputs("sprite", file); fclose(file); }
 }
 
+/* The fixture stands for a catalog the prep tool wrote, unless a test says
+   it stands for the boot-time scan of a card without one. */
+static bool start_discovered;
+
 static void start(const row_t *rows, uint32_t count) {
     remove(SM_FAVORITES_PATH);
     ui_close(&ui);
@@ -195,6 +200,7 @@ static void start(const row_t *rows, uint32_t count) {
     ROWS = rows; ROW_COUNT = count;
     memset(&CATALOG, 0, sizeof(CATALOG));
     CATALOG.count = count;
+    CATALOG.discovery_mode = start_discovered;
     frame(NONE);
 }
 
@@ -1383,6 +1389,174 @@ int main(void) {
         frame(PRESS(start));
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 6);
         frame(PRESS(back));
+    }
+
+    /* ---- a game copied on after the card was prepared is listed ------- */
+    {
+        static const row_t rows[] = {
+            {"ROMS/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"ROMS/Gamma.z64", "Gamma", "Racing", 0, "", 0, NULL},
+            {"ROMS/Hacks/Kaizo.z64", "Kaizo", "Racing", 0, "", 0, NULL},
+        };
+        /* The folder as the card lists it: two games and a subfolder the
+           catalog knows; one game and one folder it does not; and the
+           things a scan leaves alone -- a text file, an AppleDouble twin,
+           a firmware backup, the browser's own ROM, a case-only variant
+           of a known name. */
+        static const sm_test_dir_entry_t entries[] = {
+            {"Alpha.z64", false}, {"beta_two.z64", false}, {"GAMMA.Z64", false},
+            {"Hacks", true}, {"New", true}, {"._beta_two.z64", false},
+            {"notes.txt", false}, {"ED64.bk2", true}, {"SleekMenu64.z64", false},
+            {".Trashes", true},
+        };
+        sm_game_t game;
+        sm_test_dir_opens = 0;
+        sm_test_dir_set("sd:/ROMS", entries, 10);
+        start(rows, 3u);
+        /* The folder is read in the frame the catalog is listed, and one
+           this short is finished in it. */
+        assert(!strcmp(ui.folder, "ROMS"));
+        assert(sm_test_dir_opens == 1);
+        assert(ui.item_count == 5u);
+        /* Folders first, then games, each where its name sorts. */
+        assert((ui.items[0] & SM_UI_FOLDER_BIT) && (ui.items[1] & SM_UI_FOLDER_BIT));
+        assert(catalog_get(&CATALOG, ui.items[0] & ~SM_UI_FOLDER_BIT, &game) &&
+               !strcmp(game.path, "ROMS/Hacks/Kaizo.z64"));
+        assert(catalog_get(&CATALOG, ui.items[1] & ~SM_UI_FOLDER_BIT, &game) &&
+               !strcmp(game.path, "ROMS/New/") && !strcmp(game.title, "New"));
+        assert(ui.items[2] == 0u && ui.items[4] == 1u);
+        assert(ui.items[3] >= ROW_COUNT);
+        assert(catalog_get(&CATALOG, ui.items[3], &game));
+        assert(!strcmp(game.path, "ROMS/beta_two.z64") && !strcmp(game.title, "beta two"));
+        assert(game.genre[0] == '\0' && game.cover[0] == '\0');
+        assert(strstr(game.description, "sleekmenu-prep") != NULL);
+        assert(ui.status && !strcmp(ui.status, "1 file not in the catalog: sleekmenu-prep adds it"));
+        settle();
+        draw();
+        assert(sm_test_drew("[New]") && sm_test_drew("beta two"));
+        /* The card was read once for the covers, and not for the folder
+           again. */
+        assert(sm_test_dir_opens == 1);
+
+        /* Down to the new game: the panel says why there is no box. */
+        frame(PRESS(down)); frame(PRESS(down)); frame(PRESS(down));
+        assert(ui.items[ui.selected] >= ROW_COUNT);
+        settle();
+        draw();
+        assert(sm_test_drew("NOT IN") && sm_test_drew("CATALOG"));
+        /* A opens its card and Start plays it, by the path the card has. */
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        assert(!strcmp(fake_selected, "ROMS/beta_two.z64"));
+        draw();
+        assert(sm_test_drew("beta two"));
+        frame(PRESS(select));                 /* the box view */
+        draw();
+        assert(sm_test_drew("Not in the catalog yet"));
+        frame(PRESS(back));
+        {
+            int before = fake_launches;
+            frame(PRESS(start));
+            assert(fake_launches == before + 1);
+        }
+        frame(PRESS(back));
+
+        /* Into the new folder: it is read too, and B lands back on it. */
+        sm_test_dir_set("sd:/ROMS/New", (const sm_test_dir_entry_t[]){{"Delta.z64", false}}, 1);
+        frame(PRESS(up)); frame(PRESS(up));
+        assert(ui.items[ui.selected] & SM_UI_FOLDER_BIT);
+        frame(PRESS(select));
+        assert(!strcmp(ui.folder, "ROMS/New"));
+        assert(ui.item_count == 0u);
+        frame(NONE);
+        assert(sm_test_dir_opens == 2 && ui.item_count == 1u);
+        assert(catalog_get(&CATALOG, ui.items[0], &game) && !strcmp(game.path, "ROMS/New/Delta.z64"));
+        frame(PRESS(back));
+        assert(!strcmp(ui.folder, "ROMS"));
+        /* Remembered: listed at once, the folder not read again, the
+           cursor on the folder just left. */
+        assert(sm_test_dir_opens == 2 && ui.item_count == 5u);
+        assert(catalog_get(&CATALOG, ui.items[ui.selected] & ~SM_UI_FOLDER_BIT, &game) &&
+               !strcmp(game.path, "ROMS/New/"));
+        assert(ui.status && strstr(ui.status, "1 file not in the catalog"));
+
+        /* A shortlist is the whole card, which has only been read here:
+           starring the new game keeps it, but the tab does not list it. */
+        frame(PRESS(down)); frame(PRESS(down));
+        assert(ui.items[ui.selected] >= ROW_COUNT);
+        frame(PRESS(favorite));
+        assert(sm_favorites_contains(&ui.favorites, "ROMS/beta_two.z64"));
+        frame(PRESS(genre_next));
+        assert(ui.flat && ui.item_count == 0u);
+        frame(PRESS(back));
+        assert(!ui.flat && ui.item_count == 5u);
+        sm_test_dir_set(NULL, NULL, 0);
+    }
+
+    /* ---- a long folder is read a few entries a frame, cursor kept ----- */
+    {
+        static const row_t rows[] = {
+            {"ROMS/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"ROMS/Zeta.z64", "Zeta", "Racing", 0, "", 0, NULL},
+        };
+        enum { MANY = 400 };
+        static sm_test_dir_entry_t entries[MANY];
+        static char names[MANY][16];
+        sm_game_t game;
+        int frames = 0;
+        for (int i = 0; i < MANY; i++) {
+            snprintf(names[i], sizeof(names[i]), "m%03d.z64", i);
+            entries[i].name = names[i];
+            entries[i].folder = false;
+        }
+        sm_test_dir_opens = 0;
+        sm_test_dir_set("sd:/ROMS", entries, MANY);
+        start(rows, 2u);
+        assert(sm_folder_scan_busy(&ui.scan) && ui.item_count == 2u);
+        frame(PRESS(down));                   /* onto Zeta while it reads */
+        assert(ui.selected == 1u);
+        /* The cursor has settled and the folder is still being read: no
+           cover comes off the card, and the list is not touched. */
+        idle(SM_UI_SETTLE_FRAMES + 2);
+        assert(sm_test_sprite_loads == 0);
+        assert(sm_folder_scan_busy(&ui.scan) && ui.item_count == 2u);
+        while (sm_folder_scan_busy(&ui.scan) && frames < 30) { frame(NONE); frames++; }
+        assert(frames > 0 && frames < 30);
+        assert(ui.item_count == MANY + 2u);
+        /* Still on Zeta, now at the end of the list. */
+        assert(ui.selected == MANY + 1u);
+        assert(catalog_get(&CATALOG, ui.items[ui.selected], &game) && !strcmp(game.title, "Zeta"));
+        settle();
+        assert(sm_test_sprite_loads == 1);
+
+        /* A while it reads gives the card to the launcher; the read starts
+           over on the way back and finishes. */
+        sm_test_reset();
+        start(rows, 2u);
+        frame(NONE);
+        assert(sm_folder_scan_busy(&ui.scan) && sm_test_dir_opens == 2);
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !sm_folder_scan_busy(&ui.scan));
+        frame(PRESS(back));
+        frames = 0;
+        while (ui.item_count == 2u && frames < 30) { frame(NONE); frames++; }
+        assert(sm_test_dir_opens == 3 && ui.item_count == MANY + 2u);
+        sm_test_dir_set(NULL, NULL, 0);
+    }
+
+    /* ---- a card scanned whole at boot has nothing more to find -------- */
+    {
+        static const row_t rows[] = {
+            {"ROMS/Alpha.z64", "Alpha", "", 0, "", 0, NULL},
+        };
+        sm_test_dir_opens = 0;
+        sm_test_dir_set("sd:/ROMS", (const sm_test_dir_entry_t[]){{"Beta.z64", false}}, 1);
+        start_discovered = true;
+        start(rows, 1u);
+        idle(3);
+        assert(sm_test_dir_opens == 0 && ui.item_count == 1u);
+        start_discovered = false;
+        sm_test_dir_set(NULL, NULL, 0);
     }
 
     remove(SM_FAVORITES_PATH);
