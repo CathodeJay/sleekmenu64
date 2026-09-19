@@ -213,7 +213,8 @@ def data_file(name: str, work: Path) -> Path:
     raise PrepError(f"{name} is neither bundled in this archive nor in a checkout's data/ folder")
 
 
-def report_checksums(roms: Path, rom_paths: list[str], database: dict, fix: bool) -> None:
+def report_checksums(roms: Path, rom_paths: list[str], database: dict, fix: bool,
+                     log=print, progress_factory=None) -> None:
     """The checksum pass and what it says. A mismatch is the one thing on
     a card that makes a game black-screen on the console and work in an
     emulator, so it is named file by file, with the way out."""
@@ -221,16 +222,106 @@ def report_checksums(roms: Path, rom_paths: list[str], database: dict, fix: bool
                      if (h := headers.read(roms / p)) is not None and h.crc_pair not in database)
     if not candidates:
         return
-    progress = Progress(candidates, "checksums")
+    progress = (progress_factory or Progress)(candidates, "checksums")
     report = check_checksums(roms, rom_paths, database, fix, progress)
     progress.done(f"checksum: {report.checked} hacks, translations and homebrew checked, "
                   f"{len(report.mismatched)} with a header that does not match"
                   + (f", {report.unknown_boot} with a boot code of their own" if report.unknown_boot else ""))
     for rom_path in report.mismatched:
-        print(f"          {'fixed  ' if rom_path in report.fixed else 'BAD    '} {rom_path}")
+        log(f"          {'fixed  ' if rom_path in report.fixed else 'BAD    '} {rom_path}")
     if report.mismatched and not fix:
-        print("          The browser rewrites these at launch where the cartridge lets it; "
-              "to fix the files themselves, run again with --fix-checksums.")
+        log("          The browser rewrites these at launch where the cartridge lets it; "
+            "to fix the files themselves, run again with --fix-checksums.")
+
+
+@dataclass
+class Options:
+    """What a run is told, from the command line or the window."""
+    card: Path | None = None        # the card root; None means the folder this archive is in
+    roms: Path | None = None        # one folder to catalog; None means every game on the card
+    metadata: Path | None = None    # the collection; None means whichever is on the card
+    dry_run: bool = False
+    fix_checksums: bool = False
+    no_checksums: bool = False
+
+
+def run(options: Options, log=print, fail=None, progress_factory=None) -> int:
+    """The whole run. Every line of the report goes through `log`, errors
+    through `fail` (the same, by default), and the three long passes take
+    their progress line from `progress_factory(total, label)` -- the
+    terminal's rewriting line by default, the window's bar when there is
+    one. The command line and the window share this, so the two can never
+    do different things to a card."""
+    fail = fail or log
+    progress_factory = progress_factory or Progress
+    try:
+        card = find_card(options.card)
+        found = find_library(card, options.roms, create=not options.dry_run)
+        source = find_metadata(card, options.metadata)
+    except (PrepError, library.LibraryError) as error:
+        fail(f"sleekmenu-prep: {error}")
+        return 2
+
+    roms, rom_paths = found.root, found.rom_paths
+    log(f"card:     {card}")
+    log(f"roms:     {describe_library(found)}" + (f" under {roms}" if roms != card else ""))
+    if not options.dry_run:
+        for folder in lay_out(card):
+            log(f"created   {folder.relative_to(card)}/")
+    if found.created is not None:
+        log(f"created   {found.created.relative_to(card)}/")
+        log("")
+        log("There were no games yet, so the folders are in place and nothing "
+            "else was done. Copy your ROMs onto the card -- into ROMS/, or any "
+            "folders you like -- and run this again.")
+        return 0
+    if not rom_paths:
+        log("\nNo .z64, .v64 or .n64 files anywhere on the card. Copy your games "
+            "onto it, in any folders you like, and run this again.")
+        return 0
+
+    # One pass over the card, with progress, before anything else asks. Every
+    # later step reads headers through the cache and touches the card no more.
+    scan = progress_factory(len(rom_paths), "scanning")
+    found_roms = headers.scan(roms, rom_paths, scan)
+    scan.done(f"scanned   {len(rom_paths)} files, {found_roms} are N64 ROMs")
+
+    work = Path(tempfile.mkdtemp(prefix="sleekmenu-prep-"))
+    repo = None
+    try:
+        database_path = data_file("coverdb.csv", work)
+        genres_path = data_file("genres.csv", work)
+        if source is None:
+            log("metadata: no collection on the card; the card gets a catalog and no covers")
+            log(f"          download {metadata_repo.RELEASE_ZIP_NAME} from "
+                f"{metadata_repo.RELEASES_URL}")
+            log("          and put it next to this file, then run this again")
+        else:
+            repo = MetadataRepo.open(source)
+            log(f"metadata: {repo.art_count()} boxes in {source}")
+        if not options.no_checksums:
+            report_checksums(roms, rom_paths, coverdb.load(database_path),
+                             fix=options.fix_checksums and not options.dry_run,
+                             log=log, progress_factory=progress_factory)
+        summary = prepare_card.prepare(
+            roms=roms, card=card, database_path=database_path, repo=repo,
+            work=work / "build", dry_run=options.dry_run, genres=genres_path, log=log,
+            progress_stream=None, rom_paths=rom_paths, progress_factory=progress_factory)
+    except (PrepError, RepoError, prepare_card.PrepareError, coverdb.CoverDBError,
+            pack_covers.CoverPackError, make_sprite.SpriteError, cover_pack.CoverPackError,
+            build_catalog.CatalogError, library.LibraryError, OSError) as error:
+        fail(f"sleekmenu-prep: {error}")
+        return 1
+    finally:
+        if repo is not None:
+            repo.close()
+
+    if options.dry_run:
+        log("\ndry run: nothing written to the card")
+    else:
+        for name in summary.get("written", []):
+            log(f"wrote     {card / name}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -251,75 +342,26 @@ def main(argv: list[str] | None = None) -> int:
                         help="rewrite the header checksum of a hack that would not boot on a console")
     parser.add_argument("--no-checksums", action="store_true",
                         help="skip the checksum pass over hacks and homebrew")
+    parser.add_argument("--gui", action="store_true",
+                        help="open the window instead of running in the terminal")
     args = parser.parse_args(argv)
 
-    try:
-        card = find_card(args.card)
-        found = find_library(card, args.roms, create=not args.dry_run)
-        source = find_metadata(card, args.metadata)
-    except (PrepError, library.LibraryError) as error:
-        print(f"sleekmenu-prep: {error}", file=sys.stderr)
-        return 2
+    # The window, for a Python that has a toolkit to draw it with. The
+    # downloadable builds open it without asking; the archive is the
+    # terminal's, and opens it only when told to.
+    if args.gui:
+        from tools import sleekmenu_gui
+        if not sleekmenu_gui.available():
+            print("sleekmenu-prep: no window toolkit (tkinter) in this Python; run from a terminal",
+                  file=sys.stderr)
+            return 2
+        return sleekmenu_gui.main([])
 
-    roms, rom_paths = found.root, found.rom_paths
-    print(f"card:     {card}")
-    print(f"roms:     {describe_library(found)}" + (f" under {roms}" if roms != card else ""))
-    if not args.dry_run:
-        for folder in lay_out(card):
-            print(f"created   {folder.relative_to(card)}/")
-    if found.created is not None:
-        print(f"created   {found.created.relative_to(card)}/")
-        print()
-        print("There were no games yet, so the folders are in place and nothing "
-              "else was done. Copy your ROMs onto the card -- into ROMS/, or any "
-              "folders you like -- and run this again.")
-        return 0
-    if not rom_paths:
-        print("\nNo .z64, .v64 or .n64 files anywhere on the card. Copy your games "
-              "onto it, in any folders you like, and run this again.")
-        return 0
+    return run(Options(card=args.card, roms=args.roms, metadata=args.metadata,
+                       dry_run=args.dry_run, fix_checksums=args.fix_checksums,
+                       no_checksums=args.no_checksums),
+               log=print, fail=lambda message: print(message, file=sys.stderr))
 
-    # One pass over the card, with progress, before anything else asks. Every
-    # later step reads headers through the cache and touches the card no more.
-    scan = Progress(len(rom_paths), "scanning")
-    found_roms = headers.scan(roms, rom_paths, scan)
-    scan.done(f"scanned   {len(rom_paths)} files, {found_roms} are N64 ROMs")
-
-    work = Path(tempfile.mkdtemp(prefix="sleekmenu-prep-"))
-    repo = None
-    try:
-        database_path = data_file("coverdb.csv", work)
-        genres_path = data_file("genres.csv", work)
-        if source is None:
-            print("metadata: no collection on the card; the card gets a catalog and no covers")
-            print(f"          download {metadata_repo.RELEASE_ZIP_NAME} from "
-                  f"{metadata_repo.RELEASES_URL}")
-            print("          and put it next to this file, then run this again")
-        else:
-            repo = MetadataRepo.open(source)
-            print(f"metadata: {repo.art_count()} boxes in {source}")
-        if not args.no_checksums:
-            report_checksums(roms, rom_paths, coverdb.load(database_path),
-                             fix=args.fix_checksums and not args.dry_run)
-        summary = prepare_card.prepare(
-            roms=roms, card=card, database_path=database_path, repo=repo,
-            work=work / "build", dry_run=args.dry_run, genres=genres_path, log=print,
-            progress_stream=None, rom_paths=rom_paths)
-    except (PrepError, RepoError, prepare_card.PrepareError, coverdb.CoverDBError,
-            pack_covers.CoverPackError, make_sprite.SpriteError, cover_pack.CoverPackError,
-            build_catalog.CatalogError, library.LibraryError, OSError) as error:
-        print(f"sleekmenu-prep: {error}", file=sys.stderr)
-        return 1
-    finally:
-        if repo is not None:
-            repo.close()
-
-    if args.dry_run:
-        print("\ndry run: nothing written to the card")
-    else:
-        for name in summary.get("written", []):
-            print(f"wrote     {card / name}")
-    return 0
 
 
 if __name__ == "__main__":

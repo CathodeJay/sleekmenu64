@@ -57,7 +57,8 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             rom_image: Path | None = None, overrides: Path | None = None,
             work: Path | None = None, dry_run: bool = False,
             loose_covers: bool = False, genres: Path | None = None,
-            log=print, progress_stream=None, rom_paths: list[str] | None = None) -> dict:
+            log=print, progress_stream=None, rom_paths: list[str] | None = None,
+            progress_factory=None) -> dict:
     _check_directory(roms, "ROM folder")
     _check_directory(card, "card")
     try:
@@ -98,11 +99,15 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             + f", {len(planned.without)} do not")
 
         # Progress follows the log: a caller that silenced one wants neither.
-        # print is the only log that means "a person is watching".
+        # print is the only log that means "a person is watching" -- unless
+        # the caller brought its own progress, which a window does.
         progress = None
-        if log is print and progress_stream is not False and planned.sources and not dry_run:
-            progress = Progress(len(planned.sources), "sprites",
-                                stream=None if progress_stream is None else progress_stream)
+        if planned.sources and not dry_run:
+            if progress_factory is not None:
+                progress = progress_factory(len(planned.sources), "sprites")
+            elif log is print and progress_stream is not False:
+                progress = Progress(len(planned.sources), "sprites",
+                                    stream=None if progress_stream is None else progress_stream)
         summary["sprites"] = pack_covers.pack(planned, repo, covers_out, dry_run=dry_run,
                                               progress=progress)
         if progress is not None:

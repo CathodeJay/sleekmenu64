@@ -25,6 +25,16 @@ CC BY-SA 4.0), which holds no images.
 card from a library in which not one game appears in the shipped database and
 checks the result still works, boxes included.
 
+**One tool, two faces.** The card is prepared by `tools/sleekmenu_prep.run()`,
+whether the command line or the window asks: the window
+(`tools/sleekmenu_gui.py`, Tkinter) collects five answers and hands them
+over, and reports the same lines and progress the terminal prints. The
+downloadable builds are that window frozen with its Python by PyInstaller,
+one per platform, built by `.github/workflows/prep-app.yml` on every tag and
+proven there by preparing a card from the frozen binary. They are not
+code-signed: that is a yearly fee per platform, and the README says what to
+click instead.
+
 **The card is the EverDrive's.** The browser writes five files (see
 CARD_LAYOUT.md), never creates, renames or deletes anything else, and uses the
 EverDrive menu's own save files and records so the two menus can be used

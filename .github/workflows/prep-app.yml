@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# The card-preparation window as one download per platform: the same
+# Python as sleekmenu-prep.pyz, frozen with its interpreter and Pillow by
+# PyInstaller, for people with no Python and no terminal. Built on every
+# tag and attached to that tag's release; also on request, to try a build
+# without tagging. The binaries are not code-signed: macOS and Windows warn
+# the first time, and the README says what to click.
+name: prep app
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: mac-arm64
+          - os: macos-13
+            name: mac-intel
+          - os: windows-latest
+            name: windows
+          - os: ubuntu-22.04
+            name: linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Pillow and PyInstaller
+        run: pip install -r requirements-dev.txt pyinstaller
+
+      - name: Check the window's logic
+        # The parts that need no screen, on every platform; the window
+        # itself on Linux, under a virtual display.
+        run: python -m unittest tests.test_sleekmenu_gui -v
+
+      - name: Check the window itself
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb
+          xvfb-run -a python -m unittest tests.test_sleekmenu_gui -v
+
+      - name: Freeze
+        shell: bash
+        run: |
+          python -m PyInstaller --noconfirm --onefile --windowed \
+            --name "SleekMenu-Prep" --paths . \
+            --add-data "$PWD/data/coverdb.csv:data" \
+            --add-data "$PWD/data/genres.csv:data" \
+            --add-data "$PWD/data/LICENSE:data" \
+            tools/sleekmenu_gui.py
+
+      - name: Prove the build starts and prepares a card
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from tests.rom_fixtures import write_rom
+          from tests.test_sleekmenu_prep import write_collection
+          write_rom(Path("smoke/CARD/ROMS/Wave Race 64 (USA).z64"), 0x11, 0x22, game_code="WR")
+          write_collection(Path("smoke/CARD/release-metadata.zip"), "NWRE", zipped=True)
+          PY
+          case "${{ runner.os }}" in
+            macOS)   app="dist/SleekMenu-Prep.app/Contents/MacOS/SleekMenu-Prep" ;;
+            Windows) app="dist/SleekMenu-Prep.exe" ;;
+            *)       app="dist/SleekMenu-Prep" ;;
+          esac
+          card="$PWD/smoke/CARD"
+          run=""
+          case "${{ runner.os }}" in
+            Linux)   sudo apt-get install -y xvfb; run="xvfb-run -a" ;;
+            Windows) card="$(pwd -W)/smoke/CARD" ;;
+          esac
+          $run "$app" --smoke --card "$card"
+          test -f smoke/CARD/sleekmenu/catalog.ebc
+          test -f smoke/CARD/sleekmenu/covers.pak
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p out
+          case "${{ runner.os }}" in
+            macOS)
+              ditto -c -k --keepParent dist/SleekMenu-Prep.app "out/SleekMenu-Prep-${{ matrix.name }}.zip" ;;
+            Windows)
+              cp dist/SleekMenu-Prep.exe "out/SleekMenu-Prep-${{ matrix.name }}.exe" ;;
+            *)
+              cp dist/SleekMenu-Prep "out/SleekMenu-Prep-${{ matrix.name }}" ;;
+          esac
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SleekMenu-Prep-${{ matrix.name }}
+          path: out/*
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*

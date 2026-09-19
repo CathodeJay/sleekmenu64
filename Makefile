@@ -7,7 +7,7 @@ COVERDB := data/coverdb.csv
 
 .PHONY: all help test card metadata coverdb card-art \
         covers-pak discover-sd check-n64 font-dfs slim clean \
-        curate refresh registry rom-db prep release
+        curate refresh registry rom-db prep release gui
 
 all: help
 
@@ -17,6 +17,8 @@ help:
 	@echo "The release is two files: the ROM and the card-preparation tool."
 	@echo "  make prep       Build build/release/sleekmenu-prep.pyz (Python only)"
 	@echo "  make release    Build both; needs the libdragon toolchain for the ROM"
+	@echo ""
+	@echo "  make gui        Open the card-preparation window (needs Tk in this Python)"
 	@echo ""
 	@echo "Preparing a card from a checkout (the .pyz does this for you on the card):"
 	@echo "  make card CARD=/Volumes/CARD ROMS_ROOT=/Volumes/CARD/ROMS [METADATA=release-metadata.zip] [ROM=...]"
@@ -127,6 +129,12 @@ prep:
 	$(PYTHON) tools/build_prep.py --output $(BUILD_DIR)/release/sleekmenu-prep.pyz
 	@$(PYTHON) $(BUILD_DIR)/release/sleekmenu-prep.pyz --help > /dev/null
 	@echo "Release tool: $(BUILD_DIR)/release/sleekmenu-prep.pyz"
+
+# The window, from a checkout. The releases page carries it frozen with its
+# Python for people who have neither; .github/workflows/prep-app.yml builds
+# those.
+gui:
+	$(PYTHON) tools/sleekmenu_gui.py
 
 # Everything a GitHub release carries. Nothing else: no art, no metadata --
 # the tool builds those on the user's card from the collection they put there.

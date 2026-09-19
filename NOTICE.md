@@ -17,6 +17,20 @@ ships here at all.**
 | `data/coverdb.csv`, `data/genres.csv` | CC BY-SA 4.0 | libretro-database, plus corrections |
 | box art | not distributed | the respective publishers |
 
+## The downloadable window
+
+`SleekMenu-Prep-*` on the releases page is `tools/sleekmenu_gui.py` frozen
+with its interpreter by PyInstaller (`.github/workflows/prep-app.yml`). A
+build carries, besides this project's own AGPL code and `data/`:
+
+| Component | Licence |
+|---|---|
+| Python, with Tcl/Tk | PSF-2.0; Tcl/Tk's BSD-style licence |
+| Pillow | MIT-CMU |
+| PyInstaller's bootloader | GPL-2.0 with the bootloader exception, which places no terms on the frozen program |
+
+Nothing else is bundled; the box art still comes from the card.
+
 ## Why AGPL
 
 `third_party/n64flashcartmenu/boot/` provides the IPL2→IPL3 handoff — CIC

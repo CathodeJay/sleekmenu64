@@ -16,8 +16,10 @@ game started from either menu carries its save into the other.
 
 - An EverDrive-64 X7 (OS 3.11) or an EverDrive-64 Pro, with your ROMs on
   the card in any folders you like — `ROMS`, `Games`, several, or none.
-- A computer with Python 3.9 or newer and [Pillow](https://python-pillow.org/)
-  (`pip install Pillow`) to prepare the card. No compiler, no toolchain.
+- A computer to prepare the card: either Python 3.9 or newer with
+  [Pillow](https://python-pillow.org/) (`pip install Pillow`), or the
+  downloadable window from the releases page, which needs nothing at all.
+  No compiler, no toolchain either way.
 
 ## Install
 
@@ -53,6 +55,17 @@ It finds every ROM on the card, wherever it is, matches each one to its box
 and description, and writes `sleekmenu/catalog.ebc` and
 `sleekmenu/covers.pak` beside itself. A card of three thousand games takes
 under a minute. Run it again whenever you add games.
+
+**No Python? Use the window instead.** The releases page also carries the
+same tool with Python inside, one download per system:
+`SleekMenu-Prep-mac-arm64.zip` (Apple silicon), `SleekMenu-Prep-mac-intel.zip`,
+`SleekMenu-Prep-windows.exe`, `SleekMenu-Prep-linux`. Open it, pick the card
+(it is picked for you when it is the only removable disk), check that the
+box-art zip was found, press Prepare. It is not code-signed, so the first
+launch warns: on macOS, right-click the app and choose Open (on macOS 15,
+System Settings → Privacy & Security → Open Anyway); on Windows, More info
+→ Run anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
+opens the same window.
 
 **5. Eject the card, put it in the cart, and start `SleekMenu64.z64` from the
 EverDrive menu.** Press Start on a game to play it, A for its details. To get
