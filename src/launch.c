@@ -3,6 +3,7 @@
 #include "cheats.h"
 #include "cheats_io.h"
 #include "flashcart.h"
+#include "rom_checksum.h"
 #include "save_type.h"
 #include "history.h"
 #include "save_sync.h"
@@ -53,6 +54,10 @@ static sm_cheat_pack_t cheat_pack;
 static bool cheats_available;
 static bool cheats_dirty;
 static sm_cheats_hook_t cheats_hook = SM_CHEATS_HOOK_UNKNOWN_CIC;
+/* The checksum's fate at the last launch, and whether a stale one that
+   could not be corrected has already been shown once for this game. */
+static sm_checksum_state_t checksum_state;
+static bool checksum_overridden;
 static uint32_t cheat_words[SM_CHEAT_WORDS_MAX + 4u] __attribute__((aligned(16)));
 
 /* The UI owns the history list -- it is drawn from it -- and lends it here so
@@ -218,6 +223,8 @@ sm_launch_result_t launch_prepare(const char *relative_path) {
     cheats_available = false;
     cheats_dirty = false;
     cheats_hook = SM_CHEATS_HOOK_UNKNOWN_CIC;
+    checksum_state = SM_CHECKSUM_UNCHECKED;
+    checksum_overridden = false;
     memset(&selected_save, 0, sizeof(selected_save));
     describe_save();
     last_result = SM_LAUNCH_IO_ERROR;
@@ -322,6 +329,46 @@ sm_launch_result_t launch_probe(void) {
     return last_result;
 }
 
+/* The boot code's checksum, over the game as it now sits in cartridge
+   memory, corrected there when the header's two words are stale. This is
+   what the stock menu does as it loads ("Auto CRC fix"), and the reason a
+   hack whose author never recomputed the words boots from it and not from
+   a loader that leaves the header alone. The sum reads a megabyte back
+   over the PI, which the verified load already does for the whole file. */
+static bool read_cart(uint32_t offset, void *dst, uint32_t bytes, void *context) {
+    (void)context;
+    return sm_flashcart()->read_rom(offset, dst, bytes);
+}
+
+static sm_checksum_state_t settle_checksum(void) {
+    const sm_flashcart_t *cart = sm_flashcart();
+    uint32_t expected[2], computed[2];
+    static uint8_t words[8] __attribute__((aligned(16)));
+    static uint8_t back[8] __attribute__((aligned(16)));
+    if (selected_cic == SM_CIC_UNKNOWN) return SM_CHECKSUM_UNKNOWN_BOOT;
+    /* A game shorter than the summed megabyte has the boot code reading
+       past its end, which is whatever the load left there; nothing to
+       compare against. */
+    if (!cart->read_rom || selected_size < SM_CHECKSUM_START + SM_CHECKSUM_LENGTH)
+        return SM_CHECKSUM_UNCHECKED;
+    sm_checksum_header_words(selected_header, expected);
+    if (!sm_checksum_compute((unsigned)selected_cic, selected_header + SM_CHECKSUM_BOOT_OFFSET,
+            read_cart, NULL, computed))
+        return SM_CHECKSUM_UNCHECKED;
+    if (computed[0] == expected[0] && computed[1] == expected[1]) return SM_CHECKSUM_OK;
+    if (!cart->write_rom) return SM_CHECKSUM_UNFIXABLE;
+    sm_checksum_encode(computed, words);
+    /* The write is believed only when it reads back: a cart whose memory
+       the console cannot write into loses nothing here, and says so. */
+    if (!cart->write_rom(SM_CHECKSUM_WORDS_OFFSET, words, sizeof(words)) ||
+        !cart->read_rom(SM_CHECKSUM_WORDS_OFFSET, back, sizeof(back)) ||
+        memcmp(words, back, sizeof(words)) != 0)
+        return SM_CHECKSUM_UNFIXABLE;
+    return SM_CHECKSUM_FIXED;
+}
+
+sm_checksum_state_t launch_checksum_state(void) { return checksum_state; }
+
 sm_launch_result_t launch_rom(sm_launch_progress_cb progress, void *context) {
     const sm_flashcart_t *cart = sm_flashcart();
     progress_bridge_t bridge = { progress, context, 0u, false };
@@ -355,6 +402,17 @@ sm_launch_result_t launch_rom(sm_launch_progress_cb progress, void *context) {
                 default: last_result = SM_LAUNCH_IO_ERROR; break;
             }
             return last_result;
+        }
+
+        /* The header's checksum, corrected in cartridge memory when it is
+           stale. One that cannot be corrected stops this launch with a
+           message; the next Start goes ahead, and the game does what it
+           does. */
+        checksum_state = settle_checksum();
+        if (checksum_state == SM_CHECKSUM_UNFIXABLE && !checksum_overridden) {
+            checksum_overridden = true;
+            set_status(SM_LAUNCH_BAD_CHECKSUM);
+            return SM_LAUNCH_BAD_CHECKSUM;
         }
 
         /* Put this game's save where the cartridge will find it and record it

@@ -960,6 +960,41 @@ class FlashcartInterfaceTests(unittest.TestCase):
         self.assertIn("cart->save_sync_flush(", main)
         self.assertNotIn("debug_init_sdfs(", main)
 
+    def test_the_checksum_is_settled_in_cartridge_memory_between_load_and_save(self):
+        """The boot code's checksum is summed over what the load put in
+        cartridge memory and corrected there when the header's words are
+        stale -- after the load, before the save is armed, through the
+        interface; and a correction is believed only when it reads back.
+        The sum itself is a pure module the host test drives against
+        tools/n64_checksum.py, which was checked on real cartridges."""
+        launch = self.source("launch.c")
+        load = launch.index("cart->load_rom(")
+        settle = launch.index("checksum_state = settle_checksum();")
+        arm = launch.index("cart->arm_save(")
+        self.assertLess(load, settle)
+        self.assertLess(settle, arm)
+        settle_body = launch[launch.index("static sm_checksum_state_t settle_checksum(void)"):]
+        settle_body = settle_body[:settle_body.index("\n}")]
+        self.assertIn("sm_checksum_compute(", settle_body)
+        self.assertIn("cart->write_rom(SM_CHECKSUM_WORDS_OFFSET, words, sizeof(words))", settle_body)
+        self.assertIn("cart->read_rom(SM_CHECKSUM_WORDS_OFFSET, back, sizeof(back))", settle_body)
+        self.assertIn("memcmp(words, back, sizeof(words)) != 0", settle_body)
+        self.assertIn("if (selected_cic == SM_CIC_UNKNOWN) return SM_CHECKSUM_UNKNOWN_BOOT;", settle_body)
+        # an uncorrectable checksum stops one launch, and the next Start goes
+        self.assertIn("checksum_state == SM_CHECKSUM_UNFIXABLE && !checksum_overridden", launch)
+        self.assertIn("checksum_overridden = false;", launch[:launch.index("sm_launch_result_t launch_rom(")])
+        # the module knows nothing of the console
+        module = self.source("rom_checksum.c")
+        self.assertNotIn("libdragon", module)
+        self.assertNotIn("dma_", module)
+        # both carts offer the access, the placeholder offers none
+        for backend in ("flashcart_x7.c", "pro/flashcart_pro.c"):
+            table = self.source(backend)
+            self.assertIn(".read_rom = ", table)
+            self.assertIn(".write_rom = ", table)
+        self.assertIn(".read_rom = NULL,", self.source("flashcart.c"))
+        self.assertIn("SM_LAUNCH_BAD_CHECKSUM", self.source("launch_policy.c"))
+
     def test_detection_reads_the_pro_before_probing_the_x7(self):
         """libcart's X-series probe writes a key to an address the Pro maps
         as backup RAM. Reading the Pro's id register is harmless on any

@@ -371,6 +371,21 @@ static sm_flashcart_load_t pro_load(const char *sd_path, uint32_t bytes, bool by
     return SM_FLASHCART_LOAD_OK;
 }
 
+/* Cartridge memory after a load: read over the PI, as the header check
+   above does; written through the MCU's own memory write, which is how the
+   Pro takes anything into its memory. */
+static bool pro_read_rom(uint32_t offset, void *dst, uint32_t bytes) {
+    if (loaded_bytes == 0u) return false;
+    pi_rd(dst, ADDR_PI_ROM + offset, (u32)bytes);
+    return true;
+}
+
+static bool pro_write_rom(uint32_t offset, const void *src, uint32_t bytes) {
+    if (loaded_bytes == 0u) return false;
+    ed_fci_wr(ADDR_FCI_ROM + offset, (void *)src, (u32)bytes);
+    return true;
+}
+
 static u32 bram_type_of(sm_save_type_t type) {
     switch (type) {
         case SM_SAVE_EEP4K: return DEV_BRM_EEP4K;
@@ -573,6 +588,8 @@ const sm_flashcart_t sm_flashcart_pro = {
     .init = pro_init,
     .save_sync_flush = pro_flush,
     .load_rom = pro_load,
+    .read_rom = pro_read_rom,
+    .write_rom = pro_write_rom,
     .arm_save = pro_arm,
     .attach_disk = pro_attach_disk,
     .boot = pro_boot,

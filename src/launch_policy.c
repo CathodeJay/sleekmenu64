@@ -242,6 +242,7 @@ const char *launch_result_message(sm_launch_result_t result) {
         case SM_LAUNCH_VERIFY_FAILED: return "CARTRIDGE VERIFY FAILED; blocked";
         case SM_LAUNCH_NO_64DD: return "64DD disks need an EverDrive-64 Pro";
         case SM_LAUNCH_NO_IPL: return "64DD IPL missing from ED64/64ddipl";
+        case SM_LAUNCH_BAD_CHECKSUM: return "Bad checksum, unfixable here; Start again to try";
         default: return "ROM OPEN FAILED; read/transfer blocked";
     }
 }

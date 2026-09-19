@@ -121,6 +121,12 @@ applies it. The header shows how many games match.
 - **Clock.** A game that keeps time (Animal Forest) gets the cartridge's
   clock as it does from the stock menu: set at launch on the X7, served by
   the cartridge on the Pro.
+- **Hacks and homebrew.** A hack whose author never recomputed the header
+  checksum runs in an emulator and black-screens on a console. SleekMenu
+  corrects the checksum in cartridge memory as it launches, the way the
+  EverDrive menu does; the prep tool checks every hack, translation and
+  homebrew on the card, names the ones whose checksum is stale, and
+  rewrites them if you run it with `--fix-checksums`.
 - **ROM formats.** `.z64` and `.v64` (byteswapped) dumps load; `.n64`
   word-swapped dumps are listed but refused, convert them to `.z64`. Size
   limit: 64 MiB on the X7, 126 MiB on the Pro.

@@ -51,8 +51,22 @@ typedef enum {
     SM_LAUNCH_VERIFY_FAILED,
     SM_LAUNCH_WORD_SWAPPED,
     SM_LAUNCH_NO_64DD,      /* a disk image on a cartridge that has no drive */
-    SM_LAUNCH_NO_IPL        /* the 64DD IPL for the disk's region is not on the card */
+    SM_LAUNCH_NO_IPL,       /* the 64DD IPL for the disk's region is not on the card */
+    SM_LAUNCH_BAD_CHECKSUM  /* the header's checksum is stale and could not be corrected */
 } sm_launch_result_t;
+
+/* What became of the boot code's checksum at the last launch: summed over
+   cartridge memory after the load, and corrected there when the header's
+   words were stale (rom_checksum.h). UNFIXABLE stops the first launch with
+   a message; the next Start goes ahead regardless, which is the person's
+   call to make. */
+typedef enum {
+    SM_CHECKSUM_UNCHECKED = 0,   /* no launch yet, or the cart offers no access */
+    SM_CHECKSUM_UNKNOWN_BOOT,    /* not a retail boot code: its own rules */
+    SM_CHECKSUM_OK,
+    SM_CHECKSUM_FIXED,
+    SM_CHECKSUM_UNFIXABLE
+} sm_checksum_state_t;
 
 /* 64DD disk images (.ndd). The retail image starts with the system area,
    whose first word says which drive it was made for; the drive's IPL must
@@ -159,6 +173,7 @@ bool launch_cheats_possible(void);
 /* Whether the engine can hook the selected ROM's boot code; the card says
    so when it cannot, and no list is handed over. */
 sm_cheats_hook_t launch_cheats_hook(void);
+sm_checksum_state_t launch_checksum_state(void);
 bool launch_cheat_toggle(uint32_t index);
 bool launch_cheats_save(void);
 

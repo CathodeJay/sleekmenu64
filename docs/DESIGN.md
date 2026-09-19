@@ -120,6 +120,22 @@ quiesces the RCP, copies the game's own boot code into the RSP's memory,
 installs the cheat engine when there is a list, and jumps. That code is AGPL
 and the reason the whole project is.
 
+**The checksum.** The retail boot code sums the megabyte after itself and
+compares two words of the result with the header; a mismatch is a black
+screen before the game's first instruction. Emulators skip the check, so a
+hack can ship with stale words, and the EverDrive menu quietly rewrites
+them as it loads. After its own load the browser sums the game as it sits in
+cartridge memory (`rom_checksum.c`, pure; the megabyte comes through a
+reader) and, when the words are stale, writes the right ones into the
+header there and reads them back. On the Pro the write goes through the
+MCU; on the X7 through the PI, which is the one step not yet seen to take
+on hardware — the read-back decides, and a correction that did not take
+stops that launch with a message rather than booting into a black screen;
+the next Start goes ahead regardless. `tools/n64_checksum.py` is the same
+sum on the computer, checked against real cartridges of every boot code;
+the prep tool runs it over every dump the database does not know and
+rewrites the file only when asked (`--fix-checksums`).
+
 **The clock.** A game that keeps time — Animal Forest and its translations —
 is flagged by the same lookup that resolves its save type. On the Pro the
 cartridge's MCU is told to serve its own clock and nothing more is needed.
@@ -224,6 +240,8 @@ Open:
 - Controller Pak (`.mpk`) backup and restore.
 - 64DD on hardware.
 - The Pro's clock in a game: the MCU is told to serve it; not yet watched.
+- The checksum correction on the X7: whether SDRAM takes the PI write. The
+  read-back reports it either way.
 - Cheats seen to take effect in a game: the page and the matching work on
   hardware; the one in-game test so far used a file for the wrong region.
 - Cheats on CIC 6101 cartridges (see above).

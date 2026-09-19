@@ -7,4 +7,10 @@ uint32_t io_read(uint32_t address);
 void io_write(uint32_t address, uint32_t value);
 void joybus_exec(const void *input, void *output);
 bool debug_init_sdfs(const char *prefix, int partition);
+/* PI DMA and the cache lines around it, for the cartridge-memory access. */
+void dma_read(void *ram, unsigned long pi_address, unsigned long len);
+void dma_write(const void *ram, unsigned long pi_address, unsigned long len);
+void data_cache_hit_writeback(void *addr, unsigned long len);
+void data_cache_hit_invalidate(void *addr, unsigned long len);
+void data_cache_hit_writeback_invalidate(void *addr, unsigned long len);
 #endif

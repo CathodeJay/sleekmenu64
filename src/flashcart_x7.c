@@ -85,6 +85,25 @@ static sm_flashcart_load_t x7_load(const char *sd_path, uint32_t bytes, bool byt
     }
 }
 
+/* SDRAM over the PI, the way the verified load reads it back. The write is
+   the one thing here the cartridge has not been seen to do: the stock OS
+   fixes checksums, so the memory takes a write somewhere, but whether the
+   PI is that somewhere is settled by the read-back in launch.c. */
+static bool x7_read_rom(uint32_t offset, void *dst, uint32_t bytes) {
+    if (cart_type != CART_EDX) return false;
+    data_cache_hit_writeback_invalidate(dst, bytes);
+    dma_read(dst, SM_LOAD_CART_PHYS + offset, bytes);
+    data_cache_hit_invalidate(dst, bytes);
+    return true;
+}
+
+static bool x7_write_rom(uint32_t offset, const void *src, uint32_t bytes) {
+    if (cart_type != CART_EDX) return false;
+    data_cache_hit_writeback((void *)src, bytes);
+    dma_write(src, SM_LOAD_CART_PHYS + offset, bytes);
+    return true;
+}
+
 static bool x7_arm(const char *sd_path, const uint8_t *header, sm_save_type_t type,
     unsigned config, sm_save_sync_report_t *report) {
     if (!sm_x7_rtc_prepare(config)) {
@@ -152,6 +171,8 @@ const sm_flashcart_t sm_flashcart_x7 = {
     .init = x7_init,
     .save_sync_flush = x7_flush,
     .load_rom = x7_load,
+    .read_rom = x7_read_rom,
+    .write_rom = x7_write_rom,
     .arm_save = x7_arm,
     .attach_disk = NULL,
     .boot = x7_boot,

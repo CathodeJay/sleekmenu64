@@ -71,6 +71,16 @@ typedef struct {
         bool verify, sm_flashcart_progress_cb progress, void *context,
         char *status, size_t status_size);
 
+    /* Cartridge memory as the load left it, before the jump: `bytes` from
+       `offset` of the ROM area into `dst` (a multiple of 8, aligned), and
+       `bytes` from `src` into it. This is how the boot code's checksum is
+       summed and, when the header's words are stale, corrected in place
+       (launch.c). A write is confirmed by the caller reading back, so a
+       cart whose memory the console cannot write into fails that read-back
+       rather than anything worse. NULL on a cart without the access. */
+    bool (*read_rom)(uint32_t offset, void *dst, uint32_t bytes);
+    bool (*write_rom)(uint32_t offset, const void *src, uint32_t bytes);
+
     /* Between the load and the jump: put the game's save where the cart
        will find it and record what is pending. False stops the boot. */
     bool (*arm_save)(const char *sd_path, const uint8_t *header, sm_save_type_t type,

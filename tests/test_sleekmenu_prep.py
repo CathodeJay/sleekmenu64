@@ -267,6 +267,39 @@ class EntryPointTests(unittest.TestCase):
         self.assertFalse((self.card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).exists())
         self.assertIn("anywhere on the card", self.output)
 
+    def test_a_hack_with_a_stale_checksum_is_named_and_fixed_only_on_request(self):
+        """A dump the database does not know is summed the way the boot
+        code sums it. A mismatch is reported with the file's name; the file
+        is rewritten only with --fix-checksums, and a dump the database
+        knows is never read a megabyte deep."""
+        from tests.test_n64_checksum import synthetic, with_boot_code
+        image = with_boot_code(synthetic(), 6102)
+        image[0x10:0x18] = bytes(8)
+        hack = self.roms / "Hacks" / "Wave Race 64 - Shoreline (hack).z64"
+        hack.parent.mkdir()
+        hack.write_bytes(bytes(image))
+        code = self.run_prep()
+        self.assertEqual(code, 0, self.output)
+        self.assertIn("1 with a header that does not match", self.output)
+        self.assertIn("BAD     ROMS/Hacks/Wave Race 64 - Shoreline (hack).z64", self.output)
+        self.assertIn("--fix-checksums", self.output)
+        self.assertEqual(hack.read_bytes()[0x10:0x18], bytes(8), "not touched")
+
+        code = self.run_prep("--fix-checksums", "--dry-run")
+        self.assertEqual(code, 0, self.output)
+        self.assertEqual(hack.read_bytes()[0x10:0x18], bytes(8), "a dry run writes nothing")
+
+        code = self.run_prep("--fix-checksums")
+        self.assertEqual(code, 0, self.output)
+        self.assertIn("fixed   ROMS/Hacks/Wave Race 64 - Shoreline (hack).z64", self.output)
+        self.assertNotEqual(hack.read_bytes()[0x10:0x18], bytes(8))
+        self.assertEqual(hack.read_bytes()[0x18:], bytes(image[0x18:]))
+
+        code = self.run_prep()
+        self.assertIn("0 with a header that does not match", self.output)
+        code = self.run_prep("--no-checksums")
+        self.assertNotIn("checksum:", self.output)
+
     def test_a_library_in_a_folder_of_its_own_name_is_catalogued_where_it_is(self):
         """The comment that started this: games in `Games/` and no `ROMS`
         at all. The catalog records `Games/...`, which the browser resolves
