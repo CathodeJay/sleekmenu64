@@ -6,6 +6,7 @@
 #include "launch.h"
 #include "flashcart.h"
 #include "rom_db.h"
+#include "version.h"
 #include <libdragon.h>
 #include <stdio.h>
 #include <string.h>
@@ -159,6 +160,9 @@ void ui_draw_loading(surface_t *s, const sm_layout_t *l, const char *phase,
         graphics_make_color(24, 45, 72, 255));
     graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
     graphics_draw_text(s, l->safe_left+4, l->safe_top+6, "SLEEKMENU 64");
+    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+    graphics_draw_text(s, l->safe_right - 4 - (int)strlen(SM_VERSION) * FONT_WIDTH,
+        l->safe_top+6, SM_VERSION);
     graphics_set_color(graphics_make_color(240, 240, 232, 255), 0);
     snprintf(line, sizeof(line), "%c %s", indicators[indicator_frame % 4], phase);
     draw_truncated(s, l->safe_left+4, l->safe_top+38, line, max_chars);

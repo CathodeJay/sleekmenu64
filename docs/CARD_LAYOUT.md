@@ -8,7 +8,7 @@ this is the reference.
 
 ```text
 /SleekMenu64.z64            the browser                        you copy it
-/sleekmenu-prep.pyz         the card-preparation tool          you copy it
+/sleekmenu-prep.pyz         the command-line prep tool         you copy it, if you use it
 /release-metadata.zip       box art and descriptions           fetched by the tool
 /ROMS/...                   your games, in any folders          yours
 /<any other folder>/...     or anywhere else on the card        yours

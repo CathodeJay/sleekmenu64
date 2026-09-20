@@ -51,8 +51,13 @@ at the window meant. The command line still prepares without one, for a
 card of homebrew with art of its own or a machine that cannot reach
 GitHub. The
 downloadable builds are that window frozen with its Python by PyInstaller,
-one per platform, built by `.github/workflows/prep-app.yml` on every tag and
-proven there by preparing a card from the frozen binary. They are not
+one per platform, built by `.github/workflows/release.yml` on every tag and
+proven there by preparing a card from the frozen binary; the same workflow
+builds the archive and gathers both into a draft release, whose notes are
+the tag's section of CHANGELOG.md. A tag that does not match the version
+in `tools/version.py` (and `src/version.h`, which a test holds to it)
+builds nothing. The ROM needs the libdragon toolchain and is added to the
+draft by hand. They are not
 code-signed: that is a yearly fee per platform, and the README says what to
 click instead.
 

@@ -16,71 +16,53 @@ game started from either menu carries its save into the other.
 
 - An EverDrive-64 X7 (OS 3.11) or an EverDrive-64 Pro, with your ROMs on
   the card in any folders you like — `ROMS`, `Games`, several, or none.
-- A computer to prepare the card: either Python 3.9 or newer with
-  [Pillow](https://python-pillow.org/) (`pip install Pillow`), or the
-  downloadable window from the releases page, which needs nothing at all.
-  No compiler, no toolchain either way.
+- A Mac, a Windows PC or a Linux computer to prepare the card, with
+  nothing to install.
 
 ## Install
 
-**1. Get the two release files** from this project's releases page:
+**1. Download two files** from the
+[releases page](https://github.com/CathodeJay/sleekmenu64/releases/latest):
+`SleekMenu64.z64`, the browser, and the prep GUI for your computer.
 
-- `SleekMenu64.z64` — the browser
-- `sleekmenu-prep.pyz` — the tool that builds the catalog and the covers
+| Your computer | The prep GUI |
+|---|---|
+| Mac with Apple silicon (M1 and later) | `SleekMenu-Prep-mac-arm64.zip` |
+| Mac with an Intel processor | `SleekMenu-Prep-mac-intel.zip` |
+| Windows | `SleekMenu-Prep-windows.exe` |
+| Linux | `SleekMenu-Prep-linux` |
 
-**2. Copy the two files to the root of the card**, next to your games:
+**2. Copy `SleekMenu64.z64` to the root of the card**, next to your games.
 
-```text
-/SleekMenu64.z64
-/sleekmenu-prep.pyz
-/ROMS/...                 or any folders of your own
-```
+**3. Open the prep GUI.** On a Mac, unzip it first. It is not code-signed,
+so the first launch warns:
 
-**3. Run the tool from the card.** It takes no arguments; running it from the
-card is how it knows where the card is.
+- **macOS 15 and later:** open it once, close the warning, then in System
+  Settings → Privacy & Security press Open Anyway. On macOS 14 and
+  earlier, right-click the app and choose Open.
+- **Windows:** More info → Run anyway.
+- **Linux:** make it runnable first: `chmod +x SleekMenu-Prep-linux`.
 
-```sh
-cd /Volumes/CARD          # or wherever the card is mounted
-python3 sleekmenu-prep.pyz
-```
+**4. Prepare the card.** The prep GUI picks the card when it is the only
+removable disk. The first time, press **Download**: it fetches the box art
+and descriptions onto the card, once (about 52 MB). Then press **Prepare**.
+A card of three thousand games takes under a minute.
 
-The first time, it fetches the box art and descriptions onto the card:
-`release-metadata.zip` (about 52 MB) from the
-[n64-flashcart-menu-metadata releases](https://github.com/n64-tools/n64-flashcart-menu-metadata/releases),
+**5. Eject the card, put it in the cart, and start `SleekMenu64.z64` from
+the EverDrive menu.** Press Start on a game to play it, A for its details.
+To get back to the EverDrive menu, reset the console.
+
+**Adding games later:** copy them onto the card, open the prep GUI, press
+Prepare. It takes seconds, since only what changed is read. A game copied
+on plays from the browser straight away, but has no box or facts until
+then.
+
+The box art and descriptions come from
+[n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata/releases),
 a public-domain collection of box scans and descriptions for every
-cartridge, shared with other N64 menus. SleekMenu ships none of it; the zip
-stays on the card and is read in place from then on. Offline, the card still
-gets its catalog, without covers, and the report shows where to download the
-zip by hand — drop it at the root of the card and run the tool again.
-`--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps the
-tool off the network altogether.
-
-Then it finds every ROM on the card, wherever it is, matches each one to its
-box and description, and writes `sleekmenu/catalog.ebc` and
-`sleekmenu/covers.pak` beside itself. A card of three thousand games takes
-under a minute the first time. Run it again whenever you add games: a
-later run reads only what changed — the catalog on the card remembers every
-header it read, every box it made and every checksum it summed, by the
-file's size and date — so a card of thousands with one new game takes
-seconds. "Start from nothing" in the window, or `--rebuild`, does it all
-again when a card looks wrong.
-
-To catalog one folder instead of the whole card — your games are in `ROMS`
-and you keep other things elsewhere — name it: `python3 sleekmenu-prep.pyz
---roms ROMS`, or the Games folder field in the window. Only that folder is
-scanned, the browser opens inside it, the report names any ROM-shaped file
-elsewhere that was left out, and the choice holds on the next run without
-being repeated. `--roms .`, or an empty field, is the whole card again.
-
-**No Python? Use the prep GUI instead.** The releases page also carries the
-same tool with Python inside, one download per system, which needs nothing
-installed: open it, let it pick the card, press Download if the card has no
-box-art collection yet, then Prepare. [The prep GUI](#the-prep-gui),
-below, walks through it.
-
-**4. Eject the card, put it in the cart, and start `SleekMenu64.z64` from the
-EverDrive menu.** Press Start on a game to play it, A for its details. To get
-back to the EverDrive menu, reset the console.
+cartridge, shared with other N64 menus. SleekMenu ships none of it:
+Download puts its `release-metadata.zip` on the card, where it is read in
+place from then on.
 
 What the tool writes, and what it leaves alone:
 
@@ -100,7 +82,7 @@ Both the catalog and the covers are optional: with no catalog the browser
 scans the card and shows filenames, with no covers it draws a placeholder.
 The tool never moves, renames or deletes anything on the card, apart from
 a picture or text of your own in `sleekmenu/art/` when you press Remove my
-edit in the window.
+edit in the prep GUI.
 
 ## The prep GUI
 
@@ -109,13 +91,8 @@ it, and see it the way the browser will before it goes back in the
 console — every game, its box, where each fact came from — and give any
 game your own picture, text or facts.
 
-**Getting it.** One download per system from the releases page, with
-Python inside: `SleekMenu-Prep-mac-arm64.zip` (Apple silicon),
-`SleekMenu-Prep-mac-intel.zip`, `SleekMenu-Prep-windows.exe`,
-`SleekMenu-Prep-linux`. It is not code-signed, so the first launch warns:
-on macOS, right-click the app and choose Open (on macOS 15, System
-Settings → Privacy & Security → Open Anyway); on Windows, More info → Run
-anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
+[Install](#install) says which download is yours and what to click the
+first time. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
 opens the same window.
 
 ### Prepare
@@ -203,6 +180,38 @@ console will draw it, and the first line counts the edit as waiting.
 Remove my edit deletes your files and puts the original back the same way;
 the original was never touched.
 
+## Preparing from the command line
+
+`sleekmenu-prep.pyz`, also on the releases page, is the same tool for a
+terminal, for anyone with Python 3.9 or newer and
+[Pillow](https://python-pillow.org/) (`pip install Pillow`). Copy it to the
+root of the card and run it there, with no arguments; running it from the
+card is how it knows where the card is.
+
+```sh
+cd /Volumes/CARD          # or wherever the card is mounted
+python3 sleekmenu-prep.pyz
+```
+
+It does what Download and Prepare do in the prep GUI: fetches the
+collection onto a card that lacks it, finds every ROM on the card, matches
+each one to its box and description, and writes the catalog and the
+covers. Offline, the card still gets its catalog, without covers, and the
+report says where to download the zip by hand — drop it at the root of the
+card and run the tool again. The options mirror the GUI's:
+
+- `--roms ROMS` catalogs one folder instead of the whole card, like the
+  Games folder field. Only that folder is scanned, the browser opens inside
+  it, the report names any ROM-shaped file elsewhere that was left out, and
+  the choice holds on the next run; `--roms .` is the whole card again.
+- `--hires` fetches the high-resolution boxes; `--rebuild` starts from
+  nothing; `--fix-checksums` rewrites a hack's stale header checksum, and
+  `--no-checksums` skips the check.
+- `--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps
+  the tool off the network altogether; `--dry-run` writes nothing.
+- `--gui` opens the prep GUI; `--version` says which release it is; `--help`
+  lists everything.
+
 ## Controls
 
 | Control | Browsing | Launch details |
@@ -261,7 +270,8 @@ applies it. The header shows how many games match.
   corrects the checksum in cartridge memory as it launches, the way the
   EverDrive menu does; the prep tool checks every hack, translation and
   homebrew on the card, names the ones whose checksum is stale, and
-  rewrites them if you run it with `--fix-checksums`.
+  rewrites them if you tick "Rewrite a stale checksum" in the prep GUI
+  (`--fix-checksums` on the command line).
 - **ROM formats.** `.z64` and `.v64` (byteswapped) dumps load; `.n64`
   word-swapped dumps are listed but refused, convert them to `.z64`. Size
   limit: 64 MiB on the X7, 126 MiB on the Pro.
@@ -356,26 +366,26 @@ Each header wins over the database and the collection for that one field;
 the first line that is not a header starts the description. A genre the
 card has not seen becomes its own tab on the console. Pictures and text
 are read when the tool runs, so a new one needs a re-run of the tool, like
-a new game does; Save in the window does both at once.
+a new game does; Save in the prep GUI does both at once.
 
 **High-resolution boxes.** The collection's scans are 158 pixels wide,
 enough for the console's 96×72 thumbnail and no more.
 [libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
-keeps a 512-pixel box for every retail cartridge; `--hires` (the window's
-"High-resolution boxes" box) fetches one for every game on the card the
+keeps a 512-pixel box for every retail cartridge; the prep GUI's
+"High-resolution boxes" box (`--hires`) fetches one for every game on the card the
 database knows, about 250 KB each, into `sleekmenu/art/hires/` by game
 code, and builds the covers from those — a 512-pixel box downscaled looks
 better than a 158-pixel one downscaled, and the box view (A on a game's
 details) draws them at full size. A card that has them keeps them
 complete: every later run fetches the boxes of the games added since,
-without being asked, and the window shows the box ticked. Only what is
+without being asked, and the prep GUI shows the box ticked. Only what is
 missing is fetched; a game libretro has no box for is noted and not asked
 about again unless you pass `--hires` yourself; a picture of your own
 still wins; Stop ends it between two boxes. The Catalog tab counts the
 high-resolution boxes and says, for each game, what the box view will
 draw.
 
-**From the window.** The Catalog tab writes these files for one game or
+**From the prep GUI.** The Catalog tab writes these files for one game or
 one game code and puts them on the card as you save: see
 [Editing a game](#editing-a-game).
 

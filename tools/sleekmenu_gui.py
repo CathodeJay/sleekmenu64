@@ -36,10 +36,10 @@ if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
 from tools import (card_catalog, card_layout, custom_art, fetch, hires, library, make_sprite,
-                   metadata_repo, progress, provenance, sleekmenu_prep)
+                   metadata_repo, progress, provenance, sleekmenu_prep, version)
 from tools.metadata_repo import MetadataRepo
 
-TITLE = "SleekMenu 64 — prepare a card"
+TITLE = f"SleekMenu 64 {version.VERSION} — prepare a card"
 DOWNLOAD_URL = metadata_repo.RELEASES_URL
 #: The box is 96x72 on the console; twice that on a desktop screen is
 #: legible without pretending to be the source picture.

@@ -11,6 +11,7 @@
 #include "favorites.h"
 #include "launch.h"
 #include "rom_load.h"
+#include "version.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1643,6 +1644,13 @@ int main(void) {
         frame(PRESS(back));
         assert(!strcmp(ui.folder, "ROMS") && ui.selected == 0u);
         sm_test_dir_set(NULL, NULL, 0);
+    }
+
+    /* ---- the start screen names the release ------------------------------ */
+    {
+        sm_test_reset();
+        ui_draw_loading(&screen, &layout, "READING CATALOG", NULL, NULL, 0);
+        assert(sm_test_drew("SLEEKMENU 64") && sm_test_drew(SM_VERSION));
     }
 
     /* ---- the fold itself ------------------------------------------------- */

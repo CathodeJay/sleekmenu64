@@ -131,7 +131,7 @@ prep:
 	@echo "Release tool: $(BUILD_DIR)/release/sleekmenu-prep.pyz"
 
 # The window, from a checkout. The releases page carries it frozen with its
-# Python for people who have neither; .github/workflows/prep-app.yml builds
+# Python for people who have neither; .github/workflows/release.yml builds
 # those.
 gui:
 	$(PYTHON) tools/sleekmenu_gui.py

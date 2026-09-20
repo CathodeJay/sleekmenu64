@@ -186,6 +186,19 @@ class CardLayoutTests(unittest.TestCase):
         self.assertIn(f'#define SM_FIRMWARE_FOLDER "{card_layout.FIRMWARE_FOLDER}"',
                       self.header())
 
+    def test_the_console_and_the_tooling_carry_one_version(self):
+        """The start screen and the window must name the same release, or a
+        question about a card starts from two answers."""
+        import re
+        from tools import version
+        self.assertRegex(version.VERSION, r"^\d+\.\d+\.\d+$")
+        header = (self.ROOT / "src" / "version.h").read_text(encoding="utf-8")
+        self.assertEqual(re.findall(r'#define SM_VERSION "([^"]+)"', header), [version.VERSION])
+        # The release workflow takes the release's notes from here, and
+        # refuses a tag with none.
+        changelog = (self.ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertRegex(changelog, rf"(?m)^## {re.escape(version.VERSION)}\b")
+
     def test_no_source_file_spells_the_folder_name_out_again(self):
         """The name as a *path component*. An asset that merely begins with the
         project name -- sleekmenu-font.sprite, inside the ROM's own

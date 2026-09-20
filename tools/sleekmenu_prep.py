@@ -54,7 +54,7 @@ from pathlib import Path
 
 from tools import (build_catalog, card_catalog, card_layout, cover_pack, coverdb, custom_art, fetch,
                    headers, hires, library, make_sprite, metadata_repo, n64_checksum, pack_covers,
-                   prepare_card, progress)
+                   prepare_card, progress, version)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 
@@ -484,6 +484,7 @@ def main(argv: list[str] | None = None) -> int:
                              "a card that has them keeps them complete on every later run")
     parser.add_argument("--gui", action="store_true",
                         help="open the window instead of running in the terminal")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {version.VERSION}")
     args = parser.parse_args(argv)
 
     # The window, for a Python that has a toolkit to draw it with. The
