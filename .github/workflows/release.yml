@@ -83,7 +83,9 @@ jobs:
       - name: Freeze
         # One file on Windows and Linux. On macOS an app bundle is already
         # one thing to download, and a one-file bundle would unpack itself
-        # on every launch, which PyInstaller is retiring.
+        # on every launch, which PyInstaller is retiring. The data files are
+        # named relative to the checkout, where the spec is written: on
+        # Windows, bash spells $PWD /d/a/..., which PyInstaller cannot find.
         shell: bash
         run: |
           case "${{ runner.os }}" in
@@ -92,9 +94,9 @@ jobs:
           esac
           python -m PyInstaller --noconfirm $shape --windowed \
             --name "SleekMenu-Prep" --paths . \
-            --add-data "$PWD/data/coverdb.csv:data" \
-            --add-data "$PWD/data/genres.csv:data" \
-            --add-data "$PWD/data/LICENSE:data" \
+            --add-data "data/coverdb.csv:data" \
+            --add-data "data/genres.csv:data" \
+            --add-data "data/LICENSE:data" \
             tools/sleekmenu_gui.py
 
       - name: Prove the build starts and prepares a card
