@@ -42,7 +42,14 @@ over, and reports the same lines and progress the terminal prints. Its Stop
 button is a flag the run reads before every progress step and between two
 pieces of a download (`tools/progress.stoppable()`), so a stop lands between
 two files, never inside one, and before the catalog or covers are written;
-Ctrl-C on the command line ends the same way. The
+Ctrl-C on the command line ends the same way. The two faces differ in one
+deliberate place: the window will not prepare without the collection. It
+shows whether the card has one, opened and counted, with a Download button
+that runs the same fetch the command line does, and keeps Prepare off until
+there is one -- a card without boxes or descriptions is never what a person
+at the window meant. The command line still prepares without one, for a
+card of homebrew with art of its own or a machine that cannot reach
+GitHub. The
 downloadable builds are that window frozen with its Python by PyInstaller,
 one per platform, built by `.github/workflows/prep-app.yml` on every tag and
 proven there by preparing a card from the frozen binary. They are not

@@ -26,6 +26,7 @@ import os
 import queue
 import sys
 import threading
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 # Runnable as a script as well as importable -- see tools/__init__.py.
@@ -34,8 +35,9 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import (card_catalog, card_layout, custom_art, hires, library, make_sprite, metadata_repo,
-                   provenance, sleekmenu_prep)
+from tools import (card_catalog, card_layout, custom_art, fetch, hires, library, make_sprite,
+                   metadata_repo, progress, provenance, sleekmenu_prep)
+from tools.metadata_repo import MetadataRepo
 
 TITLE = "SleekMenu 64 — prepare a card"
 DOWNLOAD_URL = metadata_repo.RELEASES_URL
@@ -151,9 +153,15 @@ def describe_card(card: Path) -> str:
         parts.append(f"{new} added since the last Prepare")
     if (card / card_layout.BROWSER_ROM).is_file():
         parts.append(card_layout.BROWSER_ROM + " present")
-    collection = metadata_repo.find_on_card(card)
-    parts.append(f"collection: {collection.name}" if collection is not None else "collection: not on the card")
+    # The collection has a line of its own, under its field.
     return ", ".join(parts)
+
+
+def megabytes(size: int) -> str:
+    """A file size the way the window says it: whole megabytes, one decimal
+    under ten."""
+    value = size / 1048576
+    return f"{value:.0f} MB" if value >= 10 else f"{value:.1f} MB"
 
 
 # -- the run, reported into the window --------------------------------------
@@ -165,8 +173,13 @@ class Runner:
     raises a flag the run looks at before every step; it ends with code 3
     a moment later, having written nothing more."""
 
-    def __init__(self, options: sleekmenu_prep.Options):
+    def __init__(self, options: sleekmenu_prep.Options | None = None, job=None, kind: str = "prepare"):
+        """`options` for a Prepare; or `job`, any callable taking (log, fail,
+        progress_factory, cancel) and returning an exit code, run the same
+        way -- the collection's download is one."""
         self.options = options
+        self.job = job
+        self.kind = kind
         self.events: queue.Queue = queue.Queue()
         self.code: int | None = None
         self.stopping = threading.Event()
@@ -203,13 +216,12 @@ class Runner:
                 events.put(("progress", self.label, self.total, self.total))
                 events.put(("log", summary or f"{self.label}: {self.count}/{self.total}"))
 
+        job = self.job or (lambda log, fail, progress_factory, cancel: sleekmenu_prep.run(
+            self.options, log=log, fail=fail, progress_factory=progress_factory, cancel=cancel))
         try:
-            runner.code = sleekmenu_prep.run(
-                self.options,
-                log=lambda line: events.put(("log", line)),
-                fail=lambda line: events.put(("error", line)),
-                progress_factory=Bar,
-                cancel=self.stopping.is_set)
+            runner.code = job(lambda line: events.put(("log", line)),
+                              lambda line: events.put(("error", line)),
+                              Bar, self.stopping.is_set)
         except Exception as error:  # noqa: BLE001 -- the window must say it, not die
             events.put(("error", f"sleekmenu-prep: {type(error).__name__}: {error}"))
             runner.code = 1
@@ -222,6 +234,90 @@ class Runner:
                 out.append(self.events.get_nowait())
             except queue.Empty:
                 return out
+
+
+@dataclass(frozen=True)
+class CollectionStatus:
+    """Whether a Prepare from the window has its collection, and the line
+    that says so under the field."""
+    ready: bool
+    line: str
+    path: Path | None = None
+    downloadable: bool = False     # no collection, a card to put one on, downloads allowed
+
+
+_box_counts: dict[tuple[str, int, int], int] = {}
+
+
+def count_boxes(path: Path) -> int:
+    """How many boxes a collection holds, remembered per file so a field
+    that changes on every keystroke does not reopen a 52 MB zip each time.
+    Raises RepoError for something that is not a collection."""
+    try:
+        stat = path.stat()
+        key = (str(path), stat.st_size, stat.st_mtime_ns)
+    except OSError as error:
+        raise metadata_repo.RepoError(str(error)) from error
+    if key not in _box_counts:
+        with MetadataRepo.open(path) as repo:
+            _box_counts[key] = repo.art_count()
+    return _box_counts[key]
+
+
+def collection_status(card: Path | None, chosen: str = "") -> CollectionStatus:
+    """The collection a Prepare would use -- the file in the field, else
+    the one on the card -- opened and counted. The window prepares only
+    with one: without it a card gets no boxes and no descriptions, which
+    is never what a person pressing Prepare wants. (The command line still
+    can, for a card of homebrew with art of its own.)"""
+    if chosen.strip():
+        path = Path(chosen.strip()).expanduser()
+        try:
+            boxes = count_boxes(path)
+        except metadata_repo.RepoError as error:
+            return CollectionStatus(False, f"✗ {path.name} is not the collection: {error}")
+        if not boxes:
+            return CollectionStatus(False, f"✗ {path.name} holds no boxes.")
+        return CollectionStatus(True, f"✓ Using {path.name}: {boxes} boxes.", path)
+    if card is None:
+        return CollectionStatus(False, "")
+    found = metadata_repo.find_on_card(card)
+    if found is not None:
+        try:
+            boxes = count_boxes(found)
+        except metadata_repo.RepoError as error:
+            return CollectionStatus(False, f"✗ {found.name} on the card will not open ({error}): "
+                                           "download it again, or choose a copy with Browse.",
+                                    None, not fetch.offline_by_request())
+        where = found.relative_to(card).as_posix() if found.is_relative_to(card) else str(found)
+        size = f", {megabytes(found.stat().st_size)}" if found.is_file() else ""
+        return CollectionStatus(True, f"✓ {where} is on the card: {boxes} boxes{size}. Ready to prepare.",
+                                found)
+    if fetch.offline_by_request():
+        return CollectionStatus(False, f"✗ Not on the card, and downloads are off: choose a copy of "
+                                       f"{metadata_repo.RELEASE_ZIP_NAME} with Browse (click here for "
+                                       "GitHub).")
+    return CollectionStatus(False, "✗ Not on the card: press Download (about 52 MB, from GitHub), "
+                                   "or choose a copy with Browse.", None, True)
+
+
+def download_job(card: Path):
+    """The collection's download as a Runner job: onto the card root, where
+    Prepare looks first, checked to hold boxes before it is kept."""
+    def job(log, fail, progress_factory, cancel) -> int:
+        log(f"Fetching {fetch.ASSET} from github.com/{fetch.REPOSITORY} onto {card}")
+        try:
+            fetched = fetch.collection(card, progress_factory, cancel, log)
+        except progress.Cancelled:
+            fail("Download stopped; nothing was kept.")
+            return 3
+        except fetch.FetchError as error:
+            fail(f"Could not download it ({error}). Download it from {metadata_repo.RELEASES_URL} "
+                 "and choose it with Browse.")
+            return 1
+        log(f"{fetched.bytes / 1048576:.1f} MB written to {fetched.path}")
+        return 0
+    return job
 
 
 def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums: bool,
@@ -983,7 +1079,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     card_box = ttk.Combobox(frame, textvariable=card_var)
     card_box.grid(row=0, column=1, sticky="ew", padx=6)
     buttons = ttk.Frame(frame)
-    buttons.grid(row=0, column=2, sticky="e")
+    buttons.grid(row=0, column=2, sticky="w")
     ttk.Label(frame, textvariable=card_note, foreground="#555").grid(row=1, column=1, sticky="w", padx=6)
 
     ttk.Label(frame, text="Games folder").grid(row=2, column=0, sticky="w", pady=(10, 0))
@@ -994,6 +1090,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     ttk.Entry(frame, textvariable=metadata_var).grid(row=4, column=1, sticky="ew", padx=6, pady=(10, 0))
     note = ttk.Label(frame, textvariable=metadata_note, foreground="#555", cursor="hand2")
     note.grid(row=5, column=1, sticky="w", padx=6)
+    collection_buttons = ttk.Frame(frame)
+    collection_buttons.grid(row=4, column=2, sticky="w", pady=(10, 0))
 
     options = ttk.Frame(frame)
     options.grid(row=6, column=1, sticky="w", padx=6, pady=(10, 0))
@@ -1016,6 +1114,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     log = tk.Text(frame, height=12, wrap="word", state="disabled", font=("Menlo", 11) if sys.platform == "darwin" else ("Consolas", 10) if sys.platform == "win32" else ("monospace", 10))
     log.grid(row=9, column=0, columnspan=3, sticky="nsew", pady=(4, 8))
     frame.rowconfigure(9, weight=1)
+    why_var = tk.StringVar(value="")
+    ttk.Label(frame, textvariable=why_var, foreground="#8a4b00").grid(row=10, column=0, columnspan=2, sticky="e",
+                                                                     padx=(0, 8))
     actions = ttk.Frame(frame)
     actions.grid(row=10, column=2, sticky="e")
     stop = ttk.Button(actions, text="Stop", state="disabled")
@@ -1058,23 +1159,36 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             # what the card remembers, and unticking it is a choice.
             hires_var.set(bool(card) and Path(card).is_dir()
                           and hires.remembered(custom_art.art_dir(Path(card))))
-        if not card or not Path(card).is_dir():
+        good = bool(card) and Path(card).is_dir()
+        if not good:
             card_note.set("Pick the card, or plug it in and press Refresh.")
-            metadata_note.set("")
-            return
-        card_note.set(describe_card(Path(card)))
-        collection = metadata_repo.find_on_card(Path(card))
-        if metadata_var.get().strip():
-            metadata_note.set("Using the file above.")
-        elif collection is not None:
-            metadata_note.set(f"{collection.name} found on the card: the box scans and descriptions.")
-        elif (Path(card) / card_layout.CARD_FOLDER / card_layout.COVER_PACK_NAME).is_file():
-            metadata_note.set("The card has its covers, but the collection they came from is no longer on "
-                              f"it: Prepare fetches {metadata_repo.RELEASE_ZIP_NAME} (about 52 MB) from "
-                              "GitHub (click to see), or choose a copy with Browse.")
         else:
-            metadata_note.set(f"Not on the card: Prepare fetches {metadata_repo.RELEASE_ZIP_NAME} "
-                              "(about 52 MB) from GitHub (click to see), or choose a copy with Browse.")
+            card_note.set(describe_card(Path(card)))
+        status = collection_status(Path(card) if good else None, metadata_var.get())
+        state["collection"] = status
+        metadata_note.set(status.line)
+        note.configure(foreground="#2e7d32" if status.ready else "#8a4b00")
+        update_buttons()
+
+    def update_buttons() -> None:
+        """Prepare only with a card and a collection, Download only when
+        there is a card to put one on and none on it; neither while a run
+        or a download is going."""
+        busy = state["runner"] is not None
+        card = current_card()
+        status = state.get("collection")
+        ready = card is not None and status is not None and status.ready
+        prepare.configure(state="normal" if ready and not busy else "disabled")
+        download.configure(state="normal" if card is not None and status is not None
+                           and status.downloadable and not busy else "disabled")
+        if busy:
+            why_var.set("")
+        elif card is None:
+            why_var.set("Pick the card first.")
+        elif not ready:
+            why_var.set("Download the collection first, or choose it with Browse.")
+        else:
+            why_var.set("")
 
     def browse_card() -> None:
         chosen = filedialog.askdirectory(title="The card")
@@ -1110,6 +1224,24 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         if "GitHub" in metadata_note.get():
             webbrowser.open(DOWNLOAD_URL)
 
+    def begin(runner: Runner) -> None:
+        log.configure(state="normal")
+        log.delete("1.0", "end")
+        log.configure(state="disabled")
+        bar["value"] = 0
+        stop.configure(state="normal")
+        state["runner"] = runner
+        update_buttons()
+        runner.start()
+        root.after(100, poll)
+
+    def start_download() -> None:
+        card = current_card()
+        status = state.get("collection")
+        if state["runner"] is not None or card is None or status is None or not status.downloadable:
+            return
+        begin(Runner(job=download_job(card), kind="download"))
+
     def poll() -> None:
         runner = state["runner"]
         if runner is None:
@@ -1130,9 +1262,19 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                 status_var.set(f"{status_var.get().split('  ')[0]}  {event[1]}")
             elif kind == "done":
                 state["runner"] = None
-                prepare.configure(state="normal")
                 stop.configure(state="disabled")
                 bar["value"] = bar["maximum"]
+                if runner.kind == "download":
+                    on_card_change()
+                    status = state.get("collection")
+                    if event[1] == 0 and status is not None and status.ready:
+                        status_var.set("Collection downloaded. Press Prepare.")
+                    elif event[1] == 3:
+                        status_var.set("Download stopped. Press Download to try again.")
+                    else:
+                        status_var.set("Download failed; see the last line above.")
+                    state["last_download"] = event[1]
+                    return
                 if event[1] == 0:
                     status_var.set("Done. Eject the card and start SleekMenu64.z64 from the EverDrive menu.")
                     say("")
@@ -1153,20 +1295,16 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         if state["runner"] is not None:
             return
         card = card_var.get().strip()
-        if not card:
-            status_var.set("Pick the card first.")
+        status = state.get("collection")
+        if not card or current_card() is None or status is None or not status.ready:
+            status_var.set(why_var.get() or "Pick the card first.")
+            if smoke:
+                # nothing to prepare with: a build check says so and ends
+                state["last_code"] = 1
+                root.after(200, root.destroy)
             return
-        log.configure(state="normal")
-        log.delete("1.0", "end")
-        log.configure(state="disabled")
-        bar["value"] = 0
-        prepare.configure(state="disabled")
-        stop.configure(state="normal")
-        runner = Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get(),
-                                     hires_var.get(), roms_var.get(), rebuild_var.get()))
-        state["runner"] = runner
-        runner.start()
-        root.after(100, poll)
+        begin(Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get(),
+                                  hires_var.get(), roms_var.get(), rebuild_var.get())))
 
     def ask_stop() -> None:
         runner = state["runner"]
@@ -1178,8 +1316,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     ttk.Button(buttons, text="Browse…", command=browse_card).pack(side="left")
     ttk.Button(buttons, text="Refresh", command=refresh_cards).pack(side="left", padx=(6, 0))
-    ttk.Button(frame, text="Browse…", command=browse_roms).grid(row=2, column=2, sticky="e", pady=(10, 0))
-    ttk.Button(frame, text="Browse…", command=browse_metadata).grid(row=4, column=2, sticky="e", pady=(10, 0))
+    ttk.Button(frame, text="Browse…", command=browse_roms).grid(row=2, column=2, sticky="w", pady=(10, 0))
+    ttk.Button(collection_buttons, text="Browse…", command=browse_metadata).pack(side="left")
+    download = ttk.Button(collection_buttons, text="Download", command=start_download, state="disabled")
+    download.pack(side="left", padx=(6, 0))
     note.bind("<Button-1>", open_download)
     card_box.bind("<<ComboboxSelected>>", on_card_change)
     card_var.trace_add("write", on_card_change)
@@ -1195,6 +1335,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     # For the tests: the fields and the button, without walking widgets.
     state["fields"] = {"card": card_var, "roms": roms_var, "metadata": metadata_var}
     state["start"] = start
+    state["download"] = start_download
+    state["buttons"] = {"prepare": prepare, "download": download}
+    state["why"] = why_var
+    state["note"] = metadata_note
     root.sleekmenu_state = state  # type: ignore[attr-defined]
 
     if smoke and card:

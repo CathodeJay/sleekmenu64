@@ -75,10 +75,13 @@ being repeated. `--roms .`, or an empty field, is the whole card again.
 **No Python? Use the window instead.** The releases page also carries the
 same tool with Python inside, one download per system:
 `SleekMenu-Prep-mac-arm64.zip` (Apple silicon), `SleekMenu-Prep-mac-intel.zip`,
-`SleekMenu-Prep-windows.exe`, `SleekMenu-Prep-linux`. Open it, pick the card
-(it is picked for you when it is the only removable disk), press Prepare;
-the collection is fetched onto the card if it is not there, and Stop ends
-the run if it takes too long. The card line says how many games were added
+`SleekMenu-Prep-windows.exe`, `SleekMenu-Prep-linux`. Open it and pick the
+card (it is picked for you when it is the only removable disk). The line
+under Collection says whether the card has the box-art collection; if not,
+press Download (about 52 MB from GitHub, onto the card, once) or choose a
+copy you already have with Browse. Prepare stays off until the line shows
+a tick, since a card prepared without the collection gets no boxes and no
+descriptions. Then press Prepare; Stop ends the run if it takes too long. The card line says how many games were added
 since the last Prepare, which is when a card wants one: the catalog is
 built here, not on the console, so a game copied onto the card plays from
 the browser straight away but has no box or facts until the next run. The
