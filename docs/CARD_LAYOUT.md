@@ -70,9 +70,15 @@ answered — `collection`, `collection (another region's box)`,
 `file name`, `yours (this ROM)`, `yours (code NSME)`, `yours`, or `none` —
 and `identified`: how the
 database knew the dump (`crc`, `serial`, `serial without region`, or
-nothing). The window's Catalog tab reads it; so does `make refresh`. The
-browser never does: `catalog.ebc` carries the result and nothing about
-where it came from. The words are fixed in `tools/provenance.py`.
+nothing). A `set_aside` list names the ROM-shaped files the tool found
+in the games folder and refused, with the reason (`not a ROM: no N64
+header` -- a 64DD IPL dump, a broken download), so the window can say so
+rather than count them as games still to add. The window's Catalog tab
+reads it; so does `make refresh`. The browser never does: `catalog.ebc`
+carries the result and nothing about where it came from -- except the
+set-asides, which it carries as records with a flag (`SM_FLAG_SET_ASIDE`,
+`src/catalog.h`) so that the browser knows those files when it reads a
+folder and never lists them. The words are fixed in `tools/provenance.py`.
 
 ## Where the games are looked for
 
@@ -176,6 +182,16 @@ without its region letter (for translations that changed it). When two
 different games share a code, neither is used. The collection's
 `metadata.ini` fills in what the database leaves blank, and its
 `description.txt` supplies the paragraph on the launch card.
+
+Your own text wins over both: `<ROM name>.txt` beside the ROM or in
+`sleekmenu/art/`, or `<CODE>.txt` there. Header lines at the top --
+`Title:`, `Genre:`, `Publisher:`, `Year:`, `Players:`, `Regions:` -- each
+set that one field, checked the way the catalog checks it (a year in
+1970..2100, players 1..8, regions from USA, Japan and Europe under the
+usual spellings), and the first line that is not a header starts the
+description. The window's edit panel writes this same file
+(`tools/custom_art.py`), and reads it back to show the edit as the next
+Prepare will catalog it.
 
 ## Covers
 

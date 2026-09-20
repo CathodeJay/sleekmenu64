@@ -139,6 +139,35 @@ class BuildMetadataTests(unittest.TestCase):
         self.assertEqual(len(games), 3)
         build_catalog.encode(games)
 
+    def test_a_file_with_no_header_is_set_aside_by_name_and_packed_as_never_listed(self):
+        """A 64DD IPL dump or a demo with a broken magic looks like a game
+        to a directory walk and is not one. It is named in the document
+        with the reason, so the window can say so instead of counting it
+        as a game still to add, and packed as a record the browser never
+        lists -- so the browser's own read of the folder does not take it
+        for a game the catalog missed."""
+        from tools import build_catalog
+        write_rom(self.roms / "Real Game (USA).z64", 1, 2)
+        (self.roms / "Dev Tools").mkdir()
+        (self.roms / "Dev Tools" / "64DD IPL (Japan).z64").write_bytes(b"\x00\x00\x00\x00" + bytes(60))
+        (self.roms / "Demo.v64").write_bytes(b"junk" * 16)
+        document, how = self.build()
+        self.assertEqual(how["not a rom"], 2)
+        self.assertEqual([game["path"] for game in document["games"]], ["Real Game (USA).z64"])
+        self.assertEqual(document["set_aside"], [
+            {"path": "Demo.v64", "why": build_metadata.NOT_A_ROM},
+            {"path": "Dev Tools/64DD IPL (Japan).z64", "why": build_metadata.NOT_A_ROM},
+        ])
+        packed = build_catalog.normalize(document)
+        self.assertEqual([(g["path"], g["flags"]) for g in packed],
+                         [("Demo.v64", build_catalog.FLAG_SET_ASIDE),
+                          ("Dev Tools/64DD IPL (Japan).z64", build_catalog.FLAG_SET_ASIDE),
+                          ("Real Game (USA).z64", 0)])
+        self.assertEqual(packed[1]["title"], "64DD IPL (Japan)")
+        with self.assertRaises(build_catalog.CatalogError):
+            build_catalog.normalize({"schema_version": 1, "games": document["games"],
+                                     "set_aside": [{"path": "Real Game (USA).z64", "why": "x"}]})
+
     def test_attribution_names_only_what_was_used(self):
         write_rom(self.roms / "Game (USA).z64", 1, 2)
         document, _ = self.build()

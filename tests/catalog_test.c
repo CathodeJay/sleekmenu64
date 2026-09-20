@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
 
     /* The good one loads, and every field lands where the builder put it. */
     assert(catalog_load(&catalog, argv[1], error, sizeof(error)));
-    assert(catalog.count == 2u);
+    assert(catalog.count == 3u);
     assert(catalog_get(&catalog, 0, &game));
     assert(!strcmp(game.path, "ROMS/GoldenEye 007 (USA).z64"));
     assert(!strcmp(game.title, "GoldenEye 007 (USA)"));
@@ -40,7 +40,13 @@ int main(int argc, char **argv) {
     assert(game.description != NULL && game.description[0] == '\0');
     assert(game.cover[0] == '\0');
     assert(game.year == 0 && game.regions == 0);
-    assert(!catalog_get(&catalog, 2, &game));
+    /* What the tool set aside travels as a record the browser knows and
+       never lists: its name, its path, and the flag that says so. */
+    assert(catalog_get(&catalog, 2, &game));
+    assert(!strcmp(game.path, "ROMS/Tools/IPL.z64"));
+    assert(!strcmp(game.title, "IPL"));
+    assert(game.flags == SM_FLAG_SET_ASIDE);
+    assert(!catalog_get(&catalog, 3, &game));
     catalog_close(&catalog);
 
     /* A format-1 catalog -- from a prep tool older than descriptions -- is

@@ -184,7 +184,8 @@ applies it. The header shows how many games match.
   line says how many are waiting, and the next Prepare gives them their
   boxes and facts. Only the folders the browser shows are read: with the
   whole library under one folder, a new folder beside it at the card root
-  is not seen until the card is prepared again.
+  is not seen until the card is prepared again. A ROM-shaped file the
+  tool set aside as not a ROM is known to the browser and never listed.
 - **Not done yet.** Controller Pak (`.mpk`) backup and restore.
 
 ## Cheats
@@ -244,10 +245,25 @@ sleekmenu/art/NSME.png              by game code: every ROM with that code
 PNG or JPEG, any size; it is fitted like the scans are, and the name can be
 in any case. A text file the same way — `SM64 Star Road.txt` beside the
 ROM or in `sleekmenu/art/`, or `NSME.txt` there for every game with that
-code — becomes the description on the launch card, and a first line of
-`Title: Super Mario Star Road` renames the game in the list. Pictures and
-text are read when the tool runs, so a new one needs a re-run of the tool,
-like a new game does.
+code — becomes the description on the launch card, and header lines at the
+top of it set the facts, any of them, in any order:
+
+```text
+Title: Super Mario Star Road
+Genre: Platforms
+Publisher: Skelux
+Year: 2011
+Players: 1
+Regions: USA, Japan
+
+A hack with 120 new stars.
+```
+
+Each header wins over the database and the collection for that one field;
+the first line that is not a header starts the description. A genre the
+card has not seen becomes its own tab on the console. Pictures and text
+are read when the tool runs, so a new one needs a re-run of the tool, like
+a new game does — the window shows them before that (below).
 
 **High-resolution boxes.** The collection's scans are 158 pixels wide,
 enough for the console's 96×72 thumbnail and no more.
@@ -268,18 +284,26 @@ draw.
 
 **From the window.** Pick the game on the Catalog tab; in the panel under
 the list, choose a picture (Browse, or drop one on the field when your
-Python has `tkinterdnd2`), type a title and a text, choose "This ROM only"
-or "Every game with this code", and press Save. That writes exactly the files above
-into `sleekmenu/art/` — the picture as it is, the sizes are made when you
-press Prepare — and the panel says how many games the edit reaches. Remove
-my edit deletes those files, and the next Prepare brings the original back,
-because the original was never touched.
+Python has `tkinterdnd2`), type a title, a genre, a publisher, a year, the
+players, the regions and a text — any of them, an empty field keeps what
+the card has — choose "This ROM only" or "Every game with this code", and
+press Save. That writes exactly the files above into `sleekmenu/art/` —
+the picture as it is, the sizes are made when you press Prepare — and the
+panel says how many games the edit reaches. The tab shows the edit at once,
+as the next Prepare will catalog it: the row in blue, the picture fitted
+to the box, and a note of what changed; the header counts the edits
+waiting. Remove my edit deletes those files, and the next Prepare brings
+the original back, because the original was never touched.
 
 The Catalog tab says, for every game, where its box, title and text came
 from — the collection, another region's scan, the database, or your own
-file — and "Only what I changed" lists the games you gave a picture or
-text of your own. The same is in `sleekmenu/catalog.json` on the card,
-beside the catalog the console reads.
+file. Search narrows the list as you type, over the title, the file name,
+the publisher, the genre, the year and the game code; Show narrows it to
+what you changed, or to what is not in the catalog: the games copied on
+since the last Prepare, in amber, and the files the tool set aside as not
+ROMs (no N64 header — a 64DD IPL dump, a broken download), in grey, which
+the browser never lists and Prepare will not add. The same is in
+`sleekmenu/catalog.json` on the card, beside the catalog the console reads.
 
 ## Building from source
 

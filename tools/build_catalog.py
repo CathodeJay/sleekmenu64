@@ -30,6 +30,12 @@ REGIONS = {"USA": 1, "JAPAN": 2, "EUROPE": 4}
 # Cartridge dumps and 64DD disk images; src/catalog.c lists the same set.
 ROM_SUFFIXES = {".z64", ".v64", ".n64", ".ndd"}
 MAX_DESCRIPTION = 2000
+# Record flags. src/catalog.h names the same bits.
+FLAG_FAVORITE = 1
+# A ROM-shaped file the tool set aside (no N64 header). Carried so the
+# browser knows the file and never lists it, rather than finding it in the
+# folder and taking it for a game the catalog missed.
+FLAG_SET_ASIDE = 2
 
 # Characters the font lacks that have an obvious ASCII spelling. Everything
 # else non-ASCII is decomposed and stripped of its accents; what is left
@@ -159,7 +165,31 @@ def normalize(document: object) -> list[dict[str, object]]:
             "year": year,
             "players": players,
             "region_mask": region_mask,
-            "flags": 1 if favorite else 0,
+            "flags": FLAG_FAVORITE if favorite else 0,
+        })
+    aside = document.get("set_aside", [])
+    if not isinstance(aside, list):
+        raise CatalogError("set_aside must be an array")
+    for index, raw in enumerate(aside):
+        prefix = f"set_aside[{index}]"
+        if not isinstance(raw, dict):
+            raise CatalogError(f"{prefix} must be an object")
+        path = _relative_path(raw.get("path"), f"{prefix}.path", ROM_SUFFIXES)
+        key = path.casefold()
+        if key in seen:
+            raise CatalogError(f"duplicate ROM path: {path}")
+        seen.add(key)
+        result.append({
+            "title": console_text(PurePosixPath(path).stem) or "?",
+            "path": path,
+            "cover": "",
+            "publisher": "",
+            "genre": "",
+            "description": "",
+            "year": 0,
+            "players": 0,
+            "region_mask": 0,
+            "flags": FLAG_SET_ASIDE,
         })
     return sorted(result, key=lambda game: (str(game["path"]).casefold(), str(game["title"]).casefold()))
 
@@ -204,7 +234,8 @@ def build(input_path: Path, output_path: Path, manifest_path: Path) -> None:
     manifest = {
         "catalog_format": VERSION,
         "catalog_sha256": hashlib.sha256(data).hexdigest(),
-        "game_count": len(games),
+        "game_count": sum(1 for game in games if not int(game["flags"]) & FLAG_SET_ASIDE),
+        "set_aside_count": sum(1 for game in games if int(game["flags"]) & FLAG_SET_ASIDE),
         "input": input_path.name,
         "output": output_path.name,
         "record_size": RECORD.size,

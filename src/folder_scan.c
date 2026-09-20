@@ -280,8 +280,9 @@ bool sm_folder_scan_step(sm_folder_scan_t *scan, sm_catalog_t *catalog) {
             if (result != 0) {
                 scan->failed = result < -1;
                 if (scan->failed) extras_clear(&scan->found);
-                qsort(scan->found.entries, scan->found.count, sizeof(*scan->found.entries),
-                    compare_extras);
+                if (scan->found.count)
+                    qsort(scan->found.entries, scan->found.count, sizeof(*scan->found.entries),
+                        compare_extras);
                 scan->entry_pending = false;
                 scan->state = SM_SCAN_IDLE;
                 free(scan->known);

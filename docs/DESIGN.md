@@ -63,10 +63,31 @@ catalog (`tools/card_catalog.py`); the console reads only the packed one.
 The tab is three regions: the tree of the card, with a word or two per
 cell for where the box and the text came from; beside it the selected game
 as the console shows it -- the box at the box view's size, or a placeholder
-of that size so nothing moves as the selection does, the facts, the text,
-then the whole provenance; and under the tree the owner's own art and text
-for that game. The right column is a fixed width, so the box is never
-clipped and the tree takes whatever is left.
+of that size so nothing moves as the selection does, the facts, the whole
+provenance, then the text; and under the tree the owner's own art, facts
+and text for that game. The right column is a fixed width, so the box is
+never clipped and the tree takes whatever is left. Search narrows the tree
+as typed, and Show narrows it to what the owner changed or to what the
+card holds beyond the catalog.
+
+**An edit shows before it is prepared, from the file alone.** Save writes
+the owner's file; the tab then reads every owner's file on the card back
+(`custom_art.pending_edits`) and lays it over `catalog.json` in memory:
+a field is pending when the file's word differs from the catalog's, a
+picture when it is newer than the catalog or the catalog's box is not the
+owner's, and a field the catalog has as the owner's whose file is gone is
+pending the other way. No record of "unsaved changes" exists apart from
+the files, so a file dropped into `sleekmenu/art/` by hand is shown the
+same way, and nothing goes stale.
+
+**What the tool sets aside, the browser knows.** A ROM-shaped file with
+no N64 header -- a 64DD IPL dump, a broken download -- is refused by the
+tool, and before it was carried anywhere the browser's read of the folder
+took it for a game the catalog had missed and offered to play it. So the
+catalog carries those files as records with `SM_FLAG_SET_ASIDE`: the
+folder read finds them known, every list leaves them out, and the window
+names them with the reason rather than counting them as games still to
+add.
 
 **The card is the EverDrive's.** The browser writes five files (see
 CARD_LAYOUT.md), never creates, renames or deletes anything else, and uses the

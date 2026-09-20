@@ -7,7 +7,11 @@
 #include <stdint.h>
 
 enum { SM_REGION_USA = 1, SM_REGION_JAPAN = 2, SM_REGION_EUROPE = 4 };
-enum { SM_FLAG_FAVORITE = 1 };
+/* Record flags; tools/build_catalog.py writes the same bits. A set-aside
+   record is a ROM-shaped file the tool found and refused (no N64 header):
+   carried so the browser knows the file when it reads the folder, and
+   never listed. */
+enum { SM_FLAG_FAVORITE = 1, SM_FLAG_SET_ASIDE = 2 };
 /* 8,192 comfortably exceeds known multi-region N64 sets while bounding RAM use. */
 enum { SM_DISCOVERY_MAX_GAMES = 8192 };
 

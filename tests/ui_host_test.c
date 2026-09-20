@@ -1544,6 +1544,34 @@ int main(void) {
         sm_test_dir_set(NULL, NULL, 0);
     }
 
+    /* ---- what the tool set aside is known, never listed --------------- */
+    {
+        /* A 64DD IPL dump in the games folder and a stray file at the card
+           root, both packed with the set-aside flag: neither is in any
+           list, the root stays inside ROMS, and the folder read knows the
+           IPL file rather than taking it for a game the catalog missed. */
+        static const row_t rows[] = {
+            {"ROMS/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"ROMS/Dev/64DD IPL (Japan).z64", "64DD IPL (Japan)", "", SM_FLAG_SET_ASIDE, "", 0, NULL},
+            {"junk.z64", "junk", "", SM_FLAG_SET_ASIDE, "", 0, NULL},
+        };
+        static const sm_test_dir_entry_t roms[] = {{"Alpha.z64", false}, {"Dev", true}};
+        sm_test_dir_opens = 0;
+        sm_test_dir_set("sd:/ROMS", roms, 2);
+        start(rows, 3u);
+        assert(!strcmp(ui.root, "ROMS") && !strcmp(ui.folder, "ROMS"));
+        /* Alpha alone: a folder holding nothing but a set-aside file is
+           not a folder of games, and the read of ROMS knows the folder
+           rather than listing it as new. */
+        idle(3);
+        assert(sm_test_dir_opens == 1 && ui.item_count == 1u && ui.items[0] == 0u);
+        assert(ui.status == NULL || !strstr(ui.status, "not in the catalog"));
+        frame(PRESS(genre_next));               /* favourites, flat */
+        assert(ui.item_count == 0u);
+        frame(PRESS(back));
+        sm_test_dir_set(NULL, NULL, 0);
+    }
+
     /* ---- a card scanned whole at boot has nothing more to find -------- */
     {
         static const row_t rows[] = {

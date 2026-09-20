@@ -617,18 +617,23 @@ static void focus_selected(sm_ui_t *ui, const sm_layout_t *layout) {
 static void find_library_root(const sm_catalog_t *catalog, char *root, size_t size) {
     sm_game_t first;
     size_t depth = 0;
+    uint32_t start = 0;
     root[0] = '\0';
-    if (!catalog->count || !catalog_get(catalog, 0, &first)) return;
+    /* Games only: a file the tool set aside is not where anyone browses. */
+    while (start < catalog->count && catalog_get(catalog, start, &first) &&
+           (first.flags & SM_FLAG_SET_ASIDE)) start++;
+    if (start >= catalog->count || !catalog_get(catalog, start, &first)) return;
     for (;;) {
         const char *slash = strchr(first.path + depth, '/');
         size_t candidate;
         bool shared = true;
         if (!slash) break;
         candidate = (size_t)(slash - first.path);
-        for (uint32_t i = 1; i < catalog->count && shared; i++) {
+        for (uint32_t i = start + 1u; i < catalog->count && shared; i++) {
             sm_game_t game;
-            if (!catalog_get(catalog, i, &game) ||
-                strncmp(game.path, first.path, candidate + 1u) != 0) shared = false;
+            if (!catalog_get(catalog, i, &game)) { shared = false; continue; }
+            if (game.flags & SM_FLAG_SET_ASIDE) continue;
+            if (strncmp(game.path, first.path, candidate + 1u) != 0) shared = false;
         }
         if (!shared || candidate + 1u > size) break;
         depth = candidate + 1u;
@@ -669,6 +674,8 @@ static void select_folder_named(sm_ui_t *ui, const sm_catalog_t *catalog,
    the card is what has been pressed since. The file wins, which is what makes
    a favourite survive rebuilding the catalog. */
 static bool item_matches(const sm_ui_t *ui, sm_game_t *game) {
+    /* What the tool set aside is in the catalog to be known, not shown. */
+    if (game->flags & SM_FLAG_SET_ASIDE) return false;
     if (sm_favorites_contains(&ui->favorites, game->path)) game->flags |= SM_FLAG_FAVORITE;
     else game->flags &= (uint8_t)~SM_FLAG_FAVORITE;
     return catalog_matches(game, &ui->filter);

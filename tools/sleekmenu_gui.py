@@ -26,7 +26,7 @@ import os
 import queue
 import sys
 import threading
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 # Runnable as a script as well as importable -- see tools/__init__.py.
 import sys as _sys
@@ -113,21 +113,30 @@ def _windows_removable() -> list[Path]:
     return found
 
 
+def newcomers(document: dict, roms: list[str]) -> list[str]:
+    """ROMs in the catalogued folder that the last Prepare did not
+    catalogue and did not set aside: games added since, which the browser
+    lists without a box until the next Prepare. `roms` is the card's walk;
+    only the folder the catalog covers counts."""
+    catalogued = {str(game.get("path", "")).casefold() for game in document.get("games", [])}
+    aside = {str(entry.get("path", "")).casefold() for entry in document.get("set_aside", [])}
+    folder = str(document.get("roms", "") or "").strip("/")
+    prefix = folder.casefold() + "/" if folder else ""
+    return [path for path in roms if path.casefold().startswith(prefix)
+            and path.casefold() not in catalogued and path.casefold() not in aside]
+
+
 def added_since(card: Path, roms: list[str]) -> int | None:
-    """ROMs on the card that the last Prepare did not catalogue -- games
-    added since -- or None when the card has no catalog to compare with.
-    The count is what tells a person the card needs a Prepare at all."""
+    """How many games were added since the last Prepare, or None when the
+    card has no catalog to compare with. The count is what tells a person
+    the card needs a Prepare at all."""
     try:
         document = card_catalog.load(card)
     except card_catalog.CatalogJsonError:
         return None
     if document is None:
         return None
-    catalogued = {str(game.get("path", "")).casefold() for game in document["games"]}
-    folder = card_catalog.remembered_roms(card)
-    prefix = folder.casefold() + "/" if folder else ""
-    return sum(1 for path in roms if path.casefold().startswith(prefix)
-               and path.casefold() not in catalogued)
+    return len(newcomers(document, roms))
 
 
 def describe_card(card: Path) -> str:
@@ -285,20 +294,98 @@ def short_text_source(source: str) -> str:
     return source
 
 
-def waiting_line(card: Path | None, document: dict | None) -> str:
-    """The ROMs on the card that the catalog does not have -- games added
-    since the last Prepare, which the browser lists without a box until
-    the next one -- as a sentence for the tab's header, or ""."""
+def waiting_line(new: int, aside: int) -> str:
+    """The tab's second header line: the games added since the last
+    Prepare, which the browser lists without a box until the next one, and
+    the ROM-shaped files the tool set aside; "" when there is neither."""
+    parts = []
+    if new:
+        parts.append(f"{new} ROM{'s' if new != 1 else ''} on the card {'are' if new != 1 else 'is'} "
+                     f"not in it yet: the browser lists {'them' if new != 1 else 'it'} without a box "
+                     "until the next Prepare.")
+    if aside:
+        parts.append(f"{aside} file{'s' if aside != 1 else ''} set aside as not a ROM "
+                     f"(no N64 header); the browser never lists {'them' if aside != 1 else 'it'}.")
+    return " ".join(parts)
+
+
+# The Show choice above the tree.
+SHOW_ALL = "everything"
+SHOW_CHANGED = "only what I changed"
+SHOW_WAITING = "only what is not in the catalog"
+SHOW_CHOICES = (SHOW_ALL, SHOW_CHANGED, SHOW_WAITING)
+
+# The rows the tree shows beyond the catalog's own games. A record with one
+# of these in `state` is not in catalog.json: the tab made it from the card.
+STATE_WAITING = "waiting"    # on the card, not in the catalog: the next Prepare adds it
+STATE_ASIDE = "aside"        # set aside by the tool: not a ROM
+STATE_PENDING = "pending"    # a catalogued game with an edit the next Prepare will apply
+
+
+def card_rows(card: Path | None, document: dict | None) -> list[dict]:
+    """The newcomers and the set-asides as records the tree can hold beside
+    the catalog's: a path, a title from the file name, a state, and for a
+    set-aside the reason."""
     if card is None or document is None:
-        return ""
+        return []
     try:
-        new = added_since(card, library.walk(card))
+        roms = library.walk(card)
     except library.LibraryError:
-        return ""
-    if not new:
-        return ""
-    return (f"{new} ROM{'s' if new != 1 else ''} on the card {'are' if new != 1 else 'is'} not in "
-            f"it yet: the browser lists {'them' if new != 1 else 'it'} without a box until the next Prepare.")
+        roms = []
+    rows = [{"path": path, "title": PurePosixPath(path).stem, "state": STATE_WAITING, "sources": {}}
+            for path in newcomers(document, roms)]
+    rows += [{"path": str(entry.get("path", "")), "title": PurePosixPath(str(entry.get("path", ""))).stem,
+              "state": STATE_ASIDE, "why": str(entry.get("why", "")), "sources": {}}
+             for entry in document.get("set_aside", []) if entry.get("path")]
+    return rows
+
+
+def pending_line(pending) -> str:
+    """One line for the pane: what the next Prepare will change."""
+    names = {"title": "title", "description": "text", "genre": "genre", "publisher": "publisher",
+             "year": "year", "players": "players", "regions": "regions", "cover": "picture"}
+    parts = []
+    changed = [names[k] for k in names if k in pending.fields]
+    if pending.picture is not None:
+        changed.append("picture")
+    if changed:
+        parts.append("Changed here, not in the catalog yet: " + ", ".join(changed)
+                     + ". Shown as the next Prepare will catalog it.")
+    if pending.removed:
+        parts.append("Your " + ", ".join(names[k] for k in pending.removed if k in names)
+                     + " file is gone: the next Prepare brings the original back.")
+    return " ".join(parts)
+
+
+def pending_picture(path: Path) -> tuple[int, int, bytes] | None:
+    """The owner's picture fitted into the box view's frame, for the pane:
+    the sprite does not exist until the next Prepare, so the picture stands
+    in, sized the way the sprite will be. None when it will not open."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    width, height = make_sprite.LARGE_CANVAS_SIZE
+    try:
+        with Image.open(path) as source:
+            image = source.convert("RGB")
+            image.thumbnail((width, height))
+    except (OSError, ValueError):
+        return None
+    canvas = Image.new("RGB", (width, height), (35, 42, 52))
+    canvas.paste(image, ((width - image.width) // 2, (height - image.height) // 2))
+    return width, height, canvas.tobytes()
+
+
+def matches(record: dict, query: str) -> bool:
+    """Every word of the query somewhere in the game: title, file name,
+    publisher, genre, year or game code, whatever the case."""
+    words = query.casefold().split()
+    if not words:
+        return True
+    haystack = " ".join(str(record.get(key) or "") for key in
+                        ("title", "path", "publisher", "genre", "year", "code")).casefold()
+    return all(word in haystack for word in words)
 
 
 def box_view_line(game: dict) -> str:
@@ -361,9 +448,12 @@ class CatalogTab:
         self.covers = None
         self.games: dict[str, dict] = {}
         self.photo = None
-        self.only_mine = tk.BooleanVar(value=False)
+        self.show = tk.StringVar(value=SHOW_ALL)
+        self.query = tk.StringVar()
+        self.shown = tk.StringVar()
         self.summary = tk.StringVar(value="No card picked.")
         self.waiting = tk.StringVar()
+        self.rows: list[dict] = []       # newcomers and set-asides, from the card
         self.title = tk.StringVar()
         self.facts = tk.StringVar()
         self.sources = tk.StringVar()
@@ -371,6 +461,12 @@ class CatalogTab:
         # the edit panel: the owner's picture and text for the selected game
         self.picture = tk.StringVar()
         self.own_title = tk.StringVar()
+        self.own_genre = tk.StringVar()
+        self.own_publisher = tk.StringVar()
+        self.own_year = tk.StringVar()
+        self.own_players = tk.StringVar()
+        self.own_regions = {name: tk.BooleanVar(value=False) for name in ("USA", "JAPAN", "EUROPE")}
+        self.pending: dict[str, custom_art.Pending] = {}
         self.scope = tk.StringVar(value=custom_art.SCOPE_ROM)
         self.reach = tk.StringVar()
         self.edit_note = tk.StringVar()
@@ -383,11 +479,24 @@ class CatalogTab:
 
         top = ttk.Frame(frame)
         top.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
-        ttk.Button(top, text="Reload", command=self.reload).pack(side="left")
-        ttk.Checkbutton(top, text="Only what I changed", variable=self.only_mine,
-                        command=self.fill).pack(side="left", padx=(12, 0))
+        top.columnconfigure(1, weight=1)
+        controls = ttk.Frame(top)
+        controls.grid(row=0, column=0, sticky="w")
+        ttk.Button(controls, text="Reload", command=self.reload).pack(side="left")
+        ttk.Label(controls, text="Show").pack(side="left", padx=(12, 4))
+        chooser = ttk.Combobox(controls, textvariable=self.show, state="readonly", width=30,
+                               values=list(SHOW_CHOICES))
+        chooser.pack(side="left")
+        chooser.bind("<<ComboboxSelected>>", lambda _event: self.fill())
+        ttk.Label(controls, text="Search").pack(side="left", padx=(12, 4))
+        search = ttk.Entry(controls, textvariable=self.query, width=24)
+        search.pack(side="left")
+        search.bind("<KeyRelease>", lambda _event: self.fill())
+        search.bind("<Escape>", lambda _event: (self.query.set(""), self.fill()))
+        ttk.Label(controls, textvariable=self.shown, foreground="#555").pack(side="left", padx=(8, 0))
+        self.search = search
         lines = ttk.Frame(top)
-        lines.pack(side="left", fill="x", expand=True, padx=(12, 0))
+        lines.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
         summary = ttk.Label(lines, textvariable=self.summary, foreground="#555", justify="left")
         summary.pack(anchor="w")
         waiting = ttk.Label(lines, textvariable=self.waiting, foreground="#8a4b00", justify="left")
@@ -415,18 +524,22 @@ class CatalogTab:
         scroll.grid(row=0, column=1, sticky="ns")
         across.grid(row=1, column=0, sticky="ew")
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
+        self.tree.tag_configure(STATE_WAITING, foreground="#8a4b00")
+        self.tree.tag_configure(STATE_ASIDE, foreground="#8a8a8a")
+        self.tree.tag_configure(STATE_PENDING, foreground="#1f5fa8")
 
         # -- the selected game, as the console shows it -----------------------
         right = ttk.Frame(frame, padding=(12, 0, 0, 0), width=self.DETAIL_WIDTH)
         right.grid(row=1, column=1, rowspan=2, sticky="nsew")
         right.grid_propagate(False)
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(3, weight=1)
+        right.rowconfigure(5, weight=1)
         # The box is always the box view's size, a placeholder when there
         # is none, so the title and the rest stay put as the selection moves.
         width, height = make_sprite.LARGE_CANVAS_SIZE
         self.placeholder = tk.PhotoImage(
-            data=make_sprite.to_ppm(width, height, bytes((35, 42, 52)) * (width * height)), format="PPM")
+            master=right, format="PPM",
+            data=make_sprite.to_ppm(width, height, bytes((35, 42, 52)) * (width * height)))
         self.box = ttk.Label(right, image=self.placeholder, text="", compound="center",
                              foreground="#8291a0", anchor="w")
         self.box.grid(row=0, column=0, sticky="w")
@@ -435,14 +548,16 @@ class CatalogTab:
                   font=("TkDefaultFont", 12, "bold")).grid(row=1, column=0, sticky="w", pady=(6, 0))
         ttk.Label(right, textvariable=self.facts, justify="left", wraplength=wrap).grid(
             row=2, column=0, sticky="w", pady=(2, 0))
+        # What it is, where it came from, what to know -- then the text,
+        # which takes whatever height is left.
+        ttk.Label(right, textvariable=self.sources, foreground="#555", justify="left",
+                  wraplength=wrap).grid(row=3, column=0, sticky="w", pady=(6, 0))
+        ttk.Label(right, textvariable=self.notes, foreground="#8a4b00", justify="left",
+                  wraplength=wrap).grid(row=4, column=0, sticky="w", pady=(4, 0))
         self.description = tk.Text(right, height=4, width=20, wrap="word", state="disabled",
                                    relief="flat", font="TkDefaultFont",
                                    background=parent.winfo_toplevel().cget("background"))
-        self.description.grid(row=3, column=0, sticky="nsew", pady=(6, 0))
-        ttk.Label(right, textvariable=self.sources, foreground="#555", justify="left",
-                  wraplength=wrap).grid(row=4, column=0, sticky="w", pady=(6, 0))
-        ttk.Label(right, textvariable=self.notes, foreground="#8a4b00", justify="left",
-                  wraplength=wrap).grid(row=5, column=0, sticky="w", pady=(4, 0))
+        self.description.grid(row=5, column=0, sticky="nsew", pady=(8, 0))
         self.detail = right
 
         # -- the owner's own art and text, under the tree ---------------------
@@ -457,26 +572,47 @@ class CatalogTab:
         ttk.Label(edit, text="Title").grid(row=1, column=0, sticky="w", pady=(4, 0))
         ttk.Entry(edit, textvariable=self.own_title).grid(row=1, column=1, columnspan=2, sticky="ew",
                                                           padx=(6, 0), pady=(4, 0))
-        ttk.Label(edit, text="Text").grid(row=2, column=0, sticky="nw", pady=(4, 0))
+        # The facts, one row: the genres and publishers already on the card
+        # are offered, anything else can be typed. An empty field keeps
+        # what the catalog has.
+        ttk.Label(edit, text="Genre").grid(row=2, column=0, sticky="w", pady=(4, 0))
+        facts = ttk.Frame(edit)
+        facts.grid(row=2, column=1, columnspan=2, sticky="ew", padx=(6, 0), pady=(4, 0))
+        self.genre_box = ttk.Combobox(facts, textvariable=self.own_genre, width=18)
+        self.genre_box.pack(side="left")
+        ttk.Label(facts, text="Publisher").pack(side="left", padx=(12, 6))
+        self.publisher_box = ttk.Combobox(facts, textvariable=self.own_publisher, width=22)
+        self.publisher_box.pack(side="left")
+        ttk.Label(edit, text="Year").grid(row=3, column=0, sticky="w", pady=(4, 0))
+        more = ttk.Frame(edit)
+        more.grid(row=3, column=1, columnspan=2, sticky="ew", padx=(6, 0), pady=(4, 0))
+        ttk.Entry(more, textvariable=self.own_year, width=6).pack(side="left")
+        ttk.Label(more, text="Players").pack(side="left", padx=(12, 6))
+        ttk.Combobox(more, textvariable=self.own_players, width=2, state="readonly",
+                     values=("", "1", "2", "3", "4")).pack(side="left")
+        ttk.Label(more, text="Region").pack(side="left", padx=(12, 6))
+        for name, label in (("USA", "USA"), ("JAPAN", "Japan"), ("EUROPE", "Europe")):
+            ttk.Checkbutton(more, text=label, variable=self.own_regions[name]).pack(side="left", padx=(0, 6))
+        ttk.Label(edit, text="Text").grid(row=4, column=0, sticky="nw", pady=(4, 0))
         self.own_text = tk.Text(edit, height=2, width=20, wrap="word", font="TkDefaultFont")
-        self.own_text.grid(row=2, column=1, columnspan=2, sticky="ew", padx=(6, 0), pady=(4, 0))
+        self.own_text.grid(row=4, column=1, columnspan=2, sticky="ew", padx=(6, 0), pady=(4, 0))
         scopes = ttk.Frame(edit)
-        scopes.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        scopes.grid(row=5, column=0, columnspan=2, sticky="w", pady=(6, 0))
         ttk.Radiobutton(scopes, text="This ROM only", variable=self.scope,
                         value=custom_art.SCOPE_ROM, command=self.update_reach).pack(side="left")
         self.by_code = ttk.Radiobutton(scopes, text="Every game with this code", variable=self.scope,
                                        value=custom_art.SCOPE_CODE, command=self.update_reach)
         self.by_code.pack(side="left", padx=(12, 0))
         ttk.Label(edit, textvariable=self.reach, foreground="#555").grid(
-            row=4, column=0, columnspan=2, sticky="w")
+            row=6, column=0, columnspan=2, sticky="w")
         buttons = ttk.Frame(edit)
-        buttons.grid(row=3, column=2, rowspan=2, sticky="e", pady=(6, 0))
+        buttons.grid(row=5, column=2, rowspan=2, sticky="e", pady=(6, 0))
         self.remove_button = ttk.Button(buttons, text="Remove my edit", command=self.remove_edit)
         self.remove_button.pack(side="left", padx=(0, 6))
         self.save_button = ttk.Button(buttons, text="Save", command=self.save_edit)
         self.save_button.pack(side="left")
         edit_note = ttk.Label(edit, textvariable=self.edit_note, foreground="#555", justify="left")
-        edit_note.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
+        edit_note.grid(row=7, column=0, columnspan=3, sticky="w", pady=(4, 0))
         self.edit = edit
 
         def rewrap_edit(event):
@@ -508,33 +644,87 @@ class CatalogTab:
                 self.covers = card_catalog.Covers.open(card)
                 self.games = {str(game["path"]): game for game in self.document["games"]}
                 self.summary.set(summarize(self.document))
-        self.waiting.set(waiting_line(card, self.document))
+        self.rows = card_rows(card, self.document)
+        self.games.update({str(row["path"]): row for row in self.rows})
+        self.refresh_pending()
+        self.waiting.set(waiting_line(sum(1 for row in self.rows if row["state"] == STATE_WAITING),
+                                      sum(1 for row in self.rows if row["state"] == STATE_ASIDE)))
         self.fill()
-        self.show(None)
+        self.show_game(None)
+
+    def refresh_pending(self) -> None:
+        """What the owner's files on the card would change at the next
+        Prepare, read again: after a load, a Save and a Remove."""
+        card = self.card_of()
+        self.pending = (custom_art.pending_edits(card, card, self.document)
+                        if card is not None and self.document is not None else {})
+        games = (self.document or {}).get("games", [])
+        self.genre_box.configure(values=sorted({str(g.get("genre") or "") for g in games} - {""}, key=str.casefold))
+        self.publisher_box.configure(values=sorted({str(g.get("publisher") or "") for g in games} - {""},
+                                                   key=str.casefold))
+        if self.document is not None:
+            line = summarize(self.document)
+            if self.pending:
+                line += f"; {len(self.pending)} edit{'s' if len(self.pending) != 1 else ''} waiting for a Prepare"
+            self.summary.set(line)
+
+    def effective(self, game: dict) -> dict:
+        """The game as the next Prepare will catalog it: the record with
+        the owner's pending fields laid over it."""
+        pending = self.pending.get(str(game.get("path", "")))
+        if pending is None or not pending.fields:
+            return game
+        return dict(game, **pending.fields)
 
     def fill(self) -> None:
-        """The tree from the loaded catalog, folders first, honouring the
-        'only what I changed' filter."""
+        """The tree from the loaded catalog and the card's own rows, folders
+        first, narrowed by the Show choice and the search."""
         self.tree.delete(*self.tree.get_children())
         if self.document is None:
+            self.shown.set("")
             return
-        games = self.document["games"]
-        if self.only_mine.get():
-            games = [game for game in games if provenance.edited(game.get("sources") or {})]
-        self._add(card_catalog.tree(games), "")
+        mode = self.show.get()
+        if mode == SHOW_CHANGED:
+            records = [game for game in self.document["games"]
+                       if provenance.edited(game.get("sources") or {})
+                       or str(game.get("path", "")) in self.pending]
+        elif mode == SHOW_WAITING:
+            records = list(self.rows)
+        else:
+            records = list(self.document["games"]) + list(self.rows)
+        total = len(records)
+        query = self.query.get().strip()
+        if query:
+            records = [record for record in records if matches(record, query)]
+        self.shown.set(f"{len(records)} of {total}" if query or mode != SHOW_ALL else "")
+        self._add(card_catalog.tree(records), "")
 
     def _add(self, node: dict, parent: str) -> None:
         for name, child in node["folders"].items():
             iid = self.tree.insert(parent, "end", text=f"{name}/  ({card_catalog.count(child)})", open=True)
             self._add(child, iid)
-        for game in node["games"]:
-            sources = game.get("sources") or {}
+        for record in node["games"]:
+            sources = record.get("sources") or {}
+            state = str(record.get("state") or "")
+            pending = self.pending.get(str(record.get("path", "")))
+            game = self.effective(record)
+            if state == STATE_WAITING:
+                box = text = "not yet"
+            elif state == STATE_ASIDE:
+                box = text = "not a ROM"
+            else:
+                box = short_cover_source(str(sources.get("cover", "")))
+                text = short_text_source(str(sources.get("description", "")))
+                if pending is not None and pending.picture is not None:
+                    box = "yours, pending"
+                if pending is not None and "description" in pending.fields:
+                    text = "yours, pending"
+            tag = state or (STATE_PENDING if pending is not None else "")
             self.tree.insert(parent, "end", iid=str(game["path"]), text=str(game.get("title", "")),
+                             tags=(tag,) if tag else (),
                              values=(game.get("genre", ""), game.get("year") or "",
                                      game.get("publisher", ""), game.get("players") or "",
-                                     "/".join(game.get("regions") or []),
-                                     short_cover_source(str(sources.get("cover", ""))),
-                                     short_text_source(str(sources.get("description", "")))))
+                                     "/".join(game.get("regions") or []), box, text))
 
     # -- the selected game ---------------------------------------------------
 
@@ -543,12 +733,13 @@ class CatalogTab:
         return self.games.get(chosen[0]) if chosen else None
 
     def on_select(self, _event=None) -> None:
-        self.show(self.selected())
+        self.show_game(self.selected())
 
-    def show(self, game: dict | None) -> None:
+    def show_game(self, game: dict | None) -> None:
         self.description.configure(state="normal")
         self.description.delete("1.0", "end")
-        self.fill_edit(game)
+        state = str((game or {}).get("state") or "")
+        self.fill_edit(None if state else game)
         if game is None:
             self.title.set("")
             self.facts.set("")
@@ -557,45 +748,94 @@ class CatalogTab:
             self.box.configure(image=self.placeholder, text="")
             self.photo = None
             self.edit.configure(text="Your own art and text")
+        elif state:
+            # A row the card gave, not the catalog: what it is and what
+            # happens next, and nothing to edit until it is catalogued.
+            self.title.set(str(game.get("title", "")))
+            self.facts.set(str(game.get("path", "")))
+            self.sources.set("")
+            self.photo = None
+            if state == STATE_WAITING:
+                self.notes.set("Not in the catalog yet: the browser lists it in its folder, without "
+                               "a box, and plays it. Press Prepare to add its box and facts.")
+                self.box.configure(image=self.placeholder, text="NOT YET")
+            else:
+                self.notes.set(f"Set aside by the tool ({game.get('why', '')}): the browser never "
+                               "lists it, and Prepare will not add it.")
+                self.box.configure(image=self.placeholder, text="NO ART")
+            self.edit.configure(text="Your own art and text")
         else:
             sources = game.get("sources") or {}
-            self.title.set(str(game.get("title", "")))
-            self.facts.set(facts_line(game))
+            pending = self.pending.get(str(game.get("path", "")))
+            shown = self.effective(game)
+            self.title.set(str(shown.get("title", "")))
+            self.facts.set(facts_line(shown))
             self.sources.set(f"Cover: {sources.get('cover', '')}\nText: {sources.get('description', '')}"
                              f"\nTitle: {sources.get('title', '')}\n{box_view_line(game)}")
             self.edit.configure(text=f"Your own art and text for {game.get('title', '')}")
-            self.description.insert("1.0", str(game.get("description") or ""))
-            self.notes.set("\n".join(provenance.notes(game)))
+            self.description.insert("1.0", str(shown.get("description") or ""))
+            notes = list(provenance.notes(game))
+            if pending is not None:
+                # What the edit answers is no longer worth a note.
+                if pending.picture is not None:
+                    notes = [note for note in notes if not note.startswith("No box")]
+                if "description" in pending.fields:
+                    notes = [note for note in notes if not note.startswith("No description")]
+                notes.insert(0, pending_line(pending))
+            self.notes.set("\n".join(notes))
             # The box view's sprite when the card has the large pack --
             # what the console draws full screen -- else the thumbnail,
-            # doubled so it is legible.
+            # doubled so it is legible. A picture of the owner's the catalog
+            # does not carry yet is shown instead, fitted to the same size.
             large = self.covers.pixels(game, large=True) if self.covers is not None else None
             pixels = large or (self.covers.pixels(game) if self.covers is not None else None)
-            if pixels is None:
+            preview = pending_picture(pending.picture) if pending is not None and pending.picture else None
+            if preview is not None:
+                width, height, rgb = preview
+                self.photo = self.tk.PhotoImage(master=self.box, format="PPM",
+                                                data=make_sprite.to_ppm(width, height, rgb))
+                self.box.configure(image=self.photo, text="PENDING", compound="top")
+            elif pixels is None:
                 self.photo = None
-                self.box.configure(image=self.placeholder, text="NO ART")
+                self.box.configure(image=self.placeholder, text="NO ART", compound="center")
             else:
                 width, height, rgb = pixels
-                self.photo = self.tk.PhotoImage(data=make_sprite.to_ppm(width, height, rgb), format="PPM")
+                self.photo = self.tk.PhotoImage(master=self.box, format="PPM",
+                                                data=make_sprite.to_ppm(width, height, rgb))
                 if large is None:
                     self.photo = self.photo.zoom(BOX_ZOOM, BOX_ZOOM)
-                self.box.configure(image=self.photo, text="")
+                self.box.configure(image=self.photo, text="", compound="center")
         self.description.configure(state="disabled")
 
 
     # -- the edit panel ------------------------------------------------------
 
     def fill_edit(self, game: dict | None) -> None:
-        """The panel for a game: the title and text fields hold the owner's
-        own words when the catalog says they are, and nothing otherwise --
-        an empty field keeps what the card has."""
+        """The panel for a game: the fields hold what the owner's file on
+        the card says -- prepared or not -- and nothing otherwise; an
+        empty field keeps what the card has."""
         self.picture.set("")
         self.own_text.delete("1.0", "end")
         self.edit_note.set("")
+        for variable in (self.own_title, self.own_genre, self.own_publisher, self.own_year, self.own_players):
+            variable.set("")
+        for variable in self.own_regions.values():
+            variable.set(False)
         sources = (game or {}).get("sources") or {}
-        self.own_title.set(str(game.get("title", "")) if sources.get("title") == provenance.YOURS else "")
-        if sources.get("description") == provenance.YOURS:
-            self.own_text.insert("1.0", str(game.get("description") or ""))
+        card = self.card_of()
+        own = (custom_art.find_text(custom_art.Index(), card, str(game.get("path", "")),
+                                    custom_art.art_dir(card), str(game.get("code") or ""))
+               if game is not None and card is not None else None)
+        if own is not None:
+            self.own_title.set(own.title)
+            self.own_text.insert("1.0", own.description)
+            self.own_genre.set(str(own.facts.get("genre", "")))
+            self.own_publisher.set(str(own.facts.get("publisher", "")))
+            self.own_year.set(str(own.facts.get("year") or ""))
+            self.own_players.set(str(own.facts.get("players") or ""))
+            for name in own.facts.get("regions", []):
+                if name in self.own_regions:
+                    self.own_regions[name].set(True)
         enabled = "normal" if game is not None else "disabled"
         for widget in (self.save_button, self.remove_button, self.by_code):
             widget.configure(state=enabled)
@@ -639,16 +879,54 @@ class CatalogTab:
         if game is None or card is None:
             return
         picture = Path(self.picture.get().strip()) if self.picture.get().strip() else None
+        facts, problems = self.own_facts()
+        if problems:
+            self.edit_note.set("Not saved: " + "; ".join(problems))
+            return
         try:
             touched = custom_art.save(card, game, picture, self.own_title.get(),
-                                      self.own_text.get("1.0", "end"), self.scope.get())
+                                      self.own_text.get("1.0", "end"), self.scope.get(), facts)
         except (custom_art.EditError, OSError) as error:
             self.edit_note.set(f"Not saved: {error}")
             return
         names = ", ".join(path.name for path in touched) or "nothing to write"
+        self.redraw(str(game["path"]))
         self.edit_note.set(f"Saved {names} in {card_layout.CARD_FOLDER}/{card_layout.ART_FOLDER}/. "
-                           "Press Prepare to rebuild the catalog and covers.")
+                           "Shown here now; press Prepare to put it on the card's catalog and covers.")
         self.remove_button.configure(state="normal" if touched else "disabled")
+
+    def own_facts(self) -> tuple[dict, list[str]]:
+        """The fact fields as a dict for custom_art.save, and what is wrong
+        with them: a year or a player count that is not one."""
+        facts: dict = {}
+        problems: list[str] = []
+        if self.own_genre.get().strip():
+            facts["genre"] = self.own_genre.get().strip()
+        if self.own_publisher.get().strip():
+            facts["publisher"] = self.own_publisher.get().strip()
+        year = self.own_year.get().strip()
+        if year:
+            if year.isdigit() and 1970 <= int(year) <= 2100:
+                facts["year"] = int(year)
+            else:
+                problems.append("the year must be from 1970 to 2100")
+        players = self.own_players.get().strip()
+        if players:
+            facts["players"] = int(players)
+        regions = [name for name, variable in self.own_regions.items() if variable.get()]
+        if regions:
+            facts["regions"] = regions
+        return facts, problems
+
+    def redraw(self, path: str) -> None:
+        """After a Save or a Remove: the overlay again, the tree again with
+        the same row selected, the pane again."""
+        self.refresh_pending()
+        self.fill()
+        if self.tree.exists(path):
+            self.tree.selection_set(path)
+            self.tree.see(path)
+        self.show_game(self.games.get(path))
 
     def remove_edit(self) -> None:
         game, card = self.selected(), self.card_of()
@@ -659,9 +937,7 @@ class CatalogTab:
         except OSError as error:
             self.edit_note.set(f"Not removed: {error}")
             return
-        self.picture.set("")
-        self.own_title.set("")
-        self.own_text.delete("1.0", "end")
+        self.redraw(str(game["path"]))
         self.remove_button.configure(state="disabled")
         self.edit_note.set(("Removed " + ", ".join(path.name for path in removed) + ". " if removed
                             else "Nothing of yours to remove. ")

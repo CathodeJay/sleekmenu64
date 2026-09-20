@@ -8,7 +8,7 @@ from pathlib import Path
 from PIL import Image
 
 from tests.rom_fixtures import write_rom
-from tools import build_metadata, cover_pack, custom_art, pack_covers, prepare_card
+from tools import provenance, build_metadata, cover_pack, custom_art, pack_covers, prepare_card
 from tools.metadata_repo import MetadataRepo
 
 
@@ -73,6 +73,29 @@ class LookupTests(unittest.TestCase):
         text = custom_art.find_text(custom_art.Index(), self.roms, "Homebrew/Flappy.z64", self.art)
         self.assertEqual((text.title, text.description), ("", "Just a bird."))
         self.assertIsNone(custom_art.find_text(custom_art.Index(), self.roms, "Hacks/None.z64", self.art))
+
+    def test_header_lines_set_the_facts_and_bad_values_are_left_unset(self):
+        """Any of the facts, in any order, checked the way the catalog
+        checks them; the first line that is not a header starts the text,
+        so a description that happens to begin with a word and a colon
+        survives when no header precedes it... unless the word is one of
+        the six, which is the price of a format with no delimiter."""
+        (self.roms / "Hacks" / "SM64 Star Road.txt").write_text(
+            "Genre: Platforms\nyear: 2011\nPLAYERS: 1\nRegion: us, jpn\nPublisher:  Skelux \n"
+            "Title: Star Road\n\nA hack.\n", encoding="utf-8")
+        text = custom_art.find_text(custom_art.Index(), self.roms, "Hacks/SM64 Star Road.z64", self.art)
+        self.assertEqual(text.title, "Star Road")
+        self.assertEqual(text.description, "A hack.")
+        self.assertEqual(text.facts, {"genre": "Platforms", "year": 2011, "players": 1,
+                                      "regions": ["USA", "JAPAN"], "publisher": "Skelux"})
+        (self.roms / "Hacks" / "SM64 Star Road.txt").write_text(
+            "Year: soon\nPlayers: 0\nRegions: mars\nGenre:\nNote: the first real line.\n", encoding="utf-8")
+        text = custom_art.find_text(custom_art.Index(), self.roms, "Hacks/SM64 Star Road.z64", self.art)
+        self.assertEqual(text.facts, {})
+        self.assertEqual(text.description, "Note: the first real line.")
+        self.assertEqual(custom_art.format_text("T", "D", {"year": 1999, "regions": ["USA"], "players": 0}),
+                         "Title: T\nYear: 1999\nRegions: USA\n\nD\n")
+        self.assertEqual(custom_art.format_text("", "", {"genre": "Racing"}), "Genre: Racing\n")
 
 
 class PlanTests(unittest.TestCase):
@@ -154,6 +177,26 @@ class CardTests(unittest.TestCase):
             self.assertEqual(document["games"][0]["description"], "Own words.")
             self.assertEqual(how["own text"], 1)
 
+    def test_the_owners_facts_win_over_the_database_and_are_marked_yours(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            roms = card / "ROMS"
+            write_rom(roms / "Game.z64", 1, 2, game_code="GA")
+            (card / "sleekmenu" / "art").mkdir(parents=True)
+            (card / "sleekmenu" / "art" / "Game.txt").write_text(
+                "Genre: Puzzle\nYear: 2001\nPlayers: 2\nRegions: EUROPE\n", encoding="utf-8")
+            document, how = build_metadata.build(roms, card, coverdb_path=card / "none.csv")
+            game = document["games"][0]
+            self.assertEqual((game["genre"], game["year"], game["players"], game["regions"]),
+                             ("Puzzle", 2001, 2, ["EUROPE"]))
+            self.assertEqual(game["publisher"], "")
+            self.assertEqual(game["sources"]["genre"], provenance.YOURS)
+            self.assertEqual(game["sources"]["year"], provenance.YOURS)
+            self.assertEqual(game["sources"]["players"], provenance.YOURS)
+            self.assertEqual(game["sources"]["publisher"], provenance.NONE)
+            self.assertEqual(game["description"], "")
+            self.assertTrue(provenance.edited(game["sources"]))
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -217,6 +260,51 @@ class EditTests(unittest.TestCase):
         with self.assertRaises(custom_art.EditError):
             custom_art.save(self.card, self.hack, self.card / "downloads" / "box.gif", "", "")
         self.assertFalse(self.art.exists())
+
+    def test_pending_edits_are_what_the_next_prepare_would_change(self):
+        """Saved but not yet prepared: the fields that differ from the
+        catalog, a picture newer than the catalog, and an owner's field
+        whose file has gone. A file the last Prepare already read is not
+        pending, however old."""
+        import time
+        document = {"built": "2026-09-20T00:00:00+00:00", "games": [
+            dict(self.hack, genre="Racing", year=1996, players=0, regions=["USA"], description="",
+                 sources={"title": "file name", "cover": "collection", "genre": "database",
+                          "description": "none", "year": "database", "players": "none", "publisher": "none"}),
+            dict(self.mario, title="Mario", description="Own.", genre="", regions=[],
+                 sources={"title": "file name", "cover": "yours (this ROM)", "description": "yours",
+                          "genre": "yours", "year": "none", "players": "none", "publisher": "none"}),
+        ]}
+        # Mario's catalog says the owner gave a picture, a text and a genre,
+        # and none of those files are on the card: the next Prepare takes
+        # them back. The hack has nothing of the owner's yet.
+        pending = custom_art.pending_edits(self.card, self.card, document)
+        self.assertEqual(set(pending), {"ROMS/Mario.z64"})
+        self.assertEqual(pending["ROMS/Mario.z64"].fields, {})
+        self.assertEqual(pending["ROMS/Mario.z64"].removed, ("description", "genre", "cover"))
+        custom_art.save(self.card, self.hack, self.source, "Star Road DX", "A hack.",
+                        facts={"genre": "Platforms", "year": 1996, "regions": ["USA"], "players": 2})
+        pending = custom_art.pending_edits(self.card, self.card, document)
+        self.assertEqual(set(pending), {"ROMS/Hacks/Star Road.z64", "ROMS/Mario.z64"})
+        hack = pending["ROMS/Hacks/Star Road.z64"]
+        # the year and the regions already match the catalog: not pending
+        self.assertEqual(hack.fields, {"title": "Star Road DX", "description": "A hack.",
+                                       "genre": "Platforms", "players": 2})
+        self.assertEqual(hack.picture, self.art / "Star Road.jpg")
+        self.assertEqual(hack.removed, ())
+        # once the catalog carries the edit, and the picture is older than
+        # it, nothing is pending
+        document["games"][0].update(title="Star Road DX", description="A hack.", genre="Platforms",
+                                    players=2, sources={"cover": "yours (this ROM)", "title": "yours"})
+        document["built"] = "2100-01-01T00:00:00+00:00"
+        (self.art / "Mario.txt").write_text("Own.\n")
+        picture(self.art / "Mario.png")
+        document["games"][1]["regions"] = []
+        pending = custom_art.pending_edits(self.card, self.card, document)
+        self.assertNotIn("ROMS/Hacks/Star Road.z64", pending)
+        self.assertEqual(pending["ROMS/Mario.z64"].removed, ("genre",))
+        self.assertIsNone(pending["ROMS/Mario.z64"].picture)
+        time.sleep(0)
 
     def test_empty_text_removes_the_text_file_and_remove_deletes_only_the_art_folders_files(self):
         custom_art.save(self.card, self.hack, self.source, "T", "D")

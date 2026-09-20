@@ -134,7 +134,8 @@ class ConsoleReaderTests(unittest.TestCase):
                  "year": 1997, "players": 4, "regions": ["USA"], "favorite": True,
                  "description": "You are Bond. James Bond."},
                 {"title": "Homebrew", "path": "ROMS/Homebrew.z64", "regions": []},
-            ]}), encoding="utf-8")
+            ], "set_aside": [{"path": "ROMS/Tools/IPL.z64", "why": "not a ROM: no N64 header"}]}),
+                encoding="utf-8")
             good = root / "catalog.ebc"
             build_catalog.build(source, good, root / "manifest.json")
             # The same bytes stamped as format 1: the reader must refuse them.

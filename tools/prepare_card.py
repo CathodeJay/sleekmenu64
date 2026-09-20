@@ -146,6 +146,17 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
     summary["with_description"] = with_text
     log(f"metadata: {len(document['games'])} games, {with_meta} with genre/publisher/year/players, "
         f"{with_text} with a description")
+    aside = document.get("set_aside", [])
+    summary["set_aside"] = len(aside)
+    if aside:
+        # Named, because a file that looks like a game and is not one is
+        # exactly what a person would otherwise go looking for in the list.
+        log(f"set aside: {len(aside)} ROM-shaped file{'s' if len(aside) != 1 else ''} with no N64 "
+            "header, left out of the list (the browser never shows them):")
+        for entry in aside[:20]:
+            log(f"          {entry['path']}")
+        if len(aside) > 20:
+            log(f"          ... and {len(aside) - 20} more")
 
     catalog = work / CATALOG_NAME
     build_catalog.build(metadata_path, catalog, work / "catalog.manifest.json")

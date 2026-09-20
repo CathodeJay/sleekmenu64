@@ -46,6 +46,8 @@ DEFAULT_COVERDB = Path(__file__).resolve().parent.parent / "data" / "coverdb.csv
 DEFAULT_GENRES = genre_map.DEFAULT_PATH
 OVERRIDABLE = ("title", "genre", "publisher", "year", "players", "regions", "cover",
                "favorite", "description")
+# Why a ROM-shaped file was set aside, as the window shows it.
+NOT_A_ROM = "not a ROM: no N64 header"
 
 
 def read_header(path: Path):
@@ -139,6 +141,13 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         raise SystemExit(f"no ROMs under {roms}")
 
     records, how = [], Counter()
+    # ROM-shaped files that are not ROMs -- a 64DD IPL dump, a demo with a
+    # broken header -- are set aside by name and reason: the catalog carries
+    # them so the browser knows to leave them alone and the window can say
+    # why they have no box, rather than counting them as games still to
+    # add. tools/build_catalog.py packs them as records the console never
+    # lists.
+    set_aside: list[dict] = []
     # The card owner's own text, beside a ROM or in sleekmenu/art/, is read
     # only against the card: without a card root there is no art folder.
     art_folder = custom_art.art_dir(sd_root)
@@ -172,6 +181,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         header = read_header(path)
         if header is None:
             how["not a rom"] += 1
+            set_aside.append({"path": str(relative), "why": NOT_A_ROM})
             continue
         how[f"format {header.form}"] += 1
 
@@ -224,6 +234,19 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
                 description, text_source = own.description, provenance.YOURS
             if own.title:
                 title, title_source = own.title, provenance.YOURS
+            # The facts the same way: a header line in the owner's file is
+            # the owner's word on that field, over the database and the
+            # collection both.
+            if "genre" in own.facts:
+                genre, facts["genre"] = own.facts["genre"], provenance.YOURS
+            if "publisher" in own.facts:
+                publisher, facts["publisher"] = own.facts["publisher"], provenance.YOURS
+            if "year" in own.facts:
+                year, facts["year"] = own.facts["year"], provenance.YOURS
+            if "players" in own.facts:
+                players, facts["players"] = own.facts["players"], provenance.YOURS
+            if "regions" in own.facts:
+                regions = list(own.facts["regions"])
 
         record = {
             # The header CRC pair and game code, so a correction to
@@ -274,7 +297,8 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
     attribution = ("read from the ROM headers and data/coverdb.csv"
                    + ("; descriptions and gaps from the n64-flashcart-menu-metadata "
                       "collection (public domain)" if repo is not None else ""))
-    return {"schema_version": 1, "attribution": attribution, "games": records}, how
+    return {"schema_version": 1, "attribution": attribution, "games": records,
+            "set_aside": set_aside}, how
 
 
 def main(argv=None) -> int:
