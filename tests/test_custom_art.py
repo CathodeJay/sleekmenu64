@@ -2,6 +2,7 @@
 """The card owner's own pictures and text, by ROM name or game code."""
 
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -57,6 +58,20 @@ class LookupTests(unittest.TestCase):
         found = self.find("Homebrew/Flappy.z64", code="")
         self.assertIsNotNone(found)
         self.assertEqual(found.path.name, "FLAPPY.JPG")
+
+    def test_names_match_whichever_way_an_accent_is_spelled(self):
+        """The catalog spells "Pokemon" with its accent composed, as the card
+        stores it; macOS lists the picture beside it with the accent as a
+        character of its own. Both name the same file."""
+        composed = "Pok\u00e9mon Snap (NA)"
+        decomposed = unicodedata.normalize("NFD", composed)
+        self.assertNotEqual(composed, decomposed)
+        picture(self.art / (decomposed + ".png"))
+        found = self.find(f"Hacks/{composed}.z64", code="")
+        self.assertIsNotNone(found)
+        self.assertEqual(found.path.name, decomposed + ".png")
+        self.assertEqual(custom_art.per_rom_sprite(f"Hacks/{composed}.z64"),
+                         custom_art.per_rom_sprite(f"Hacks/{decomposed}.z64"))
 
     def test_two_roms_of_one_name_in_two_folders_get_two_sprites(self):
         self.assertNotEqual(custom_art.per_rom_sprite("A/Game.z64"), custom_art.per_rom_sprite("B/Game.z64"))

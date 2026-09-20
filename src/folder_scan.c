@@ -43,15 +43,123 @@ bool sm_file_excluded(const char *name) {
 }
 
 char *sm_title_from_name(const char *name) {
-    size_t length = strlen(name);
+    size_t length = strlen(name), kept = 0;
     char *title;
     if (length >= 4 && sm_name_is_rom(name)) length -= 4;
-    title = malloc(length + 1);
+    title = malloc(length + 2u);
     if (title == NULL) return NULL;
-    for (size_t i = 0; i < length; i++)
-        title[i] = (name[i] == '_' || name[i] == '-') ? ' ' : name[i];
+    memcpy(title, name, length);
     title[length] = '\0';
+    length = sm_ascii_fold(title, title, length + 1u);
+    /* Underscores and dashes read as spaces, and a run of spaces as one. */
+    for (size_t i = 0; i < length; i++) {
+        char c = (title[i] == '_' || title[i] == '-') ? ' ' : title[i];
+        if (c == ' ' && (kept == 0 || title[kept - 1] == ' ')) continue;
+        title[kept++] = c;
+    }
+    while (kept > 0 && title[kept - 1] == ' ') kept--;
+    /* A name written wholly in letters the font lacks still names a game. */
+    if (kept == 0) title[kept++] = '?';
+    title[kept] = '\0';
     return title;
+}
+
+/* -- names in the font's letters ------------------------------------------ */
+
+/* U+00A0..U+017F -- Latin-1 and Latin Extended-A, the letters of the
+   European languages -- each as tools/build_catalog.py console_text()
+   spells it. tests/test_build_catalog.py holds the two to the same answer
+   for every one of them. */
+static const char *const LATIN[0x180 - 0xA0] = {
+    /* 00A0 */ " ", "", "", "", "", "", "", "",
+    /* 00A8 */ " ", "", "a", "", "", "", "", " ",
+    /* 00B0 */ "", "", "2", "3", " ", "", "", "-",
+    /* 00B8 */ " ", "1", "o", "", "14", "12", "34", "",
+    /* 00C0 */ "A", "A", "A", "A", "A", "A", "AE", "C",
+    /* 00C8 */ "E", "E", "E", "E", "I", "I", "I", "I",
+    /* 00D0 */ "D", "N", "O", "O", "O", "O", "O", "x",
+    /* 00D8 */ "O", "U", "U", "U", "U", "Y", "Th", "ss",
+    /* 00E0 */ "a", "a", "a", "a", "a", "a", "ae", "c",
+    /* 00E8 */ "e", "e", "e", "e", "i", "i", "i", "i",
+    /* 00F0 */ "d", "n", "o", "o", "o", "o", "o", "",
+    /* 00F8 */ "o", "u", "u", "u", "u", "y", "th", "y",
+    /* 0100 */ "A", "a", "A", "a", "A", "a", "C", "c",
+    /* 0108 */ "C", "c", "C", "c", "C", "c", "D", "d",
+    /* 0110 */ "D", "d", "E", "e", "E", "e", "E", "e",
+    /* 0118 */ "E", "e", "E", "e", "G", "g", "G", "g",
+    /* 0120 */ "G", "g", "G", "g", "H", "h", "H", "h",
+    /* 0128 */ "I", "i", "I", "i", "I", "i", "I", "i",
+    /* 0130 */ "I", "i", "IJ", "ij", "J", "j", "K", "k",
+    /* 0138 */ "k", "L", "l", "L", "l", "L", "l", "L",
+    /* 0140 */ "l", "L", "l", "N", "n", "N", "n", "N",
+    /* 0148 */ "n", "n", "N", "n", "O", "o", "O", "o",
+    /* 0150 */ "O", "o", "OE", "oe", "R", "r", "R", "r",
+    /* 0158 */ "R", "r", "S", "s", "S", "s", "S", "s",
+    /* 0160 */ "S", "s", "T", "t", "T", "t", "T", "t",
+    /* 0168 */ "U", "u", "U", "u", "U", "u", "U", "u",
+    /* 0170 */ "U", "u", "U", "u", "W", "w", "Y", "y",
+    /* 0178 */ "Y", "Z", "z", "Z", "z", "Z", "z", "s",
+};
+
+/* The code point at `*at`, which is stepped past it. A malformed sequence
+   is one byte that spells nothing, so a name in some other encoding loses
+   the odd letter rather than the rest of itself. */
+static uint32_t next_code_point(const unsigned char **at) {
+    const unsigned char *s = *at;
+    uint32_t point;
+    unsigned extra;
+    if (s[0] < 0x80u) { *at = s + 1; return s[0]; }
+    if ((s[0] & 0xE0u) == 0xC0u) { point = s[0] & 0x1Fu; extra = 1; }
+    else if ((s[0] & 0xF0u) == 0xE0u) { point = s[0] & 0x0Fu; extra = 2; }
+    else if ((s[0] & 0xF8u) == 0xF0u) { point = s[0] & 0x07u; extra = 3; }
+    else { *at = s + 1; return 0; }
+    for (unsigned i = 1; i <= extra; i++) {
+        /* A NUL is not a continuation byte, so this never reads past one. */
+        if ((s[i] & 0xC0u) != 0x80u) { *at = s + 1; return 0; }
+        point = (point << 6) | (s[i] & 0x3Fu);
+    }
+    *at = s + 1 + extra;
+    return point;
+}
+
+static const char *spelling(uint32_t point, char *one) {
+    if (point >= 0x20u && point < 0x7Fu) { one[0] = (char)point; return one; }
+    if (point >= 0xA0u && point < 0x180u) return LATIN[point - 0xA0u];
+    /* Full-width ASCII, which Japanese file names use for Latin letters. */
+    if (point >= 0xFF01u && point <= 0xFF5Eu) { one[0] = (char)(point - 0xFEE0u); return one; }
+    switch (point) {
+    case 0x2000: case 0x2001: case 0x2002: case 0x2003: case 0x2004: case 0x2005:
+    case 0x2006: case 0x2007: case 0x2008: case 0x2009: case 0x200A: case 0x2017:
+    case 0x202F: case 0x203E: case 0x205F: case 0x3000: return " ";
+    case 0x2013: case 0x2014: case 0x2015: case 0x2022: case 0x2212: return "-";
+    case 0x2018: case 0x2019: case 0x201A: return "'";
+    case 0x201C: case 0x201D: case 0x201E: return "\"";
+    case 0x2024: return ".";
+    case 0x2025: return "..";
+    case 0x2026: return "...";
+    case 0x203C: return "!!";
+    case 0x2047: return "??";
+    case 0x2048: return "?!";
+    case 0x2049: return "!?";
+    /* Combining accents -- the second half of a decomposed letter -- and
+       every script the font has no letters for. */
+    default: return "";
+    }
+}
+
+size_t sm_ascii_fold(const char *text, char *out, size_t out_size) {
+    const unsigned char *at = (const unsigned char *)text;
+    char one[2] = {0, 0};
+    size_t length = 0;
+    if (out == NULL || out_size == 0) return 0;
+    while (at != NULL && *at && length + 1u < out_size) {
+        /* Read before written: no spelling is longer than the bytes it
+           replaces, so `out` may be `text` itself. */
+        const char *spelled = spelling(next_code_point(&at), one);
+        while (*spelled && length + 1u < out_size) out[length++] = *spelled++;
+    }
+    out[length] = '\0';
+    return length;
 }
 
 /* -- extras --------------------------------------------------------------- */

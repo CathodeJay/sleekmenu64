@@ -98,7 +98,7 @@ def scan(sd_root: Path, metadata_path: Path | None = None,
         for filename in sorted(files):
             if Path(filename).suffix.casefold() not in build_catalog.ROM_SUFFIXES:
                 continue
-            path = normalize_rom_path((base / filename).relative_to(sd_root).as_posix())
+            path = normalize_rom_path(card_layout.card_name((base / filename).relative_to(sd_root).as_posix()))
             game: dict[str, object] = {
                 "title": infer_title(path),
                 "path": path,

@@ -1587,6 +1587,98 @@ int main(void) {
         sm_test_dir_set(NULL, NULL, 0);
     }
 
+    /* ---- a name with an accent is one game, drawn without the accent ---- */
+    {
+        /* The card stores "Pokemon" with its accent composed, and the
+           catalog spells it the same way: the file is the catalog's own and
+           not a second, uncatalogued copy of it. A file and a folder the
+           catalog does not know, accents in their names, are listed and
+           drawn in the letters the font has. */
+        static const row_t rows[] = {
+            {"ROMS/Pok\xc3\xa9mon Snap (NA).z64", "Pokemon Snap", "Action", 0, "", 0, NULL},
+        };
+        static const sm_test_dir_entry_t entries[] = {
+            {"Pok\xc3\xa9mon Snap (NA).z64", false},
+            {"Pok\xc3\xa9mon Stadium 2 (NA).z64", false},
+            {"Fran\xc3\xa7" "ais", true},
+        };
+        sm_game_t game;
+        bool ascii = true;
+        sm_test_dir_set("sd:/ROMS", entries, 3);
+        start(rows, 1u);
+        idle(3);
+        assert(ui.item_count == 3u);
+        assert(ui.items[0] & SM_UI_FOLDER_BIT);
+        assert(ui.items[1] == 0u && ui.items[2] >= ROW_COUNT);
+        assert(catalog_get(&CATALOG, ui.items[2], &game));
+        assert(!strcmp(game.path, "ROMS/Pok\xc3\xa9mon Stadium 2 (NA).z64"));
+        assert(!strcmp(game.title, "Pokemon Stadium 2 (NA)"));
+        assert(ui.status && strstr(ui.status, "1 file not in the catalog"));
+        settle();
+        draw();
+        assert(sm_test_drew("[Francais]") && sm_test_drew("Pokemon Stadium 2 (NA)"));
+        for (int i = 0; i < sm_test_text_count; i++)
+            for (const unsigned char *at = (const unsigned char *)sm_test_text[i]; *at; at++)
+                if (*at >= 0x80u) ascii = false;
+        assert(ascii);
+        /* Its card, and the start it makes, use the card's own bytes. */
+        frame(PRESS(down)); frame(PRESS(down));
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        assert(!strcmp(fake_selected, "ROMS/Pok\xc3\xa9mon Stadium 2 (NA).z64"));
+        draw();
+        assert(sm_test_drew("Pokemon Stadium 2"));
+        for (int i = 0; i < sm_test_text_count; i++)
+            for (const unsigned char *at = (const unsigned char *)sm_test_text[i]; *at; at++)
+                if (*at >= 0x80u) ascii = false;
+        assert(ascii);
+        frame(PRESS(back));
+        /* Into the folder and back out: B lands on it by its own name. */
+        frame(PRESS(up)); frame(PRESS(up));
+        assert(ui.items[ui.selected] & SM_UI_FOLDER_BIT);
+        sm_test_dir_set("sd:/ROMS/Fran\xc3\xa7" "ais", (const sm_test_dir_entry_t[]){{"Jeu.z64", false}}, 1);
+        frame(PRESS(select));
+        assert(!strcmp(ui.folder, "ROMS/Fran\xc3\xa7" "ais"));
+        idle(2);
+        frame(PRESS(back));
+        assert(!strcmp(ui.folder, "ROMS") && ui.selected == 0u);
+        sm_test_dir_set(NULL, NULL, 0);
+    }
+
+    /* ---- the fold itself ------------------------------------------------- */
+    {
+        char out[64];
+        /* Composed and decomposed alike: the accent of the second is a
+           code point of its own, and spells nothing. */
+        assert(sm_ascii_fold("Pok\xc3\xa9mon", out, sizeof(out)) == 7u && !strcmp(out, "Pokemon"));
+        assert(sm_ascii_fold("Poke\xcc\x81mon", out, sizeof(out)) == 7u && !strcmp(out, "Pokemon"));
+        sm_ascii_fold("\xc3\x86sop \xe2\x80\x94 \xe2\x80\x9cStra\xc3\x9f" "e\xe2\x80\x9d\xe2\x80\xa6", out, sizeof(out));
+        assert(!strcmp(out, "AEsop - \"Strasse\"..."));
+        /* Full-width Latin, and a script the font has no letters for. */
+        sm_ascii_fold("\xef\xbc\xa6\xef\xbc\x9a\xe3\x83\x9d\xe3\x82\xb1", out, sizeof(out));
+        assert(!strcmp(out, "F:"));
+        /* A byte that starts nothing, and a sequence cut short by the end
+           of the string, spell nothing and take nothing after them. */
+        sm_ascii_fold("a\xe9" "b\xc3", out, sizeof(out));
+        assert(!strcmp(out, "ab"));
+        /* A small buffer takes what fits and is terminated, and the fold
+           may run in place. */
+        assert(sm_ascii_fold("\xc3\xa6\xc3\xa6\xc3\xa6", out, 4u) == 3u && !strcmp(out, "aea"));
+        snprintf(out, sizeof(out), "%s", "Z\xc3\xbcrich \xe2\x80\x93 Gen\xc3\xa8ve");
+        sm_ascii_fold(out, out, sizeof(out));
+        assert(!strcmp(out, "Zurich - Geneve"));
+        /* The title a name gives: letters spelled, separators as spaces, a
+           run of them as one, none at either end, "?" for nothing left. */
+        {
+            char *title = sm_title_from_name("__Pok\xc3\xa9mon--Snap_.z64");
+            assert(title && !strcmp(title, "Pokemon Snap"));
+            free(title);
+            title = sm_title_from_name("\xe3\x83\x9d\xe3\x82\xb1\xe3\x83\xa2\xe3\x83\xb3.z64");
+            assert(title && !strcmp(title, "?"));
+            free(title);
+        }
+    }
+
     remove(SM_FAVORITES_PATH);
     printf("ui host checks passed\n");
     return 0;

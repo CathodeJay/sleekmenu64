@@ -51,7 +51,8 @@ def walk(root: Path, suffixes=LIBRARY_SUFFIXES, excluded=card_layout.EXCLUDED_DI
     every platform. Folders named in `excluded` are never entered, hidden
     entries are skipped, and the browser's own ROM is not a game. Names come
     from the directory listing, so the catalog spells a folder the way the
-    card does and not the way a caller typed it."""
+    card does and not the way a caller typed it -- composed, as the card has
+    them, even where macOS lists them decomposed (card_layout.card_name)."""
     if not root.is_dir():
         raise LibraryError(f"not a folder: {root}")
     found: list[str] = []
@@ -63,7 +64,7 @@ def walk(root: Path, suffixes=LIBRARY_SUFFIXES, excluded=card_layout.EXCLUDED_DI
             if card_layout.hidden(filename) or filename.casefold() == card_layout.BROWSER_ROM.casefold():
                 continue
             if Path(filename).suffix.casefold() in suffixes:
-                found.append((base / filename).relative_to(root).as_posix())
+                found.append(card_layout.card_name((base / filename).relative_to(root).as_posix()))
     return sorted(found, key=lambda value: (value.casefold(), value))
 
 
@@ -87,6 +88,6 @@ def spelled_on_disk(card: Path, folder: Path) -> Path:
         return folder
     current = card.resolve()
     for part in parts:
-        match = next((name for name in os.listdir(current) if name.casefold() == part.casefold()), part)
-        current = current / match
+        match = next((name for name in os.listdir(current) if card_layout.same_name(name, part)), part)
+        current = current / card_layout.card_name(match)
     return current

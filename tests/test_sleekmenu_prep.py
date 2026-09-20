@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import unittest
 import zipfile
 from pathlib import Path
@@ -171,6 +172,30 @@ class CardDiscoveryTests(unittest.TestCase):
             with mock.patch("os.listdir", lambda path: ["roms", "other"]):
                 self.assertEqual(library.spelled_on_disk(card, card / "ROMS").name, "roms")
                 self.assertEqual(library.spelled_on_disk(card, card / "ROMS" / "US").name, "US")
+
+    def test_a_name_with_an_accent_is_recorded_as_the_card_stores_it(self):
+        """The card stores "Pokemon" with its accent composed, and the
+        console reads it so; macOS lists it decomposed. A catalog built on a
+        Mac must carry the composed spelling, or the browser lists the game
+        twice -- once from the catalog, once as a file the catalog does not
+        know -- and cannot open it by the catalog's name. Elsewhere the
+        listing is already the card's own and is kept as it is. A Linux
+        folder keeps whatever bytes it is given, so it can stand in for the
+        Mac's listing."""
+        composed = "Fran\u00e7ais/Pok\u00e9mon Snap (NA).z64"
+        decomposed = unicodedata.normalize("NFD", composed)
+        self.assertNotEqual(composed, decomposed)
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch)
+            write_rom(card / decomposed, 1, 2)
+            with mock.patch.object(sys, "platform", "darwin"):
+                self.assertEqual(library.walk(card), [composed])
+                spelled = library.spelled_on_disk(card, card / "FRAN\u00c7AIS")
+                self.assertEqual(spelled.name, "Fran\u00e7ais")
+            with mock.patch.object(sys, "platform", "linux"):
+                self.assertEqual(library.walk(card), [decomposed])
+                self.assertEqual(library.spelled_on_disk(card, card / "FRAN\u00c7AIS").name,
+                                 unicodedata.normalize("NFD", "Fran\u00e7ais"))
 
     def test_the_card_folders_are_laid_out_once(self):
         with tempfile.TemporaryDirectory() as scratch:

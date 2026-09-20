@@ -34,7 +34,9 @@ this is the reference.
 Only the ROM is required. Without `catalog.ebc` the browser scans the card
 and shows file names; without `covers.pak` it draws a placeholder. The ROMs
 must be on the card itself: the catalog records each game's path relative to
-the card root, spelled as the card spells it. Both the tool and the browser
+the card root, spelled as the card spells it -- an accented name with its
+accents composed, as the card stores it, even on a Mac, which lists them
+decomposed. Both the tool and the browser
 skip the folders that hold no games — `ED64`, `sleekmenu`, `menu`,
 `metadata`, `System Volume Information`, anything hidden — and the browser's
 own `SleekMenu64.z64`. When every game is under one folder, the browser

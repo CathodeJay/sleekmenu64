@@ -39,7 +39,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import coverdb, custom_art, genre_map, headers, identify, library, provenance, rom_header
+from tools import card_layout, coverdb, custom_art, genre_map, headers, identify, library, provenance, rom_header
 from tools.metadata_repo import MetadataRepo, RepoError
 
 DEFAULT_COVERDB = Path(__file__).resolve().parent.parent / "data" / "coverdb.csv"
@@ -69,7 +69,9 @@ def load_overrides(path: Path | None) -> dict[str, dict]:
     games = document.get("games")
     if not isinstance(games, dict):
         raise SystemExit("overrides file needs a games object")
-    return {str(k).replace("\\", "/").casefold(): v for k, v in games.items()}
+    # Typed by hand, perhaps with the accents macOS decomposes: keyed the way
+    # the card compares names, so either spelling finds the game.
+    return {card_layout.fold(str(k).replace("\\", "/")): v for k, v in games.items()}
 
 
 def load_cover_map(path: Path | None) -> dict[str, str]:
@@ -288,7 +290,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
             how[f"genre not in map: {name}"] += 1
 
     for record in records:
-        patch = patches.get(record["path"].casefold())
+        patch = patches.get(card_layout.fold(record["path"]))
         if patch:
             record.update({k: v for k, v in patch.items() if k in OVERRIDABLE})
             record["sources"].update({k: provenance.OVERRIDE for k in patch if k in provenance.FIELDS})

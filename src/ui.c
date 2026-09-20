@@ -27,9 +27,20 @@ enum { FILTER_ROWS = 6 };
 #define COVER_WIDTH SM_COVER_WIDTH
 #define COVER_HEIGHT SM_COVER_HEIGHT
 
+/* Text as the font can draw it. Every title and field the catalog carries
+   is already ASCII -- the tool spelled it so -- and comes back as it is; a
+   folder or file name straight off the card may not be, and is spelled
+   into `buffer`. */
+static const char *drawable(const char *text, char *buffer, size_t size) {
+    for (const unsigned char *at = (const unsigned char *)text; *at; at++)
+        if (*at >= 0x80u) { sm_ascii_fold(text, buffer, size); return buffer; }
+    return text;
+}
+
 static void draw_truncated(surface_t *surface, int x, int y, const char *text, int max_chars) {
-    char line[64];
+    char line[64], folded[128];
     if (max_chars < 1) return;
+    text = drawable(text, folded, sizeof(folded));
     if (max_chars >= (int)sizeof(line)) max_chars = sizeof(line) - 1;
     size_t length = strlen(text);
     size_t copy = length < (size_t)max_chars ? length : (size_t)max_chars;
@@ -84,8 +95,8 @@ static int draw_wrapped(surface_t *surface, int x, int y, int line_height,
 
 static void draw_status(surface_t *surface, const sm_layout_t *layout, const char *text) {
     int max_chars = (layout->safe_right - layout->safe_left) / FONT_WIDTH;
-    char line[64];
-    const char *cursor = text;
+    char line[64], folded[160];
+    const char *cursor = drawable(text, folded, sizeof(folded));
     for (int row = 0; row < 2 && *cursor; row++) {
         while (*cursor == ' ') cursor++;
         size_t remaining = strlen(cursor), take = remaining < (size_t)max_chars ? remaining : (size_t)max_chars;
@@ -119,8 +130,10 @@ static void draw_launch_progress(uint32_t loaded_kib, uint32_t total_kib, void *
 }
 
 static void draw_path_tail(surface_t *surface, int x, int y, const char *text, int max_chars) {
-    char line[64];
+    char line[64], folded[512];
     if (text == NULL || max_chars < 1) return;
+    /* The whole path, so the tail shown is the path's own tail. */
+    text = drawable(text, folded, sizeof(folded));
     if (max_chars >= (int)sizeof(line)) max_chars = sizeof(line) - 1;
     size_t length = strlen(text);
     if (length <= (size_t)max_chars) {
@@ -1566,8 +1579,12 @@ static bool item_is_favorite(const sm_ui_t *ui, uint32_t item, const sm_game_t *
    and would cost a redraw every frame. */
 static void draw_row_title(surface_t *s, int x, int y, int width, const char *title,
     bool selected, unsigned marquee) {
+    char folded[128];
     int room = width / SM_FONT_WIDTH;
-    int length = (int)strlen(title);
+    int length;
+    /* Scrolled by letters drawn, not by bytes stored. */
+    title = drawable(title, folded, sizeof(folded));
+    length = (int)strlen(title);
     if (!selected || length <= room) { draw_truncated(s, x, y, title, room); return; }
     {
         /* Hold at each end for a moment, then slide. The pause is what makes a

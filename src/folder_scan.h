@@ -62,10 +62,21 @@ bool sm_name_is_rom(const char *name);
 bool sm_name_is_hidden(const char *name);
 bool sm_folder_excluded(const char *name);
 bool sm_file_excluded(const char *name);
-/* The title a file name gives a game nothing knows: the suffix dropped and
-   the underscores and dashes people put in file names read as spaces.
-   Allocated; NULL when memory is short. */
+/* The title a file name gives a game nothing knows: the suffix dropped,
+   the underscores and dashes people put in file names read as spaces, and
+   the letters spelled as the font can draw them (sm_ascii_fold). Allocated;
+   NULL when memory is short. */
 char *sm_title_from_name(const char *name);
+/* The font draws ASCII, and a name on the card is UTF-8: the accent in
+   "Pokemon" is two bytes the font has no glyph for, drawn as two wrong
+   ones. This spells `text` in the font's letters as tools/build_catalog.py
+   console_text() spells a title -- accents dropped, "ae" for the ligature,
+   straight quotes for curly ones -- for Latin-1, Latin Extended-A, the
+   common punctuation and full-width ASCII, and leaves out the rest. No
+   spelling is longer than what it replaces, so a buffer the size of `text`
+   always holds the answer, and `out` may be `text`. Returns the length
+   written; `out` is always terminated. */
+size_t sm_ascii_fold(const char *text, char *out, size_t out_size);
 
 void sm_folder_scan_init(sm_folder_scan_t *scan);
 /* The folder being browsed changed. A folder read earlier this session is

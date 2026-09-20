@@ -152,6 +152,33 @@ class ConsoleReaderTests(unittest.TestCase):
                            cwd=self.ROOT, check=True)
             subprocess.run([str(binary), str(good), str(older), str(junk)], check=True)
 
+    def test_the_console_spells_a_name_as_the_builder_spells_a_title(self):
+        """A title the catalog carries was spelled by console_text(); a name
+        the browser finds on the card is spelled by sm_ascii_fold(). The
+        same letters must come out of both, or a game the tool knows and the
+        same game found on the card read differently. Every character the
+        console's table covers is checked, between two letters so that a
+        spelling of a space survives console_text's trimming."""
+        points = (list(range(0x20, 0x7F)) + list(range(0xA0, 0x180)) + list(range(0x300, 0x370))
+                  + list(range(0x2000, 0x2070)) + [0x2212, 0x3000] + list(range(0xFF01, 0xFF5F))
+                  # Scripts the font has no letters for: left out by both.
+                  + [0x391, 0x416, 0x5D0, 0x627, 0x3042, 0x30DD, 0x4E00, 0xAC00])
+        lines = [f"a{chr(point)}b" for point in points]
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "fold-test"
+            subprocess.run(self.HOST_CC + ["src/catalog.c", "src/folder_scan.c",
+                                           "tests/stubs/libdragon_stub.c",
+                                           "tests/fold_test.c", "-o", str(binary)],
+                           cwd=self.ROOT, check=True)
+            result = subprocess.run([str(binary)], input="\n".join(lines).encode("utf-8") + b"\n",
+                                    capture_output=True, check=True)
+        folded = result.stdout.decode("ascii").split("\n")[:-1]
+        self.assertEqual(len(folded), len(lines))
+        for point, line, console in zip(points, lines, folded):
+            with self.subTest(point=f"U+{point:04X}"):
+                self.assertEqual(console, build_catalog.console_text(line))
+                self.assertLessEqual(len(console), len(line.encode("utf-8")))
+
 
 if __name__ == "__main__":
     unittest.main()

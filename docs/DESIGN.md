@@ -223,7 +223,16 @@ favourites see them without knowing. A file gets its name for a title and
 in `/`, which is what lets it stand in for "the first game inside it"
 wherever a folder item is read. Each is moved to where its name sorts, since
 the catalog is in path order. Membership is one hash lookup per entry
-against the catalog's names in that folder, built once per read. A
+against the catalog's names in that folder, built once per read, and it
+compares bytes: the catalog must spell a name exactly as the card stores
+it. That matters for an accented name, which a FAT or exFAT card stores
+composed ("é" one character) and macOS lists decomposed ("e" and an
+accent); the tool composes what macOS lists before it goes into the
+catalog, or the browser would list the game twice and could not open it by
+the catalog's name. The font draws ASCII, so a name straight off the card
+is spelled in its letters the way the tool spells a title -- accents
+dropped, "ae" for the ligature -- when it is drawn, and a title made from a
+file name is spelled so when it is made. A
 finished folder is kept for the session, four at a time, so stepping back
 into one lists its extras at once. Only one thing reads the card at a time:
 covers and headers wait for the read to finish, and the launch card, which

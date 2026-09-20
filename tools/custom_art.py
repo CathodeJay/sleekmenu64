@@ -76,7 +76,10 @@ def art_dir(card: Path | None) -> Path | None:
 
 
 class Index:
-    """Directory listings, case-folded, read once per folder."""
+    """Directory listings, read once per folder, looked up the way the card
+    looks names up: ignoring case, and ignoring whether an accent is one
+    character or two (card_layout.fold). A ROM path in the catalog is
+    composed; macOS lists the picture beside it decomposed."""
 
     def __init__(self) -> None:
         self._listings: dict[Path, dict[str, str]] = {}
@@ -87,16 +90,16 @@ class Index:
         listing = self._listings.get(folder)
         if listing is None:
             try:
-                listing = {entry.casefold(): entry for entry in os.listdir(folder)}
+                listing = {card_layout.fold(entry): entry for entry in os.listdir(folder)}
             except OSError:
                 listing = {}
             self._listings[folder] = listing
-        actual = listing.get(name.casefold())
+        actual = listing.get(card_layout.fold(name))
         return folder / actual if actual is not None else None
 
 
 def per_rom_sprite(rom_path: str) -> str:
-    digest = hashlib.sha1(PurePosixPath(rom_path).as_posix().casefold().encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(card_layout.fold(PurePosixPath(rom_path).as_posix()).encode("utf-8")).hexdigest()
     return f"custom-{digest[:8]}.sprite"
 
 
