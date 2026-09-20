@@ -429,6 +429,67 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(root.sleekmenu_state["last_code"], 1)
             self.assertFalse((card / "sleekmenu").exists())
 
+    def test_a_save_is_put_on_the_card_at_once_and_a_second_one_waits_its_turn(self):
+        """The console reads only the catalog, so a Save that stopped at the
+        owner's file changed nothing there. Now Save runs the same Prepare
+        the button does -- incremental, so seconds -- with the choices the
+        card remembers, and the catalog the console reads has the edit.
+        A Save while that runs is applied after it; a Remove is applied
+        the same way."""
+        from tools import card_catalog
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Hacks" / "Kaizo.z64", 0x33, 0x44, game_code="WR")
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_rom(card / "Other" / "Loose.z64", 5, 6)
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card, roms=Path("ROMS"))), 0)
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            catalog = state["catalog"]
+            # a half-edited games folder on the Prepare tab is not what an
+            # edit is applied with: the card's own choice is
+            state["fields"]["roms"].set("")
+            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            root.update()
+            catalog.own_title.set("Kaizo Race")
+            catalog.own_genre.set("Racing")
+            catalog.save_edit()
+            self.assertEqual(state["runner"].kind, "apply")
+            self.assertIn("Putting it on the card", catalog.edit_note.get())
+            # a second game saved while the first is going in (no event
+            # loop turn in between: the run is only over once the window
+            # has seen it end)
+            catalog.tree.selection_set("ROMS/Wave Race 64 (USA).z64")
+            catalog.on_select()
+            catalog.own_text.insert("1.0", "Waves.")
+            catalog.save_edit()
+            self.assertEqual(state["apply_pending"], "ROMS/Wave Race 64 (USA).z64")
+            while state["runner"] is not None or "apply_pending" in state:
+                root.update()
+            self.assertEqual(state["last_apply"], 0)
+            games = {game["path"]: game for game in card_catalog.load(card)["games"]}
+            self.assertEqual(games["ROMS/Hacks/Kaizo.z64"]["title"], "Kaizo Race")
+            self.assertEqual(games["ROMS/Hacks/Kaizo.z64"]["genre"], "Racing")
+            self.assertEqual(games["ROMS/Wave Race 64 (USA).z64"]["description"], "Waves.")
+            self.assertNotIn("Other/Loose.z64", games, "applied with the card's games folder")
+            self.assertIn(b"Kaizo Race", (card / "sleekmenu" / "catalog.ebc").read_bytes())
+            self.assertEqual(catalog.pending, {})
+            self.assertEqual(catalog.selected()["path"], "ROMS/Wave Race 64 (USA).z64", "the row stays")
+            self.assertEqual(catalog.edit_note.get(), "On the card: SleekMenu shows it the next time it starts.")
+            # and a Remove goes back the same way
+            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            root.update()
+            catalog.remove_edit()
+            while state["runner"] is not None:
+                root.update()
+            games = {game["path"]: game for game in card_catalog.load(card)["games"]}
+            self.assertEqual(games["ROMS/Hacks/Kaizo.z64"]["title"], "Kaizo")
+            self.assertEqual(catalog.edit_note.get(), "On the card: SleekMenu shows it the next time it starts.")
+            root.destroy()
+
     def test_the_edit_panel_writes_and_removes_the_owners_files(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"

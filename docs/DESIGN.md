@@ -103,6 +103,16 @@ pending the other way. No record of "unsaved changes" exists apart from
 the files, so a file dropped into `sleekmenu/art/` by hand is shown the
 same way, and nothing goes stale.
 
+**Save is applied, not only saved.** The console reads `catalog.ebc` and
+nothing else, so an owner's file that no Prepare has read changes nothing
+there -- and a Save that stopped at the file looked done in the window and
+was not. Save and Remove now start the same run as Prepare, with the
+choices the card remembers (its games folder, its high-resolution boxes)
+rather than whatever is half-typed on the Prepare tab; the run is
+incremental, so it costs seconds. One run at a time: an edit saved while
+one goes is applied after it. There is no second writer of the catalog,
+which is why this is a whole run and not a patch of one record.
+
 **What the tool sets aside, the browser knows.** A ROM-shaped file with
 no N64 header -- a 64DD IPL dump, a broken download -- is refused by the
 tool, and before it was carried anywhere the browser's read of the folder

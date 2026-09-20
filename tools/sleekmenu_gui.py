@@ -536,11 +536,20 @@ class CatalogTab:
 
     DETAIL_WIDTH = 300
 
-    def __init__(self, parent, card_of):
+    def __init__(self, parent, card_of, apply=None):
+        """`apply(path)`, when given, puts the owner's files on the card's
+        catalog -- a Prepare -- after a Save or a Remove, and answers
+        "started", "queued", or why not ("no card", "no collection"); the
+        window calls applied() when that run ends."""
         import tkinter as tk
         from tkinter import ttk
         self.tk, self.ttk = tk, ttk
         self.card_of = card_of
+        self.apply = apply
+        # The line under the edit panel for one game, kept across redraws
+        # until another game is shown: a Save's outcome arrives after the
+        # tree has been rebuilt.
+        self.note_for: tuple[str, str] | None = None
         self.document = None
         self.covers = None
         self.games: dict[str, dict] = {}
@@ -913,7 +922,12 @@ class CatalogTab:
         empty field keeps what the card has."""
         self.picture.set("")
         self.own_text.delete("1.0", "end")
-        self.edit_note.set("")
+        # A reload shows no game for a moment; only another game's being
+        # shown ends the note.
+        shown = str((game or {}).get("path", ""))
+        if self.note_for is not None and game is not None and self.note_for[0] != shown:
+            self.note_for = None
+        self.edit_note.set(self.note_for[1] if self.note_for is not None and game is not None else "")
         for variable in (self.own_title, self.own_genre, self.own_publisher, self.own_year, self.own_players):
             variable.set("")
         for variable in self.own_regions.values():
@@ -987,10 +1001,43 @@ class CatalogTab:
             self.edit_note.set(f"Not saved: {error}")
             return
         names = ", ".join(path.name for path in touched) or "nothing to write"
+        self.note_for = (str(game["path"]),
+                         f"Saved {names} in {card_layout.CARD_FOLDER}/{card_layout.ART_FOLDER}/. "
+                         + self.put_on_card(str(game["path"])))
         self.redraw(str(game["path"]))
-        self.edit_note.set(f"Saved {names} in {card_layout.CARD_FOLDER}/{card_layout.ART_FOLDER}/. "
-                           "Shown here now; press Prepare to put it on the card's catalog and covers.")
         self.remove_button.configure(state="normal" if touched else "disabled")
+
+    def put_on_card(self, path: str) -> str:
+        """Ask the window to apply the owner's files to the card's catalog,
+        and say what happens next. The console reads only the catalog, so
+        a file saved and not applied changes nothing on the console."""
+        answer = self.apply(path) if self.apply is not None else "no apply"
+        if answer in ("started", "queued"):
+            return "Putting it on the card…"
+        if answer == "no collection":
+            return ("The console shows it once the card is prepared: get the collection on the "
+                    "Prepare tab, then press Prepare.")
+        return "The console shows it once you press Prepare."
+
+    def applied(self, path: str | None, code: int | None) -> None:
+        """A run that put an edit on the card ended: read the catalog again,
+        keep the row that is selected now, and say how it went under the
+        game that was saved."""
+        current = self.selected()
+        keep = str(current["path"]) if current is not None else path
+        if code == 0:
+            message = "On the card: SleekMenu shows it the next time it starts."
+        elif code == 3:
+            message = "Saved, but putting it on the card was stopped: press Prepare to finish."
+        else:
+            message = "Saved, but the card was not updated: see the Prepare tab for why."
+        if path is not None:
+            self.note_for = (path, message)
+        self.reload()
+        if keep is not None and self.tree.exists(keep):
+            self.tree.selection_set(keep)
+            self.tree.see(keep)
+            self.show_game(self.games.get(keep))
 
     def own_facts(self) -> tuple[dict, list[str]]:
         """The fact fields as a dict for custom_art.save, and what is wrong
@@ -1034,11 +1081,12 @@ class CatalogTab:
         except OSError as error:
             self.edit_note.set(f"Not removed: {error}")
             return
+        self.note_for = (str(game["path"]),
+                         ("Removed " + ", ".join(path.name for path in removed) + ". " if removed
+                          else "Nothing of yours to remove. ")
+                         + (self.put_on_card(str(game["path"])) if removed else ""))
         self.redraw(str(game["path"]))
         self.remove_button.configure(state="disabled")
-        self.edit_note.set(("Removed " + ", ".join(path.name for path in removed) + ". " if removed
-                            else "Nothing of yours to remove. ")
-                           + "Press Prepare to bring the original back.")
 
 
 # -- the window -------------------------------------------------------------
@@ -1143,7 +1191,29 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     catalog_page = ttk.Frame(notebook)
     notebook.add(catalog_page, text="Catalog")
-    catalog = CatalogTab(catalog_page, current_card)
+    def apply_edits(path: str) -> str:
+        """A Save or a Remove on the Catalog tab, put on the card: the same
+        run as Prepare, with the choices the card remembers (its games
+        folder, its high-resolution boxes) rather than the fields on the
+        Prepare tab, which may be half-edited. Incremental, so seconds.
+        One at a time; a second edit while one runs is applied after it."""
+        card = current_card()
+        status = state.get("collection")
+        if card is None:
+            return "no card"
+        if status is None or not status.ready:
+            return "no collection"
+        if state["runner"] is not None:
+            state["apply_pending"] = path
+            return "queued"
+        state["apply_path"] = path
+        chosen = metadata_var.get().strip()
+        begin(Runner(sleekmenu_prep.Options(card=card, metadata=Path(chosen).expanduser() if chosen else None),
+                     kind="apply"))
+        status_var.set("Putting your edit on the card…")
+        return "started"
+
+    catalog = CatalogTab(catalog_page, current_card, apply=lambda path: apply_edits(path))
     state["catalog"] = catalog
 
     def on_card_change(*_args) -> None:
@@ -1264,6 +1334,16 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                 state["runner"] = None
                 stop.configure(state="disabled")
                 bar["value"] = bar["maximum"]
+                if runner.kind == "apply":
+                    state["last_apply"] = event[1]
+                    on_card_change()
+                    status_var.set("Your edit is on the card." if event[1] == 0
+                                   else "Your edit was saved but the card was not updated; see above.")
+                    catalog.applied(state.pop("apply_path", None), event[1])
+                    waiting = state.pop("apply_pending", None)
+                    if waiting is not None:
+                        apply_edits(waiting)
+                    return
                 if runner.kind == "download":
                     on_card_change()
                     status = state.get("collection")

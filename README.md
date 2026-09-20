@@ -296,12 +296,16 @@ Python has `tkinterdnd2`), type a title, a genre, a publisher, a year, the
 players, the regions and a text — any of them, an empty field keeps what
 the card has — choose "This ROM only" or "Every game with this code", and
 press Save. That writes exactly the files above into `sleekmenu/art/` —
-the picture as it is, the sizes are made when you press Prepare — and the
-panel says how many games the edit reaches. The tab shows the edit at once,
-as the next Prepare will catalog it: the row in blue, the picture fitted
-to the box, and a note of what changed; the header counts the edits
-waiting. Remove my edit deletes those files, and the next Prepare brings
-the original back, because the original was never touched.
+the picture as it is — and then puts them on the card's catalog and covers
+straight away: the same run as Prepare, with the games folder and the
+high-resolution choice the card remembers, which takes seconds since only
+what changed is redone. The console reads only the catalog, so this is the
+step that makes the edit appear there, the next time SleekMenu starts. The
+panel says how many games the edit reaches; while the run goes, or when
+the card cannot be prepared yet (no collection), the row is blue, the
+picture is shown fitted to the box, and the header counts the edits
+waiting. Remove my edit deletes those files and puts the original back the
+same way, because the original was never touched.
 
 The Catalog tab says, for every game, where its box, title and text came
 from — the collection, another region's scan, the database, or your own
