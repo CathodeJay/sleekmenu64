@@ -29,7 +29,7 @@ from unittest import mock
 from PIL import Image
 
 from tests.rom_fixtures import write_rom
-from tools import build_prep, card_catalog, card_layout, coverdb, fetch, library, sleekmenu_prep
+from tools import build_prep, card_catalog, card_layout, coverdb, custom_art, fetch, library, sleekmenu_prep
 
 ROOT = Path(__file__).resolve().parent.parent
 PNG_BYTES = None
@@ -322,6 +322,69 @@ class EntryPointTests(unittest.TestCase):
         self.assertIn("0 with a header that does not match", self.output)
         code = self.run_prep("--no-checksums")
         self.assertNotIn("checksum:", self.output)
+
+    def test_a_second_run_reads_nothing_it_remembers_and_writes_no_pack_it_need_not(self):
+        """The catalog carries every header, every checksum verdict, what
+        each sprite was made from and what each pack came to. A second run
+        over an unchanged card opens no ROM, converts no picture and writes
+        no pack; a new ROM is read and only it; a changed picture is
+        converted and only it; --rebuild does everything again."""
+        from tests.test_n64_checksum import synthetic, with_boot_code
+        from tools import headers
+        write_collection(self.card / "release-metadata.zip", "NWRE", zipped=True)
+        hack = self.roms / "Hacks" / "Shoreline.z64"
+        hack.parent.mkdir()
+        hack.write_bytes(bytes(with_boot_code(synthetic(), 6102)))
+        png_path = self.card / "sleekmenu" / "art" / "Shoreline.png"
+        png_path.parent.mkdir(parents=True)
+        png_path.write_bytes(png_bytes())
+        out = self.card / card_layout.CARD_FOLDER
+        self.assertEqual(self.run_prep(), 0, self.output)
+        self.assertIn("2 converted", self.output)
+        first = card_catalog.load(self.card)
+        games = {game["path"]: game for game in first["games"]}
+        self.assertIn("header", games["ROMS/Wave Race 64 (USA).z64"]["file"])
+        self.assertEqual(games["ROMS/Hacks/Shoreline.z64"]["checksum"], {"known": True, "matches": False})
+        self.assertEqual(set(first["sprites"]), {"NWRE.sprite", custom_art.per_rom_sprite("ROMS/Hacks/Shoreline.z64")})
+        self.assertEqual(set(first["packs"]), {card_layout.COVER_PACK_NAME, card_layout.COVER_PACK_LARGE_NAME})
+        stamp = (out / card_layout.COVER_PACK_LARGE_NAME).stat().st_mtime_ns
+
+        # unchanged: nothing opened, nothing converted, nothing written
+        headers.clear()
+        self.assertEqual(self.run_prep(), 0, self.output)
+        self.assertIn("2 unchanged since the last run, 0 read", self.output)
+        self.assertIn("1 unchanged since the last run, not read again", self.output)
+        self.assertIn("0 converted, 2 kept from the last run", self.output)
+        self.assertIn(f"{card_layout.COVER_PACK_LARGE_NAME} is what the card has; not written again", self.output)
+        self.assertEqual((out / card_layout.COVER_PACK_LARGE_NAME).stat().st_mtime_ns, stamp)
+        self.assertEqual(headers.opened, 0)
+
+        # a game added: it alone is read; the packs change and are written
+        write_rom(self.roms / "Zelda.z64", 0x33, 0x44, game_code="ZL")
+        headers.clear()
+        self.assertEqual(self.run_prep(), 0, self.output)
+        self.assertIn("2 unchanged since the last run, 1 read", self.output)
+        self.assertEqual(headers.opened, 1)
+        self.assertIn("0 converted, 2 kept from the last run", self.output)
+        self.assertIn(f"{card_layout.COVER_PACK_LARGE_NAME} is what the card has; not written again", self.output)
+
+        # the owner's picture replaced, with an old date: it alone is
+        # converted, and the packs are written
+        from tests.test_custom_art import picture
+        picture(png_path, color=(20, 200, 40, 255))
+        os.utime(png_path, (0, 0))
+        headers.clear()
+        self.assertEqual(self.run_prep(), 0, self.output)
+        self.assertIn("1 converted, 1 kept from the last run", self.output)
+        self.assertNotIn("not written again", self.output)
+        self.assertNotEqual((out / card_layout.COVER_PACK_LARGE_NAME).stat().st_mtime_ns, stamp)
+
+        # --rebuild: as if there were no catalog
+        headers.clear()
+        self.assertEqual(self.run_prep("--rebuild"), 0, self.output)
+        self.assertNotIn("unchanged since the last run", self.output)
+        self.assertIn("2 converted", self.output)
+        self.assertEqual(headers.opened, 3)
 
     def test_a_chosen_folder_is_scanned_alone_and_remembered_until_the_whole_card_is_asked_for(self):
         """--roms ROMS: only ROMS/ is catalogued, what is elsewhere is

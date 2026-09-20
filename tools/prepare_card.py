@@ -35,8 +35,10 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
+import hashlib
+
 from tools import (build_catalog, build_metadata, card_catalog, cover_pack, coverdb, custom_art,
-                   library, make_sprite, pack_covers)
+                   headers, library, make_sprite, pack_covers)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 from tools.card_layout import (  # noqa: F401  (re-exported for callers)
@@ -54,12 +56,101 @@ def _check_directory(path: Path, what: str) -> Path:
     return path
 
 
+def previous_catalog(card: Path) -> dict | None:
+    """What the last run wrote, for what it already did: the headers it
+    read and the sprites it made. None for a first run or a broken file --
+    a run never depends on it."""
+    try:
+        return card_catalog.load(card)
+    except card_catalog.CatalogJsonError:
+        return None
+
+
+def remember_headers(card: Path, previous: dict | None) -> int:
+    """Seed the header cache from the last catalog: every game and every
+    set-aside it carries `file` and `header` for. Returns how many."""
+    if previous is None:
+        return 0
+    records = {}
+    for entry in list(previous.get("games", [])) + list(previous.get("set_aside", [])):
+        path, file = entry.get("path"), entry.get("file")
+        if isinstance(path, str) and isinstance(file, dict) and "header" in file:
+            records[path] = file
+    return headers.remember(card, records)
+
+
+def reusable_sprites(card: Path, previous: dict | None, planned, repo,
+                     large_covers: bool) -> dict[str, tuple[bytes, bytes | None]]:
+    """The sprites the last run made from pictures that have not changed,
+    read out of the packs on the card: a picture with the same identity
+    as before gives the same sprite, so the bytes are kept rather than
+    made again. Empty when the card has no packs, or the identities are
+    not recorded, or the packs will not read."""
+    if previous is None:
+        return {}
+    known = previous.get("sprites")
+    if not isinstance(known, dict):
+        return {}
+    folder = card / CARD_FOLDER
+    try:
+        small = (folder / COVER_PACK_NAME).read_bytes()
+        large = (folder / COVER_PACK_LARGE_NAME).read_bytes() if large_covers else None
+    except OSError:
+        return {}
+    try:
+        small_index = {entry.hash: entry for entry in cover_pack.read_index(small)}
+        large_index = ({entry.hash: entry for entry in cover_pack.read_index(large)}
+                       if large is not None else {})
+    except cover_pack.CoverPackError:
+        return {}
+    out: dict[str, tuple[bytes, bytes | None]] = {}
+    for name, source in planned.sources.items():
+        identity = pack_covers.source_identity(source, repo)
+        if not identity or known.get(name) != identity:
+            continue
+        if cover_pack.cover_hash(name) not in small_index:
+            continue
+        if large is not None and cover_pack.cover_hash(name) not in large_index:
+            continue
+        entry = small_index[cover_pack.cover_hash(name)]
+        bytes_small = small[entry.offset:entry.offset + entry.length]
+        bytes_large = None
+        if large is not None:
+            entry = large_index[cover_pack.cover_hash(name)]
+            bytes_large = large[entry.offset:entry.offset + entry.length]
+        out[name] = (bytes_small, bytes_large)
+    return out
+
+
+def _pack_unchanged(previous: dict | None, name: str, data: bytes, on_card: Path) -> bool:
+    """Whether the pack on the card is byte for byte what was just built,
+    by the digest the last run recorded and the file's size: then the
+    write -- 80 MB over USB for the large pack -- is skipped."""
+    if previous is None:
+        return False
+    packs = previous.get("packs")
+    if not isinstance(packs, dict) or not isinstance(packs.get(name), dict):
+        return False
+    recorded = packs[name]
+    try:
+        size = on_card.stat().st_size
+    except OSError:
+        return False
+    return (size == len(data) and recorded.get("size") == len(data)
+            and recorded.get("sha256") == hashlib.sha256(data).hexdigest())
+
+
 def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | None = None,
             rom_image: Path | None = None, overrides: Path | None = None,
             work: Path | None = None, dry_run: bool = False,
             loose_covers: bool = False, genres: Path | None = None,
             log=print, progress_stream=None, rom_paths: list[str] | None = None,
-            progress_factory=None, roms_folder: str = "", large_covers: bool = True) -> dict:
+            progress_factory=None, roms_folder: str = "", large_covers: bool = True,
+            rebuild: bool = False, checksums: dict[str, dict] | None = None) -> dict:
+    """`rebuild` makes the run start from nothing: every header read, every
+    picture converted, every pack written, as if the card had no catalog.
+    `checksums` is the checksum pass's verdict per ROM path, kept in the
+    catalog so the next run need not read those files again."""
     _check_directory(roms, "ROM folder")
     _check_directory(card, "card")
     try:
@@ -80,12 +171,21 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
     summary: dict[str, object] = {"database_entries": len(coverdb.load(database_path))
                                   if database_path.is_file() else 0}
 
+    # The last run's catalog is what makes this one short: headers it read
+    # are not read again for files that have not changed, sprites it made
+    # from pictures that have not changed are kept, and a pack that comes
+    # out the same is not written again.
+    previous = None if rebuild else previous_catalog(card)
+    summary["remembered_headers"] = remember_headers(card, previous)
+
     covers: dict[str, str] = {}
     # The card owner's own art is looked up whether or not there is a
     # collection: a card of homebrew with a picture beside each game is a
     # card with covers.
     art_folder = custom_art.art_dir(card)
     planned = pack_covers.plan(roms, rom_paths, repo, art_folder)
+    identities = {name: pack_covers.source_identity(source, repo)
+                  for name, source in planned.sources.items()}
     if repo is not None or planned.sources:
         covers = planned.covers
         (work / "cover-map.json").write_text(
@@ -111,13 +211,21 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             elif log is print and progress_stream is not False:
                 progress = Progress(len(planned.sources), "sprites",
                                     stream=None if progress_stream is None else progress_stream)
-        summary["sprites"] = pack_covers.pack(planned, repo, covers_out, dry_run=dry_run,
-                                              progress=progress, large_destination=covers_large_out)
+        reuse = reusable_sprites(card, previous, planned, repo, covers_large_out is not None)
+        converted = pack_covers.pack(planned, repo, covers_out, dry_run=dry_run,
+                                     progress=progress, large_destination=covers_large_out,
+                                     reuse=reuse)
+        summary["sprites"] = len(planned.sources)
+        summary["sprites_converted"] = converted
+        kept = len(planned.sources) - converted
+        line = (f"sprites:  {len(planned.sources)}"
+                + (" at both sizes" if covers_large_out is not None else "")
+                + f", {converted} converted"
+                + (f", {kept} kept from the last run" if kept else ""))
         if progress is not None:
-            progress.done(f"sprites:  {summary['sprites']} written"
-                          + (" at both sizes" if covers_large_out is not None else ""))
+            progress.done(line)
         else:
-            log(f"sprites:  {summary['sprites']} written to {covers_out}")
+            log(line)
         if summary["sprites"] and not loose_covers and not dry_run:
             # One file instead of hundreds. FatFs has no directory index, so
             # every cover opened by name walks the directory from the start --
@@ -137,7 +245,6 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
     metadata_path = work / "metadata.json"
     document, how = build_metadata.build(roms, card, database_path, genres, overrides,
                                          covers, repo, rom_paths, cover_origins=planned.origins)
-    metadata_path.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     summary["games"] = len(document["games"])
     with_meta = sum(1 for game in document["games"]
                     if game["genre"] or game["publisher"] or game["year"] or game["players"])
@@ -157,6 +264,26 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
             log(f"          {entry['path']}")
         if len(aside) > 20:
             log(f"          ... and {len(aside) - 20} more")
+
+    # For the next run: which file each header came from, so an unchanged
+    # file is not opened again; what each sprite was made from; and what
+    # each pack came to, so an unchanged one is not written again.
+    prefix = roms_folder.strip("/") + "/" if roms_folder.strip("/") else ""
+    for entry in list(document["games"]) + list(document.get("set_aside", [])):
+        file = headers.record(card / str(entry["path"]))
+        if file is not None:
+            entry["file"] = file
+        relative = str(entry["path"])[len(prefix):] if str(entry["path"]).startswith(prefix) else None
+        if checksums and relative in checksums:
+            entry["checksum"] = checksums[relative]
+    document["sprites"] = {name: identity for name, identity in identities.items() if identity}
+    document["packs"] = {}
+    for name in (COVER_PACK_NAME, COVER_PACK_LARGE_NAME):
+        built = work / name
+        if built.is_file():
+            data = built.read_bytes()
+            document["packs"][name] = {"size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+    metadata_path.write_text(json.dumps(document, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
     catalog = work / CATALOG_NAME
     build_catalog.build(metadata_path, catalog, work / "catalog.manifest.json")
@@ -180,11 +307,14 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
                     shutil.copy2(sprite, target / sprite.name)
                 written.append(f"{CARD_FOLDER}/{COVERS_FOLDER}/ ({summary['sprites']} sprites)")
             else:
-                shutil.copy2(work / COVER_PACK_NAME, destination / COVER_PACK_NAME)
-                written.append(f"{CARD_FOLDER}/{COVER_PACK_NAME} ({summary['sprites']} covers)")
-                if covers_large_out is not None:
-                    shutil.copy2(work / COVER_PACK_LARGE_NAME, destination / COVER_PACK_LARGE_NAME)
-                    written.append(f"{CARD_FOLDER}/{COVER_PACK_LARGE_NAME} ({summary['sprites']} covers)")
+                for name in (COVER_PACK_NAME,) + ((COVER_PACK_LARGE_NAME,) if covers_large_out is not None else ()):
+                    built = work / name
+                    if _pack_unchanged(previous, name, built.read_bytes(), destination / name):
+                        log(f"pack:     {name} is what the card has; not written again")
+                        summary.setdefault("packs_kept", []).append(name)
+                        continue
+                    shutil.copy2(built, destination / name)
+                    written.append(f"{CARD_FOLDER}/{name} ({summary['sprites']} covers)")
         if rom_image is not None:
             if not rom_image.is_file():
                 raise PrepareError(f"ROM image not found: {rom_image}")

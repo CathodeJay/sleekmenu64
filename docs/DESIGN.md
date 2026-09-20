@@ -49,6 +49,22 @@ proven there by preparing a card from the frozen binary. They are not
 code-signed: that is a yearly fee per platform, and the README says what to
 click instead.
 
+**A run remembers through the catalog, and only through it.** A card of
+thousands cost a minute of header reads a run, a decode per box and 90 MB
+of pack writes over USB, whatever had changed -- for one new game, the
+same as for a new card. Now `catalog.json` carries, per game, the ROM's
+size, time and header bytes and the checksum pass's verdict, and per
+sprite what it was made from, and per pack its digest; the next run seeds
+the header cache from that (`tools/headers.py`), reads only the files
+whose size or time moved, keeps every sprite whose source is unchanged by
+copying it out of the pack on the card, and skips writing a pack that
+comes out byte for byte the same. There is no cache on the computer: the
+card carries its own memory, so a card prepared on one machine is a short
+run on the next, and losing it costs one long run. The sprite identity
+names the converter's format too, so a change to how sprites are made
+converts everything again; `--rebuild` ("Start from nothing" in the
+window) is the way out when a card looks wrong.
+
 **Where a field came from is where its file is.** The window's catalog
 tab says for every game which source answered for its box, title, text and
 facts, and it derives that from nothing hidden: a picture is the owner's

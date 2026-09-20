@@ -41,6 +41,10 @@ CANVAS_SIZE = (96, 72)
 #: above the footer, at the box's own proportions. A picture smaller than
 #: this is centred at its own size, never stretched.
 LARGE_CANVAS_SIZE = (256, 180)
+# Named in every sprite's identity in the catalog, so a change to how sprites
+# are made -- a canvas, the fitting, the pixel format -- makes the next run
+# convert every picture again rather than keep what an older tool wrote.
+FORMAT = "rgba16-96x72+256x180-fit1"
 # The colour behind art that does not fill the frame. Matching the detail
 # panel's background makes a portrait cover look matted rather than pasted.
 MATTE_RGBA = (28, 32, 40, 255)

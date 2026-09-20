@@ -58,7 +58,12 @@ tool off the network altogether.
 Then it finds every ROM on the card, wherever it is, matches each one to its
 box and description, and writes `sleekmenu/catalog.ebc` and
 `sleekmenu/covers.pak` beside itself. A card of three thousand games takes
-under a minute. Run it again whenever you add games.
+under a minute the first time. Run it again whenever you add games: a
+later run reads only what changed — the catalog on the card remembers every
+header it read, every box it made and every checksum it summed, by the
+file's size and date — so a card of thousands with one new game takes
+seconds. "Start from nothing" in the window, or `--rebuild`, does it all
+again when a card looks wrong.
 
 To catalog one folder instead of the whole card — your games are in `ROMS`
 and you keep other things elsewhere — name it: `python3 sleekmenu-prep.pyz

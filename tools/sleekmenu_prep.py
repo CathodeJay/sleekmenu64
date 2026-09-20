@@ -49,7 +49,7 @@ import argparse
 import sys
 import tempfile
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from tools import (build_catalog, card_catalog, card_layout, cover_pack, coverdb, custom_art, fetch,
@@ -187,39 +187,73 @@ class ChecksumReport:
     mismatched: list[str]     # of those, the ones whose header does not match
     fixed: list[str]          # rewritten, when asked to
     unknown_boot: int         # a boot code with no checksum rules (homebrew)
+    remembered: int = 0       # verdicts taken from the last run, for files unchanged since
+    verdicts: dict = field(default_factory=dict)   # ROM path -> {"known", "matches"}, for the catalog
+
+
+def remembered_checksums(previous: dict | None, chosen: str) -> dict[str, dict]:
+    """The last run's verdict for every ROM whose size and time it recorded,
+    keyed by path relative to the games folder: a hack a megabyte deep is
+    read once, not once a run. Only when it was not rewritten since --
+    a fix changes the file, and the file's time with it."""
+    out: dict[str, dict] = {}
+    prefix = chosen.strip("/") + "/" if chosen.strip("/") else ""
+    for game in (previous or {}).get("games", []):
+        path, file, verdict = game.get("path"), game.get("file"), game.get("checksum")
+        if not (isinstance(path, str) and isinstance(file, dict) and isinstance(verdict, dict)):
+            continue
+        if prefix and not path.startswith(prefix):
+            continue
+        out[path[len(prefix):]] = {"size": file.get("size"), "mtime": file.get("mtime"),
+                                   "known": bool(verdict.get("known")), "matches": bool(verdict.get("matches"))}
+    return out
 
 
 def check_checksums(roms: Path, rom_paths: list[str], database: dict, fix: bool,
-                    progress=None) -> ChecksumReport:
+                    progress=None, remembered: dict[str, dict] | None = None) -> ChecksumReport:
     """The boot code's checksum, for every dump the database does not know.
     A retail dump the database knows is by definition intact; hacks,
     translations and homebrew are where a header goes stale, and they are
     a few hundred files rather than a few thousand, each read a megabyte
     deep. With `fix`, a header that does not match is rewritten in place,
     which is why it is a switch and not the default."""
-    checked = unknown_boot = 0
+    checked = unknown_boot = taken = 0
     mismatched: list[str] = []
     fixed: list[str] = []
+    verdicts: dict[str, dict] = {}
     for rom_path in rom_paths:
         header = headers.read(roms / rom_path)
         if header is None or header.crc_pair in database:
             continue
-        try:
-            verdict = n64_checksum.fix(roms / rom_path) if fix else n64_checksum.verify(roms / rom_path)
-        except (n64_checksum.ChecksumError, OSError):
-            continue
+        known = matches = None
+        earlier = (remembered or {}).get(rom_path)
+        if earlier is not None and not (fix and not earlier["matches"]):
+            try:
+                stat = (roms / rom_path).stat()
+                if stat.st_size == earlier["size"] and stat.st_mtime_ns == earlier["mtime"]:
+                    known, matches = earlier["known"], earlier["matches"]
+                    taken += 1
+            except OSError:
+                pass
+        if known is None:
+            try:
+                verdict = n64_checksum.fix(roms / rom_path) if fix else n64_checksum.verify(roms / rom_path)
+            except (n64_checksum.ChecksumError, OSError):
+                continue
+            known, matches = verdict.known, verdict.matches
         if progress is not None:
             progress.step(Path(rom_path).name)
-        if not verdict.known:
+        verdicts[rom_path] = {"known": known, "matches": matches or (fix and known)}
+        if not known:
             unknown_boot += 1
             continue
         checked += 1
-        if not verdict.matches:
+        if not matches:
             mismatched.append(rom_path)
             if fix:
                 fixed.append(rom_path)
                 headers.clear()
-    return ChecksumReport(checked, mismatched, fixed, unknown_boot)
+    return ChecksumReport(checked, mismatched, fixed, unknown_boot, taken, verdicts)
 
 
 def bundled_data(name: str, work: Path) -> Path | None:
@@ -248,24 +282,28 @@ def data_file(name: str, work: Path) -> Path:
 
 
 def report_checksums(roms: Path, rom_paths: list[str], database: dict, fix: bool,
-                     log=print, progress_factory=None) -> None:
+                     log=print, progress_factory=None,
+                     remembered: dict[str, dict] | None = None) -> ChecksumReport | None:
     """The checksum pass and what it says. A mismatch is the one thing on
     a card that makes a game black-screen on the console and work in an
     emulator, so it is named file by file, with the way out."""
     candidates = sum(1 for p in rom_paths
                      if (h := headers.read(roms / p)) is not None and h.crc_pair not in database)
     if not candidates:
-        return
+        return None
     progress = (progress_factory or Progress)(candidates, "checksums")
-    report = check_checksums(roms, rom_paths, database, fix, progress)
+    report = check_checksums(roms, rom_paths, database, fix, progress, remembered)
     progress.done(f"checksum: {report.checked} hacks, translations and homebrew checked, "
                   f"{len(report.mismatched)} with a header that does not match"
-                  + (f", {report.unknown_boot} with a boot code of their own" if report.unknown_boot else ""))
+                  + (f", {report.unknown_boot} with a boot code of their own" if report.unknown_boot else "")
+                  + (f"; {report.remembered} unchanged since the last run, not read again"
+                     if report.remembered else ""))
     for rom_path in report.mismatched:
         log(f"          {'fixed  ' if rom_path in report.fixed else 'BAD    '} {rom_path}")
     if report.mismatched and not fix:
         log("          The browser rewrites these at launch where the cartridge lets it; "
             "to fix the files themselves, run again with --fix-checksums.")
+    return report
 
 
 @dataclass
@@ -281,6 +319,8 @@ class Options:
     hires: bool | None = None       # fetch high-resolution boxes: True asks, False refuses, None
                                     # is as the card remembers (it has some: keep them complete)
     no_large_covers: bool = False   # skip the box view's covers-large.pak
+    rebuild: bool = False           # read every header and convert every box again, whatever
+                                    # the last run remembered
 
 
 def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None) -> int:
@@ -347,10 +387,15 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
 
         # One pass over the card, with progress, before anything else asks.
         # Every later step reads headers through the cache and touches the
-        # card no more.
+        # card no more -- and a file the last run read, unchanged since,
+        # is not opened even once: its header is in the catalog it wrote.
+        previous = None if options.rebuild else prepare_card.previous_catalog(card)
+        prepare_card.remember_headers(card, previous)
         scan = progress_factory(len(rom_paths), "scanning")
         found_roms = headers.scan(roms, rom_paths, scan)
-        scan.done(f"scanned   {len(rom_paths)} files, {found_roms} are N64 ROMs")
+        scan.done(f"scanned   {len(rom_paths)} files, {found_roms} are N64 ROMs"
+                  + (f"; {headers.remembered_hits} unchanged since the last run, {headers.opened} read"
+                     if headers.remembered_hits else ""))
 
         database_path = data_file("coverdb.csv", work)
         genres_path = data_file("genres.csv", work)
@@ -371,15 +416,19 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         else:
             repo = MetadataRepo.open(source)
             log(f"metadata: {repo.art_count()} boxes in {source}")
+        checksums = None
         if not options.no_checksums:
-            report_checksums(roms, rom_paths, coverdb.load(database_path),
-                             fix=options.fix_checksums and not options.dry_run,
-                             log=log, progress_factory=progress_factory)
+            checksums = report_checksums(roms, rom_paths, coverdb.load(database_path),
+                                         fix=options.fix_checksums and not options.dry_run,
+                                         log=log, progress_factory=progress_factory,
+                                         remembered=remembered_checksums(previous, found.chosen))
         summary = prepare_card.prepare(
             roms=roms, card=card, database_path=database_path, repo=repo,
             work=work / "build", dry_run=options.dry_run, genres=genres_path, log=log,
             progress_stream=None, rom_paths=rom_paths, progress_factory=progress_factory,
-            roms_folder=found.chosen, large_covers=not options.no_large_covers)
+            roms_folder=found.chosen, large_covers=not options.no_large_covers,
+            rebuild=options.rebuild,
+            checksums=checksums.verdicts if checksums is not None else None)
     except progress.Cancelled as stop:
         fail(f"sleekmenu-prep: {stop}; the catalog and covers were not written")
         return 3
@@ -416,6 +465,9 @@ def main(argv: list[str] | None = None) -> int:
                              "(default: whichever is on the card)")
     parser.add_argument("--dry-run", action="store_true",
                         help="do everything except write to the card")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="start from nothing: read every header and convert every box again, "
+                             "rather than keeping what the last run remembered for files unchanged since")
     parser.add_argument("--fix-checksums", action="store_true",
                         help="rewrite the header checksum of a hack that would not boot on a console")
     parser.add_argument("--no-checksums", action="store_true",
@@ -449,7 +501,8 @@ def main(argv: list[str] | None = None) -> int:
         return run(Options(card=args.card, roms=args.roms, metadata=args.metadata,
                            dry_run=args.dry_run, fix_checksums=args.fix_checksums,
                            no_checksums=args.no_checksums, no_download=args.no_download,
-                           hires=True if args.hires else None, no_large_covers=args.no_large_covers),
+                           hires=True if args.hires else None, no_large_covers=args.no_large_covers,
+                           rebuild=args.rebuild),
                    log=print, fail=lambda message: print(message, file=sys.stderr))
     except KeyboardInterrupt:
         # Ctrl-C during the fetch leaves no .part on the card; during a

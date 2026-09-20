@@ -70,7 +70,14 @@ answered — `collection`, `collection (another region's box)`,
 `file name`, `yours (this ROM)`, `yours (code NSME)`, `yours`, or `none` —
 and `identified`: how the
 database knew the dump (`crc`, `serial`, `serial without region`, or
-nothing). A `set_aside` list names the ROM-shaped files the tool found
+nothing). Each game also carries `file` -- the ROM's size, its modification
+time and the 64 header bytes read from it -- and `checksum`, the verdict
+of the checksum pass, so the next run opens only the files that changed;
+`sprites` names what each sprite was made from (a zip entry's CRC and
+size, or a file's size and time, with the converter's format), so a
+picture unchanged since is not converted again, and `packs` records the
+size and digest of each pack written, so a pack that would come out the
+same is not written again. A `set_aside` list names the ROM-shaped files the tool found
 in the games folder and refused, with the reason (`not a ROM: no N64
 header` -- a 64DD IPL dump, a broken download), so the window can say so
 rather than count them as games still to add. The window's Catalog tab

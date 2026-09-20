@@ -61,6 +61,8 @@ class FieldTests(unittest.TestCase):
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
         self.assertEqual(options.roms, Path("ROMS"))
         self.assertTrue(options.no_checksums and options.fix_checksums and options.hires)
+        self.assertFalse(options.rebuild, "a run keeps what the last one remembered unless told")
+        self.assertTrue(sleekmenu_gui.options_from("/Volumes/CARD", "", True, False, rebuild=True).rebuild)
         self.assertFalse(options.no_large_covers, "the window always builds the box view's pack")
 
     def test_a_card_is_described_in_one_line(self):

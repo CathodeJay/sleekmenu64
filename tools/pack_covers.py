@@ -25,7 +25,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import custom_art, headers, hires, library, make_sprite, provenance
+from tools import custom_art, headers, hires, library, make_sprite, metadata_repo, provenance
 from tools.custom_art import Custom
 from tools.metadata_repo import Found, MetadataRepo, RepoError
 
@@ -47,6 +47,18 @@ class Plan:
 def sprite_name(key: str) -> str:
     """"N/S/M/E" -> "NSME.sprite"; the neutral "N/S/M" -> "NSM.sprite"."""
     return key.replace("/", "") + ".sprite"
+
+
+def source_identity(source: object, repo: MetadataRepo | None) -> str:
+    """What a sprite was made from, as a string that changes when the
+    picture does or the converter does: the next run keeps a sprite whose
+    identity is unchanged rather than converting it again. "" when it
+    cannot be told, which means "convert it"."""
+    if isinstance(source, Found):
+        inner = repo.fingerprint(source) if repo is not None else ""
+    else:
+        inner = metadata_repo.file_identity(getattr(source, "path", Path()))
+    return f"{make_sprite.FORMAT}|{inner}" if inner else ""
 
 
 def collection_origin(found: Found, code: str) -> str:
@@ -107,18 +119,31 @@ def plan(roms_root: Path, rom_paths: list[str], repo: MetadataRepo | None,
 
 
 def pack(planned: Plan, repo: MetadataRepo | None, destination: Path, dry_run: bool = False,
-         progress=None, large_destination: Path | None = None) -> int:
-    """Write every sprite the plan names. Returns how many were written.
+         progress=None, large_destination: Path | None = None,
+         reuse: dict[str, tuple[bytes, bytes | None]] | None = None) -> int:
+    """Write every sprite the plan names. Returns how many were converted.
     `progress` is anything with a step(detail) method -- see tools/progress.py
     -- or None; converting several hundred pictures takes long enough to
     look stuck. With `large_destination`, the box view's 256x180 sprite is
     written there too, from the same decode of the same picture, under the
-    same name: one plan, two sizes, so the two packs cannot disagree."""
+    same name: one plan, two sizes, so the two packs cannot disagree.
+    `reuse` maps a sprite name to the bytes a previous run made from the
+    same picture (small, and large or None): those are written as they are,
+    and only the rest are converted."""
     destination.mkdir(parents=True, exist_ok=True)
     if large_destination is not None:
         large_destination.mkdir(parents=True, exist_ok=True)
-    written = 0
+    converted = 0
     for name in sorted(planned.sources):
+        kept = (reuse or {}).get(name)
+        if kept is not None and (large_destination is None or kept[1] is not None):
+            if not dry_run:
+                (destination / name).write_bytes(kept[0])
+                if large_destination is not None:
+                    (large_destination / name).write_bytes(kept[1])
+            if progress is not None:
+                progress.step(name)
+            continue
         if not dry_run:
             found = planned.sources[name]
             also = ([(large_destination / name, make_sprite.LARGE_CANVAS_SIZE)]
@@ -128,10 +153,10 @@ def pack(planned: Plan, repo: MetadataRepo | None, destination: Path, dry_run: b
                                           width_scale=repo.width_scale, also=also)
             else:
                 make_sprite.convert(found.path, destination / name, also=also)
-        written += 1
+        converted += 1
         if progress is not None:
             progress.step(name)
-    return written
+    return converted
 
 
 def main(argv: list[str] | None = None) -> int:

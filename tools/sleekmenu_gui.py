@@ -225,7 +225,7 @@ class Runner:
 
 
 def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums: bool,
-                 hires: bool = False, roms: str = "") -> sleekmenu_prep.Options:
+                 hires: bool = False, roms: str = "", rebuild: bool = False) -> sleekmenu_prep.Options:
     """The window's fields as the run takes them. An empty metadata field
     means whatever is on the card, as on the command line. An empty games
     folder is the whole card, said so, and an unticked box is no fetch,
@@ -239,6 +239,7 @@ def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums:
         no_checksums=not check_checksums,
         fix_checksums=fix_checksums,
         hires=bool(hires),
+        rebuild=bool(rebuild),
     )
 
 
@@ -975,6 +976,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     check_var = tk.BooleanVar(value=True)
     fix_var = tk.BooleanVar(value=False)
     hires_var = tk.BooleanVar(value=False)
+    rebuild_var = tk.BooleanVar(value=False)
     status_var = tk.StringVar(value="")
 
     ttk.Label(frame, text="Card").grid(row=0, column=0, sticky="w")
@@ -1002,6 +1004,11 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     ttk.Checkbutton(options, text="High-resolution boxes for the box view: fetch the missing ones "
                                   "from libretro (about 250 KB a game)",
                     variable=hires_var).pack(anchor="w")
+    # Off by default: a run keeps what the last one remembered for the files
+    # that have not changed, which is what makes it short. This is the way
+    # out when a card's catalog or covers look wrong.
+    ttk.Checkbutton(options, text="Start from nothing: read every ROM and convert every box again",
+                    variable=rebuild_var).pack(anchor="w")
 
     bar = ttk.Progressbar(frame, mode="determinate")
     bar.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(12, 2))
@@ -1156,7 +1163,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         prepare.configure(state="disabled")
         stop.configure(state="normal")
         runner = Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get(),
-                                     hires_var.get(), roms_var.get()))
+                                     hires_var.get(), roms_var.get(), rebuild_var.get()))
         state["runner"] = runner
         runner.start()
         root.after(100, poll)

@@ -143,8 +143,19 @@ def is_pro_layout(path: Path) -> bool:
             and path.parent.name.casefold() == card_layout.FIRMWARE_FOLDER.casefold())
 
 
+def file_identity(path: Path) -> str:
+    """A file's size and modification time, for telling whether it is the
+    file a previous run saw; "" when it cannot be looked at."""
+    try:
+        stat = Path(path).stat()
+    except OSError:
+        return ""
+    return f"file:{stat.st_size}:{stat.st_mtime_ns}"
+
+
 class MetadataRepo:
-    def __init__(self, names, reader, label: str, closer=None, width_scale: float = 1.0):
+    def __init__(self, names, reader, label: str, closer=None, width_scale: float = 1.0,
+                 fingerprinter=None):
         # Every path in the collection, relative to its root, forward slashes.
         # Looked up case-folded: the codes are upper case but a card is not a
         # case-sensitive place and a hand-made folder should not have to be.
@@ -158,6 +169,7 @@ class MetadataRepo:
                 self._regions.setdefault("/".join(parts[:3]).casefold(), set()).add(parts[3])
         self._read = reader
         self._close = closer
+        self._fingerprint = fingerprinter
         self.label = label
         #: What to multiply a picture's width by before fitting it. 0.5 for
         #: the Pro's pre-stretched copies, 1.0 for everything else.
@@ -193,7 +205,11 @@ class MetadataRepo:
             raise RepoError(f"{path} has no {ROOT_NAME}/ folder in it")
         names = [name[len(prefix):] for name in archive.namelist()
                  if name.startswith(prefix) and not name.endswith("/")]
-        return cls(names, lambda rel: archive.read(prefix + rel), str(path), archive.close)
+        # An entry's CRC and size are in the zip's own index: what a file
+        # is, without reading it.
+        return cls(names, lambda rel: archive.read(prefix + rel), str(path), archive.close,
+                   fingerprinter=lambda rel: (lambda info: f"zip:{info.CRC:08x}:{info.file_size}")(
+                       archive.getinfo(prefix + rel)))
 
     @classmethod
     def from_folder(cls, path: Path) -> "MetadataRepo":
@@ -207,7 +223,8 @@ class MetadataRepo:
         if not names:
             raise RepoError(f"{root} is empty")
         return cls(names, lambda rel: (root / rel).read_bytes(), str(root),
-                   width_scale=0.5 if is_pro_layout(root) else 1.0)
+                   width_scale=0.5 if is_pro_layout(root) else 1.0,
+                   fingerprinter=lambda rel: file_identity(root / rel))
 
     def close(self) -> None:
         if self._close is not None:
@@ -251,6 +268,17 @@ class MetadataRepo:
             return self._read(found.path)
         except (OSError, KeyError, zipfile.BadZipFile) as exc:
             raise RepoError(f"cannot read {found.path} from {self.label}: {exc}") from exc
+
+    def fingerprint(self, found: Found) -> str:
+        """What this picture is, as a short string that changes when the
+        picture does: a zip entry's CRC and size, a file's size and time.
+        For telling, next run, that a sprite need not be made again."""
+        if self._fingerprint is None:
+            return ""
+        try:
+            return f"{self._fingerprint(found.path)}:{found.path}"
+        except (OSError, KeyError, zipfile.BadZipFile):
+            return ""
 
     def art(self, code: str) -> Found | None:
         return self.find(code, ART_NAME)

@@ -343,12 +343,16 @@ def _built_epoch(document: dict) -> float:
 def pending_edits(card: Path, roms_root: Path, document: dict) -> dict[str, Pending]:
     """Every game whose owner's files disagree with the catalog, keyed by
     ROM path. Text is compared field by field, so a file the last Prepare
-    already read is not pending; a picture is pending when it is newer than
-    the catalog or the catalog's box is not the owner's."""
-    from tools import provenance
+    already read is not pending; a picture is pending when it is not the
+    file the catalog's sprite was made from -- by the size and time the
+    catalog recorded, so a picture copied in with an old date still
+    counts -- or, for a catalog that recorded nothing, when it is newer
+    than the catalog or the catalog's box is not the owner's."""
+    from tools import metadata_repo, provenance
     folder = art_dir(card)
     index = Index()
     built = _built_epoch(document)
+    sprites = document.get("sprites") if isinstance(document.get("sprites"), dict) else None
     out: dict[str, Pending] = {}
     for game in document.get("games", []):
         rom_path = str(game.get("path", ""))
@@ -376,13 +380,17 @@ def pending_edits(card: Path, roms_root: Path, document: dict) -> dict[str, Pend
                 removed.append(name)
         picture = None
         if art is not None:
-            # The catalog's stamp is whole seconds; a picture written the
-            # second before a Prepare is not newer than it.
-            try:
-                newer = art.path.stat().st_mtime > built + 1.0
-            except OSError:
-                newer = False
-            if newer or not provenance.is_yours(str(sources.get("cover", ""))):
+            if sprites is not None:
+                recorded = str(sprites.get(art.sprite, ""))
+                changed = recorded.split("|", 1)[-1] != metadata_repo.file_identity(art.path)
+            else:
+                # The catalog's stamp is whole seconds; a picture written the
+                # second before a Prepare is not newer than it.
+                try:
+                    changed = art.path.stat().st_mtime > built + 1.0
+                except OSError:
+                    changed = False
+            if changed or not provenance.is_yours(str(sources.get("cover", ""))):
                 picture = art.path
         elif provenance.is_yours(str(sources.get("cover", ""))):
             removed.append("cover")
