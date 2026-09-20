@@ -72,27 +72,11 @@ scanned, the browser opens inside it, the report names any ROM-shaped file
 elsewhere that was left out, and the choice holds on the next run without
 being repeated. `--roms .`, or an empty field, is the whole card again.
 
-**No Python? Use the window instead.** The releases page also carries the
-same tool with Python inside, one download per system:
-`SleekMenu-Prep-mac-arm64.zip` (Apple silicon), `SleekMenu-Prep-mac-intel.zip`,
-`SleekMenu-Prep-windows.exe`, `SleekMenu-Prep-linux`. Open it and pick the
-card (it is picked for you when it is the only removable disk). The line
-under Collection says whether the card has the box-art collection; if not,
-press Download (about 52 MB from GitHub, onto the card, once) or choose a
-copy you already have with Browse. Prepare stays off until the line shows
-a tick, since a card prepared without the collection gets no boxes and no
-descriptions. Then press Prepare; Stop ends the run if it takes too long. The card line says how many games were added
-since the last Prepare, which is when a card wants one: the catalog is
-built here, not on the console, so a game copied onto the card plays from
-the browser straight away but has no box or facts until the next run. The
-Catalog tab then shows the card as the browser will: the folders, every
-game with its genre, publisher, year and region, the box exactly as the
-console draws it, where each of those came from, and how many ROMs on the
-card are still waiting for a Prepare. It is not code-signed, so the
-first launch warns: on macOS, right-click the app and choose Open (on macOS 15,
-System Settings → Privacy & Security → Open Anyway); on Windows, More info
-→ Run anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
-opens the same window.
+**No Python? Use the prep GUI instead.** The releases page also carries the
+same tool with Python inside, one download per system, which needs nothing
+installed: open it, let it pick the card, press Download if the card has no
+box-art collection yet, then Prepare. [The prep GUI](#the-prep-gui),
+below, walks through it.
 
 **4. Eject the card, put it in the cart, and start `SleekMenu64.z64` from the
 EverDrive menu.** Press Start on a game to play it, A for its details. To get
@@ -117,6 +101,107 @@ scans the card and shows filenames, with no covers it draws a placeholder.
 The tool never moves, renames or deletes anything on the card, apart from
 a picture or text of your own in `sleekmenu/art/` when you press Remove my
 edit in the window.
+
+## The prep GUI
+
+The same tool as `sleekmenu-prep.pyz`, in a window: pick the card, prepare
+it, and see it the way the browser will before it goes back in the
+console — every game, its box, where each fact came from — and give any
+game your own picture, text or facts.
+
+**Getting it.** One download per system from the releases page, with
+Python inside: `SleekMenu-Prep-mac-arm64.zip` (Apple silicon),
+`SleekMenu-Prep-mac-intel.zip`, `SleekMenu-Prep-windows.exe`,
+`SleekMenu-Prep-linux`. It is not code-signed, so the first launch warns:
+on macOS, right-click the app and choose Open (on macOS 15, System
+Settings → Privacy & Security → Open Anyway); on Windows, More info → Run
+anyway. With Python and Tk installed, `python3 sleekmenu-prep.pyz --gui`
+opens the same window.
+
+### Prepare
+
+- **Card** is picked for you when it is the only removable disk; Browse and
+  Refresh otherwise. The line under it counts the games copied on since the
+  last Prepare, which is when a card wants one: the catalog is built here,
+  not on the console, so a game copied on plays from the browser straight
+  away but has no box or facts until the next run.
+- **Games folder** is empty for the whole card, or names one folder
+  (`ROMS`) to catalog only that. The card remembers the choice.
+- **Collection** says, in the line under it, whether the card has the
+  box-art collection: a green tick with the number of boxes, or an amber
+  cross saying what to do. Download fetches it onto the card (about 52 MB
+  from GitHub, once); Browse picks a copy you already have. Prepare stays
+  off until the tick shows, since a card prepared without the collection
+  gets no boxes and no descriptions.
+- **Options.** Checking hacks and homebrew for a stale header checksum is
+  on; rewriting a stale one in the file itself is off until you tick it
+  (see *Hacks and homebrew* under [Good to know](#good-to-know)).
+  High-resolution boxes fetches libretro's 512-pixel boxes for the box view
+  (see [Your own art](#your-own-art)); a card that has them shows the box
+  ticked and keeps them complete. Start from nothing reads every ROM and
+  converts every box again, for a card that looks wrong.
+
+Prepare runs it, with a progress bar and the same report the command line
+prints; Stop ends the run.
+
+### Catalog
+
+![The Catalog tab: the card's folders and games with genre, year, publisher, players, region and where the box and text came from; the selected game's box, facts and description on the right; and the panel for your own art and text underneath](docs/screenshots/prep-gui-catalog.png)
+
+The card as the browser will show it. The first line counts the games, says
+when the catalog was built, how many have a box and how many of those are
+high-resolution, how many carry your own art or text, and how many edits
+are not on the card yet. The second line, in amber, counts the ROMs copied
+on since the last Prepare and the files set aside as not ROMs.
+
+The list follows the card's folders, with the number of games in each.
+Every game shows its genre, year, publisher, players and region as the
+console will, and in the Box and Text columns where those came from:
+`collection`, `other region` (another region's scan of the same game),
+`high-res` (libretro), `yours`, or `none`. A row's colour says where it
+stands:
+
+| Row | Means |
+|---|---|
+| plain | in the catalog; this is what the console shows |
+| blue | your edit, not yet on the card's catalog |
+| amber | on the card but not in the catalog: copied on since the last Prepare, listed by the browser without a box |
+| grey | set aside: a ROM-shaped file with no N64 header (a 64DD IPL dump, a broken download), which the browser never lists and Prepare will not add |
+
+Search narrows the list as you type, over the title, the file name, the
+publisher, the genre, the year and the game code. Show narrows it to only
+what you changed, or only what is not in the catalog. Reload reads the card
+again.
+
+Select a game and the right side shows its box exactly as the console draws
+it, its facts, where its cover, text and title came from and what the box
+view will draw, and its description. The same is in `sleekmenu/catalog.json`
+on the card, beside the catalog the console reads.
+
+### Editing a game
+
+The panel under the list holds your own art and text for the selected game.
+Choose a picture (Browse, or drop one on the field when your Python has
+`tkinterdnd2`), and fill in any of the title, genre, publisher, year,
+players, regions and text. An empty field keeps what the card has: in the
+screenshot, 40 Winks has its own text, genre, publisher, year and region,
+and Players is left empty, so the database's two players stay. "This ROM
+only" writes for this one file; "Every game with code …" writes for every
+ROM whose header carries that game code — its revisions, and hacks built on
+it — and the line under the choice says how many games that reaches.
+
+Save writes exactly the files described in [Your own art](#your-own-art)
+into `sleekmenu/art/`, the picture as it is, then puts them in the card's
+catalog and covers straight away. That is the same run as Prepare, with the
+games folder and the high-resolution choice the card remembers, and it
+takes seconds since only what changed is redone. The console reads only the
+catalog, so this run is what makes the edit appear there, the next time
+SleekMenu starts. While it runs, or while the card has no collection to
+prepare with, the row stays blue, the box shows your picture fitted as the
+console will draw it, and the first line counts the edit as waiting.
+
+Remove my edit deletes your files and puts the original back the same way;
+the original was never touched.
 
 ## Controls
 
@@ -271,7 +356,7 @@ Each header wins over the database and the collection for that one field;
 the first line that is not a header starts the description. A genre the
 card has not seen becomes its own tab on the console. Pictures and text
 are read when the tool runs, so a new one needs a re-run of the tool, like
-a new game does — the window shows them before that (below).
+a new game does; Save in the window does both at once.
 
 **High-resolution boxes.** The collection's scans are 158 pixels wide,
 enough for the console's 96×72 thumbnail and no more.
@@ -290,32 +375,9 @@ still wins; Stop ends it between two boxes. The Catalog tab counts the
 high-resolution boxes and says, for each game, what the box view will
 draw.
 
-**From the window.** Pick the game on the Catalog tab; in the panel under
-the list, choose a picture (Browse, or drop one on the field when your
-Python has `tkinterdnd2`), type a title, a genre, a publisher, a year, the
-players, the regions and a text — any of them, an empty field keeps what
-the card has — choose "This ROM only" or "Every game with this code", and
-press Save. That writes exactly the files above into `sleekmenu/art/` —
-the picture as it is — and then puts them on the card's catalog and covers
-straight away: the same run as Prepare, with the games folder and the
-high-resolution choice the card remembers, which takes seconds since only
-what changed is redone. The console reads only the catalog, so this is the
-step that makes the edit appear there, the next time SleekMenu starts. The
-panel says how many games the edit reaches; while the run goes, or when
-the card cannot be prepared yet (no collection), the row is blue, the
-picture is shown fitted to the box, and the header counts the edits
-waiting. Remove my edit deletes those files and puts the original back the
-same way, because the original was never touched.
-
-The Catalog tab says, for every game, where its box, title and text came
-from — the collection, another region's scan, the database, or your own
-file. Search narrows the list as you type, over the title, the file name,
-the publisher, the genre, the year and the game code; Show narrows it to
-what you changed, or to what is not in the catalog: the games copied on
-since the last Prepare, in amber, and the files the tool set aside as not
-ROMs (no N64 header — a 64DD IPL dump, a broken download), in grey, which
-the browser never lists and Prepare will not add. The same is in
-`sleekmenu/catalog.json` on the card, beside the catalog the console reads.
+**From the window.** The Catalog tab writes these files for one game or
+one game code and puts them on the card as you save: see
+[Editing a game](#editing-a-game).
 
 ## Building from source
 

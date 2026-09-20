@@ -24,8 +24,10 @@ covers/
 *.jpg
 *.jpeg
 *.webp
-# ...except the browser's own screenshots for the README.
+# ...except the screenshots in the README: the browser's, and the prep
+# GUI's (a PNG, for its transparent edge).
 !docs/screenshots/*.jpg
+!docs/screenshots/*.png
 
 # Personal card contents: ROM libraries, saves, and firmware state.
 # tests/fixtures/registry/ keeps four registry.dat samples on purpose --
