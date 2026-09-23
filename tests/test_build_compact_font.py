@@ -152,7 +152,7 @@ class CompactFontTests(unittest.TestCase):
         framebuffer is 32-bit or 640 wide."""
         display = (ROOT / "src/display.c").read_text(encoding="utf-8")
         code = re.sub(r"/\*.*?\*/", "", display, flags=re.S)   # the comment names the option; the code must not
-        self.assertIn("display_init(resolution, DEPTH_16_BPP, 2, GAMMA_NONE, FILTERS_RESAMPLE);", code)
+        self.assertRegex(code, r"display_init\(resolution, DEPTH_16_BPP, [^;]*GAMMA_NONE,\s*FILTERS_RESAMPLE\);")
         self.assertNotIn("FILTERS_DISABLED", code)
         self.assertNotIn("FILTERS_DEDITHER", code)
 

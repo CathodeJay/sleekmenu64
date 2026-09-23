@@ -216,7 +216,7 @@ card and run the tool again. The options mirror the GUI's:
 
 | Control | Browsing | Launch details |
 |---|---|---|
-| D-pad / stick | Move | Scroll the description |
+| D-pad / stick | Move; hold to keep moving, faster the longer you hold | Scroll the description |
 | A | Open a folder, or a game's details | The box, full screen (B back) |
 | B | Parent folder | Back to the list |
 | Start | Play the game under the cursor | Play |
@@ -240,7 +240,10 @@ The **grid** shows twelve covers at a time, for scanning a folder by eye.
 ![The grid view: twelve box covers, the selected one framed](docs/screenshots/grid.jpg)
 
 **Coverflow** shows one game face on with its neighbours receding either
-side. Here L and R jump to the next letter of the alphabet instead of paging.
+side, gliding as you move; hold a direction and the shelf keeps sliding.
+Under it are the title, the genre, year, publisher and players, the start
+of the description, and a strip of initials showing where you are. L and R
+jump to the next letter of the alphabet instead of paging.
 
 ![Coverflow: the selected box face on, the shelf receding on both sides](docs/screenshots/coverflow.jpg)
 
@@ -397,6 +400,7 @@ Needs a [libdragon](https://github.com/DragonMinded/libdragon) toolchain.
 make test                                   # host-side tests, no hardware needed
 make slim N64_INST=/path/to/libdragon       # build/release/SleekMenu64.z64
 make prep                                   # build/release/sleekmenu-prep.pyz
+make perf N64_INST=/path/to/libdragon       # the ROM with a frame-time readout
 ```
 
 `make help` lists the rest. More detail, for the curious:

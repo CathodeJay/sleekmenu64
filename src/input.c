@@ -1,22 +1,29 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "input.h"
+#include "list_view.h"
 #include <libdragon.h>
 
 void app_input_init(void) {
     joypad_init();
 }
 
+/* How far the stick has to lean to count as a direction: past its dead zone
+   and past the drift a worn stick rests at, well short of the rim. */
+enum { STICK_LEAN = 50 };
+
 sm_actions_t app_input_poll(void) {
-    static bool stick_up_latched, stick_down_latched;
+    /* One per direction, the d-pad and the stick counting as the same hand. */
+    static sm_repeat_t up, down, left, right;
     joypad_poll();
     joypad_buttons_t pressed = joypad_get_buttons_pressed(JOYPAD_PORT_1);
+    joypad_buttons_t held = joypad_get_buttons_held(JOYPAD_PORT_1);
     joypad_inputs_t inputs = joypad_get_inputs(JOYPAD_PORT_1);
-    bool stick_up = inputs.stick_y > 50, stick_down = inputs.stick_y < -50;
+    uint32_t now = (uint32_t)get_ticks_ms();
     sm_actions_t actions = {
-        .up = pressed.d_up || (stick_up && !stick_up_latched),
-        .down = pressed.d_down || (stick_down && !stick_down_latched),
-        .left = pressed.d_left,
-        .right = pressed.d_right,
+        .up = sm_repeat_fire(&up, held.d_up || inputs.stick_y > STICK_LEAN, now),
+        .down = sm_repeat_fire(&down, held.d_down || inputs.stick_y < -STICK_LEAN, now),
+        .left = sm_repeat_fire(&left, held.d_left || inputs.stick_x < -STICK_LEAN, now),
+        .right = sm_repeat_fire(&right, held.d_right || inputs.stick_x > STICK_LEAN, now),
         .page_up = pressed.l,
         .page_down = pressed.r,
         .select = pressed.a,
@@ -28,7 +35,5 @@ sm_actions_t app_input_poll(void) {
         .favorite = pressed.c_down,
         .start = pressed.start,
     };
-    stick_up_latched = stick_up;
-    stick_down_latched = stick_down;
     return actions;
 }

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- Coverflow glides: the shelf eases from cover to cover instead of
+  stepping, a press in the middle of a move turns it instead of restarting
+  it, and holding a direction keeps the shelf sliding, faster the longer you
+  hold. Holding the D-pad or stick now repeats in every view.
+- Coverflow uses the space under the shelf: the genre, year, publisher and
+  players on one line, the first two lines of the description, and a strip
+  of initials showing where you are and where L and R will jump.
+- Covers draw faster, and with an Expansion Pak the screen has a third
+  buffer, so a slow frame no longer halves the frame rate.
+- A cover could stay blank for good after moving twice quickly in the grid
+  or coverflow. It now arrives.
+
 ## 1.1.0
 
 **Upgrading from 1.0:** copy the new `SleekMenu64.z64` over the old one at

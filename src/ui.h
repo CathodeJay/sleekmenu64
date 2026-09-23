@@ -9,6 +9,7 @@
 #include "favorites.h"
 #include "folder_scan.h"
 #include "history.h"
+#include "list_view.h"
 #include "genre.h"
 #include "save_type.h"
 
@@ -38,10 +39,6 @@ enum { SM_UI_FLOW_OUTER = SM_UI_FLOW_HALF + 1 };
 /* Slots held: the seven on screen plus the two off it. The centre is at
    SM_UI_FLOW_OUTER, so a slot's depth is its distance from there. */
 enum { SM_UI_FLOW_SLOTS = 2 * SM_UI_FLOW_OUTER + 1 };
-/* Frames a step takes. Six is about a tenth of a second on NTSC -- long enough
-   to read as movement, short enough that holding a direction still feels like
-   the shelf is keeping up rather than catching up. */
-enum { SM_UI_FLOW_FRAMES = 6 };
 /* The grid and coverflow share one set of loaded sprites, because they want
    the same thing: a handful of covers held across a scroll so that moving one
    step costs one card read rather than a whole window of them. Sized for
@@ -137,12 +134,26 @@ typedef struct {
        larger view, so a stale count would free sprites the other view still
        holds. */
     uint32_t slot_count;
-    /* Coverflow's slide. `flow_frames` counts down to zero; while it is
-       running every cover is drawn between where it was and where it is going,
-       and `flow_dir` says which way the shelf moved (+1 for a step right).
-       Zero means settled, and the covers are drawn at their table positions. */
-    uint32_t flow_frames;
-    int32_t flow_dir;
+    /* Coverflow's shelf: where it is, in items -- a fraction while it is
+       moving -- gliding towards the selection. At rest it is exactly the
+       selection, and the covers sit at their table positions. */
+    sm_glide_t flow;
+    /* How loosely the glide follows: tight for a single press, looser while
+       presses come quickly, so a held direction slides at an even speed
+       instead of pulsing once per step. */
+    float flow_smooth;
+    /* When the selection last moved, and when ui_update last ran: the glide
+       moves by elapsed time, not by frames. */
+    uint64_t flow_step_us;
+    uint64_t last_update_us;
+    /* This frame's share of time, and whether the shelf has had it yet:
+       the glide advances once a frame whichever way ui_update leaves. */
+    float frame_seconds;
+    bool shelf_advanced;
+    /* Which initials the current list has, for coverflow's letter strip: bit
+       0 is the bucket for everything that is not a letter, bits 1 to 26 are
+       A to Z. Worked out when the list is built, not every frame. */
+    uint32_t initials;
     /* The ROM load, for the bar on the launch card. `load_total` of zero means
        no load is in flight, which is also the state before the first chunk
        arrives -- so the bar appears with the first progress callback rather

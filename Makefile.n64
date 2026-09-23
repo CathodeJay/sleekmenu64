@@ -30,6 +30,10 @@ DFS_IMAGE ?=
 # build stops with "No rule to make target" instead of just recompiling.
 CFLAGS += -Wextra -MP -Isrc -I$(LIBDRAGON_ROOT)/src/fatfs -I$(LIBDRAGON_ROOT)/src/libcart
 CFLAGS += -I$(NFM_BOOT) -include boot_compat.h
+# make perf: the frame-time readout, for measuring on a console.
+ifneq ($(PERF),)
+CFLAGS += -DSM_SHOW_FRAME_TIME
+endif
 # The krikzz Pro library is visible only to the Pro backend, so nothing else
 # can pick up its u8/u32 macros or its FR_* names by accident.
 $(BUILD_DIR)/src/pro/%.o: CFLAGS += -I$(EDIO)

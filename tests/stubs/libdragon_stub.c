@@ -114,3 +114,7 @@ int dir_findfirst(const char *path, dir_t *entry) {
     if (!dir_entries || strcmp(path, dir_path)) return -1;
     return dir_findnext(path, entry);
 }
+
+uint64_t sm_test_now_us;
+uint64_t get_ticks_us(void) { return sm_test_now_us; }
+uint64_t get_ticks_ms(void) { return sm_test_now_us / 1000u; }

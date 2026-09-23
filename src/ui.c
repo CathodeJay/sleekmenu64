@@ -423,30 +423,55 @@ static void draw_cover_turned(surface_t *dst, int x, int centre_y,
         visible_from = top < 0 ? -top : 0;
         visible_to = top + height > dst->height ? dst->height - top : height;
 
-        for (row = visible_from; row < visible_to; row++) {
-            const uint16_t *in = (const uint16_t *)((const uint8_t *)src.buffer +
-                (size_t)(row * src_height / height) * src.stride);
-            uint16_t *out = (uint16_t *)((uint8_t *)dst->buffer +
-                (size_t)(top + row) * dst->stride) + out_x;
-            *out = in[src_x];
+        /* Rows are stepped, not divided: the source row for screen row r is
+           r * src_height / height, and walking it as a whole part and a
+           remainder gives exactly that without a division per pixel -- the
+           slowest instruction the loop had, several times over. */
+        {
+            const int whole = src_height / height, part = src_height % height;
+            const size_t stride_in = src.stride, stride_out = dst->stride;
+            const uint8_t *in = (const uint8_t *)src.buffer + (size_t)src_x * 2u;
+            uint8_t *out = (uint8_t *)dst->buffer +
+                (size_t)(top + visible_from) * stride_out + (size_t)out_x * 2u;
+            int source_row = visible_from * src_height / height;
+            int error = visible_from * src_height % height;
+            const size_t jump = (size_t)whole * stride_in;
+            in += (size_t)source_row * stride_in;
+            for (row = visible_from; row < visible_to; row++) {
+                *(uint16_t *)out = *(const uint16_t *)in;
+                out += stride_out;
+                in += jump;
+                error += part;
+                if (error >= height) { error -= height; in += stride_in; }
+            }
         }
 
         /* The reflection: the same column mirrored below the card, fading out
            over `reflection` rows. Shelf lighting is what stops seven covers on
-           a dark field from looking like seven stickers. */
-        for (row = 0; row < reflection; row++) {
-            int y = top + height + row;
-            int source_row = height - 1 - row * height / (reflection ? reflection : 1);
-            const uint16_t *in;
-            uint16_t *out;
-            unsigned shift = 1u + (unsigned)(row * 2 / (reflection ? reflection : 1));
-            if (y < 0 || y >= dst->height) break;
-            if (source_row < 0) break;
-            if (shift > 4u) break;      /* past here it is black anyway */
-            in = (const uint16_t *)((const uint8_t *)src.buffer +
-                (size_t)(source_row * src_height / height) * src.stride);
-            out = (uint16_t *)((uint8_t *)dst->buffer + (size_t)y * dst->stride) + out_x;
-            *out = dim_rgba16(in[src_x], shift);
+           a dark field from looking like seven stickers. Each row samples the
+           card `height / reflection` rows further up, so the reflection is the
+           card squashed, not its bottom edge smeared. */
+        if (reflection > 0) {
+            const uint32_t down = ((uint32_t)height << 16) / (uint32_t)reflection;
+            const uint32_t scale = ((uint32_t)src_height << 16) / (uint32_t)height;
+            uint32_t travelled = 0u;
+            const uint8_t *column = (const uint8_t *)src.buffer + (size_t)src_x * 2u;
+            int y = top + height;
+            uint8_t *out = (uint8_t *)dst->buffer + (size_t)(y < 0 ? 0 : y) * dst->stride +
+                (size_t)out_x * 2u;
+            for (row = 0; row < reflection; row++, y++, travelled += down) {
+                int screen_row = height - 1 - (int)(travelled >> 16);
+                int source_row;
+                if (screen_row < 0) break;
+                if (y >= dst->height) break;
+                if (y < 0) continue;
+                source_row = (int)(((uint32_t)screen_row * scale) >> 16);
+                if (source_row >= src_height) source_row = src_height - 1;
+                *(uint16_t *)out = dim_rgba16(
+                    *(const uint16_t *)(column + (size_t)source_row * src.stride),
+                    row * 2 < reflection ? 1u : 2u);
+                out += dst->stride;
+            }
         }
     }
 }
@@ -531,6 +556,7 @@ static void load_selected_cover(sm_ui_t *ui, const sm_catalog_t *catalog) {
 static void sync_slots(sm_ui_t *ui, int32_t base, uint32_t count) {
     sprite_t *held[SM_UI_SLOTS_MAX];
     uint32_t held_index[SM_UI_SLOTS_MAX];
+    bool held_pending[SM_UI_SLOTS_MAX];
     bool taken[SM_UI_SLOTS_MAX];
     uint32_t slot, other;
     if (count > SM_UI_SLOTS_MAX) count = SM_UI_SLOTS_MAX;
@@ -540,6 +566,7 @@ static void sync_slots(sm_ui_t *ui, int32_t base, uint32_t count) {
     for (slot = 0; slot < SM_UI_SLOTS_MAX; slot++) {
         held[slot] = ui->slot_sprites[slot];
         held_index[slot] = ui->slot_indices[slot];
+        held_pending[slot] = ui->slot_pending[slot];
         taken[slot] = false;
         ui->slot_sprites[slot] = NULL;
         ui->slot_indices[slot] = UINT32_MAX;
@@ -556,7 +583,11 @@ static void sync_slots(sm_ui_t *ui, int32_t base, uint32_t count) {
             if (taken[other] || held_index[other] != item) continue;
             ui->slot_sprites[slot] = held[other];
             taken[other] = true;
-            ui->slot_pending[slot] = false;
+            /* Carried as it was: a cover still waiting to be read keeps
+               waiting. Marking it done because its item was already in the
+               window left a blank tile that never filled whenever the window
+               moved twice before the reads caught up. */
+            ui->slot_pending[slot] = held_pending[other];
             break;
         }
     }
@@ -570,7 +601,13 @@ static void sync_slots(sm_ui_t *ui, int32_t base, uint32_t count) {
    reads, and doing them all at once is a fifth of a second in which the
    controller does nothing. */
 static void load_slot_step(sm_ui_t *ui, const sm_catalog_t *catalog) {
-    for (uint32_t slot = 0; slot < ui->slot_count; slot++) {
+    /* Coverflow reads from the middle outwards: after a jump every cover is
+       new, and the one in the middle is the one being looked at. */
+    bool shelf = ui->view == SM_VIEW_COVERFLOW && ui->slot_count == SM_UI_FLOW_SLOTS;
+    for (uint32_t n = 0; n < ui->slot_count; n++) {
+        uint32_t slot = shelf
+            ? (uint32_t)(SM_UI_FLOW_OUTER + ((n & 1u) ? -(int)((n + 1u) / 2u) : (int)(n / 2u)))
+            : n;
         if (!ui->slot_pending[slot]) continue;
         ui->slot_pending[slot] = false;
         ui->slot_sprites[slot] = load_item_cover(ui->slot_indices[slot], catalog, &ui->covers);
@@ -591,6 +628,48 @@ static char flow_initial(const sm_catalog_t *catalog, uint32_t item) {
     c = game.title[0];
     if (c >= 'a' && c <= 'z') c = (char)(c - 32);
     return (c >= 'A' && c <= 'Z') ? c : '#';
+}
+
+/* The letter strip's cell for an initial: 0 for '#', 1 to 26 for A to Z. */
+static unsigned initial_bucket(char initial) {
+    return (initial >= 'A' && initial <= 'Z') ? (unsigned)(initial - 'A') + 1u : 0u;
+}
+
+/* The shelf's glide. Tight for a single press -- it settles in about a fifth
+   of a second -- and looser while presses come quickly, which is what keeps
+   a held direction at an even speed: a tight glide under a stream of steps
+   surges and slows once per step. Seconds, as the glide takes them. */
+static const float FLOW_SMOOTH = 0.06f;
+static const float FLOW_SMOOTH_HELD = 0.11f;
+/* Steps closer together than this are a held direction or quick tapping. */
+#define FLOW_QUICK_US 250000u
+/* How far the shelf may trail the selection. At a held direction's top
+   speed the looser glide runs about three covers behind; a letter jump
+   glides the last cover and a half. */
+static const float FLOW_MAX_LAG = 3.0f;
+static const float FLOW_JUMP_LAG = 1.5f;
+/* The most time one frame may move the shelf by. */
+static const float FLOW_MAX_STEP = 0.05f;
+
+/* Once a frame, whichever way ui_update leaves: in coverflow the shelf
+   glides towards the selection; in the other views it simply is the
+   selection, so switching to coverflow starts at rest. */
+static void advance_shelf(sm_ui_t *ui) {
+    float target = (float)ui->selected;
+    if (ui->shelf_advanced) return;
+    ui->shelf_advanced = true;
+    if (ui->view != SM_VIEW_COVERFLOW || !ui->item_count) {
+        sm_glide_snap(&ui->flow, target);
+        return;
+    }
+    sm_glide_step(&ui->flow, target, ui->frame_seconds,
+        ui->flow_smooth > 0.0f ? ui->flow_smooth : FLOW_SMOOTH);
+}
+
+/* The item nearest the middle of the shelf. The glide never runs below the
+   first item, so rounding a non-negative number is all this needs. */
+static int32_t shelf_centre(const sm_ui_t *ui) {
+    return ui->flow.pos > 0.0f ? (int32_t)(ui->flow.pos + 0.5f) : 0;
 }
 
 /* The next item whose initial differs from the current one, in the given
@@ -679,7 +758,7 @@ static void select_folder_named(sm_ui_t *ui, const sm_catalog_t *catalog,
         ui->selected = i;
         /* Correct today only because the one caller rebuilds first, which is
            exactly the shape settle_on_a_new_list() exists to stop repeating. */
-        ui->flow_frames = 0;
+        sm_glide_snap(&ui->flow, (float)i);
         focus_selected(ui, layout);
         unload_cover(ui);
         unload_slots(ui);
@@ -709,15 +788,18 @@ enum { SM_STRIP_ALL = 0u, SM_STRIP_FAVORITES = 1u, SM_STRIP_HISTORY = 2u,
    cursor. Written once because it was written twice: history's own rebuild
    path had its own copy, and the copy is where a later addition -- clearing
    the coverflow slide -- was missed. */
-static void settle_on_a_new_list(sm_ui_t *ui) {
+static void settle_on_a_new_list(sm_ui_t *ui, const sm_catalog_t *catalog) {
     ui->selected = 0;
     ui->first_visible = 0;
     ui->marquee = 0;
     ui->status = NULL;
     ui->settle = SM_UI_SETTLE_FRAMES;
-    /* A slide describes a step from one shelf to the next one along. After a
-       rebuild there is no previous shelf to have come from. */
-    ui->flow_frames = 0;
+    /* A glide describes the shelf moving along one list. After a rebuild
+       there is no previous shelf to have come from. */
+    sm_glide_snap(&ui->flow, 0.0f);
+    ui->initials = 0u;
+    for (uint32_t i = 0; i < ui->item_count; i++)
+        ui->initials |= 1u << initial_bucket(flow_initial(catalog, ui->items[i]));
     unload_cover(ui);
     unload_slots(ui);
 }
@@ -817,7 +899,7 @@ static void rebuild(sm_ui_t *ui, sm_catalog_t *catalog) {
         remembered = sm_folder_scan_select(&ui->scan, catalog, scan_folder(ui));
     if (ui->genre_tab == SM_STRIP_HISTORY) {
         rebuild_history(ui, catalog);
-        settle_on_a_new_list(ui);
+        settle_on_a_new_list(ui, catalog);
         return;
     }
     if (!ui->flat) {
@@ -850,7 +932,7 @@ static void rebuild(sm_ui_t *ui, sm_catalog_t *catalog) {
         place_extras(ui, catalog, 0, folders_end);
         place_extras(ui, catalog, folders_end, ui->item_count);
     }
-    settle_on_a_new_list(ui);
+    settle_on_a_new_list(ui, catalog);
     if (remembered && !ui->flat) announce_extras(ui, catalog);
 }
 
@@ -1238,7 +1320,21 @@ static void launch_from_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_
     ui->status = launch_status_message();
 }
 
+static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout);
+
 void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout) {
+    uint64_t now = get_ticks_us();
+    float seconds = ui->last_update_us ? (float)(now - ui->last_update_us) / 1000000.0f : 0.0f;
+    /* A stall -- a card read, a launch card opening -- is not a reason to
+       jump the shelf across the screen on the next frame. */
+    ui->frame_seconds = seconds > FLOW_MAX_STEP ? FLOW_MAX_STEP : seconds;
+    ui->last_update_us = now;
+    ui->shelf_advanced = false;
+    update(ui, catalog, actions, layout);
+    advance_shelf(ui);
+}
+
+static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout) {
     if (!ui->initialized) {
         ui->initialized = true;
         /* The first run has no file, so the catalog's own flags become the
@@ -1277,10 +1373,6 @@ void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const s
     if ((ui->screen == SM_SCREEN_LIBRARY || ui->screen == SM_SCREEN_FILTERS) &&
             sm_folder_scan_step(&ui->scan, catalog))
         list_what_the_card_has(ui, catalog, layout);
-    /* Before any early return. The settle delay and the launch card both bail
-       out of this function, and a slide frozen half way through because the
-       controller stopped is worse than no slide at all. */
-    if (ui->flow_frames) ui->flow_frames--;
     if (ui->screen == SM_SCREEN_LAUNCH_DETAILS) {
         if (actions.back) {
             if (ui->diagnostics) { ui->diagnostics = false; return; }
@@ -1383,7 +1475,7 @@ void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const s
                  : ui->view == SM_VIEW_GRID ? SM_VIEW_COVERFLOW
                  : SM_VIEW_LIST;
         ui->status = NULL;
-        ui->flow_frames = 0;
+        sm_glide_snap(&ui->flow, (float)ui->selected);
         focus_selected(ui, layout);
         unload_cover(ui); unload_slots(ui);
     }
@@ -1443,16 +1535,18 @@ void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const s
         ui->status = NULL;
         unload_cover(ui);
         if (ui->view == SM_VIEW_COVERFLOW) {
-            /* A letter jump animates as one step too. That is not a claim
-               about how far it went -- it is a transition, and six frames of
-               movement reads better than a hard cut whatever the distance. */
-            ui->flow_dir = ui->selected > old ? 1 : -1;
-            /* One short of the full count. The countdown runs at the top of
-               this function, before the movement is handled, so starting at
-               the full value would leave the press frame drawing the shelf
-               exactly where it already was -- a frame of stillness at the
-               front of every step, which is where it shows most. */
-            ui->flow_frames = SM_UI_FLOW_FRAMES - 1u;
+            uint32_t distance = ui->selected > old ? ui->selected - old : old - ui->selected;
+            /* Presses coming quickly -- a held direction -- loosen the glide,
+               so the shelf slides at an even speed rather than surging once
+               per step; a single press keeps it tight and quick. */
+            bool quick = ui->flow_step_us &&
+                ui->last_update_us - ui->flow_step_us < FLOW_QUICK_US;
+            ui->flow_smooth = quick ? FLOW_SMOOTH_HELD : FLOW_SMOOTH;
+            ui->flow_step_us = ui->last_update_us;
+            /* A letter jump glides its last stretch only: fifty covers flying
+               past in a fifth of a second is a blur, not a transition. */
+            sm_glide_limit(&ui->flow, (float)ui->selected,
+                distance > 1u ? FLOW_JUMP_LAG : FLOW_MAX_LAG);
         }
         /* In the grid the cursor moving inside the window costs nothing, so
            only a scroll is worth waiting out. Coverflow has no inside: every
@@ -1502,16 +1596,21 @@ void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const s
        The grid's window starts at first_visible; coverflow's is centred on the
        selection, which is what puts the chosen cover under the reflection in
        the middle of the screen. */
+    advance_shelf(ui);
     if (ui->view == SM_VIEW_GRID || ui->view == SM_VIEW_COVERFLOW) {
         int32_t base = ui->view == SM_VIEW_GRID
             ? (int32_t)ui->first_visible
-            : (int32_t)ui->selected - SM_UI_FLOW_OUTER;
+            : shelf_centre(ui) - SM_UI_FLOW_OUTER;
         uint32_t count = ui->view == SM_VIEW_GRID
             ? SM_UI_GRID_VISIBLE : SM_UI_FLOW_SLOTS;
         if (ui->slot_base != base || ui->slot_count != count)
             sync_slots(ui, base, count);
     }
     if (ui->settle) { ui->settle--; return; }
+    /* Nor while the shelf is moving: a card read in the middle of a glide is
+       a frame late, and a late frame is the one thing a glide shows. Covers
+       come off the card once it has come to rest, the middle one first. */
+    if (ui->view == SM_VIEW_COVERFLOW && sm_glide_moving(&ui->flow, (float)ui->selected)) return;
     /* Covers and headers wait for the folder read to finish, so that one
        thing at a time has the card. It is a few frames on most folders. */
     if (sm_folder_scan_busy(&ui->scan)) return;
@@ -1898,12 +1997,45 @@ static void draw_flow_placeholder(surface_t *s, int x, int centre_y, int width,
         graphics_make_color(28, 36, 48, 255));
 }
 
+/* The strip of initials along the bottom: where the selection is in the
+   list, and where L and R will land. Letters the list has no game under are
+   dimmed rather than left out, so the strip never shifts about. */
+static void draw_letter_strip(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui,
+    char current, int y) {
+    const int cell = 10, cells = 27;
+    const int left = (l->safe_left + l->safe_right) / 2 - cells * cell / 2;
+    unsigned here = initial_bucket(current);
+    char glyph[2] = {0, 0};
+    for (int b = 0; b < cells; b++) {
+        int x = left + b * cell;
+        glyph[0] = b ? (char)('A' + b - 1) : '#';
+        if ((unsigned)b == here) {
+            graphics_draw_box(s, x, y - 1, cell - 1, SM_FONT_HEIGHT + 2,
+                graphics_make_color(245, 230, 160, 255));
+            graphics_set_color(graphics_make_color(20, 24, 32, 255), 0);
+        } else if (ui->initials & (1u << b)) {
+            graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+        } else {
+            graphics_set_color(graphics_make_color(55, 64, 78, 255), 0);
+        }
+        graphics_draw_text(s, x + (cell - SM_FONT_WIDTH) / 2, y, glyph);
+    }
+}
+
 static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
     const sm_ui_t *ui) {
     const int centre_x = (l->safe_left + l->safe_right) / 2;
-    /* High enough that the reflection has somewhere to fall and the title
-       still clears the footer. */
-    const int centre_y = l->list_top + SM_COVER_HEIGHT / 2 + 6;
+    /* Coverflow has no genre strip, so the shelf takes the strip's band just
+       under the title bar, and the room that frees below goes to what the
+       list's panel would have said. The block -- shelf, reflection, four rows
+       of text -- fills an NTSC screen; PAL's extra lines are shared out above
+       and below it rather than left in one gap over the strip. */
+    const int strip_y = l->footer_top - SM_FONT_HEIGHT - 6;
+    const int block = 160;   /* the strip band's top to the letter strip, NTSC */
+    const int spare = strip_y - l->tabs_top - block > 0 ? strip_y - l->tabs_top - block : 0;
+    /* The title bar is twenty rows deep, so four clear of it. */
+    const int centre_y = l->safe_top + 24 + SM_COVER_HEIGHT / 2 + spare / 2;
+    const int reflection_of_centre = SM_COVER_HEIGHT / 4;
     sm_game_t game;
     char label[80];
     int slot_x[SM_UI_FLOW_SLOTS];
@@ -1920,75 +2052,52 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
         return;
     }
 
-    /* One position per slot, including the two off-screen rungs at each end.
-       Slot SM_UI_FLOW_OUTER is the selection, face on in the middle. */
+    /* The table's positions, one per whole step from the middle, including
+       the rung off each side of the screen that covers glide in from and out
+       to. */
     sm_flow_positions(centre_x, FLOW_DEPTH, SM_UI_FLOW_OUTER, slot_x);
 
-    for (int slot = 0; slot < SM_UI_FLOW_SLOTS; slot++) {
-        int depth = slot - SM_UI_FLOW_OUTER;
-        int side = depth < 0 ? -1 : 1;
+    for (int slot = 0; slot < (int)ui->slot_count && slot < SM_UI_FLOW_SLOTS; slot++) {
         uint32_t item = ui->slot_indices[slot];
         flow_cover_t *cover = &covers[shown];
-        if (depth < 0) depth = -depth;
-
+        /* How far this cover is from the middle of the shelf, in covers: a
+           fraction while the shelf glides. Its size and place are the
+           table's two nearest rungs, blended by that fraction. */
+        float depth = (float)(ui->slot_base + slot) - ui->flow.pos;
+        float away = depth < 0.0f ? -depth : depth;
+        int side = depth < 0.0f ? -1 : 1;
+        int rung;
+        uint32_t blend;
         if (item == UINT32_MAX) continue;
-        /* The outer rungs are off the side of the screen and exist only to be
-           slid to and from. Nothing sits there once the shelf has settled. */
-        if (depth == SM_UI_FLOW_OUTER && !ui->flow_frames) continue;
+        /* The outer rung is off the screen: nothing rests there. */
+        if (away >= (float)SM_UI_FLOW_OUTER) continue;
+        rung = (int)away;
+        blend = (uint32_t)((away - (float)rung) * 256.0f);
 
         cover->slot = slot;
-        cover->x = slot_x[slot];
-        cover->width = FLOW_DEPTH[depth].width;
-        cover->near_height = FLOW_DEPTH[depth].near_height;
-        cover->far_height = FLOW_DEPTH[depth].far_height;
-        cover->near_left = side > 0 || depth == 0;
-
-        if (ui->flow_frames) {
-            /* Where this cover was one step ago. The shelf moved by flow_dir,
-               so it was that many slots further along in that direction; the
-               outer rungs are what keep `was` on the shelf at both ends. */
-            int was = slot + (int)ui->flow_dir;
-            int was_depth, was_side;
-            uint32_t done = SM_UI_FLOW_FRAMES - ui->flow_frames;
-            if (was < 0) was = 0;
-            if (was > 2 * SM_UI_FLOW_OUTER) was = 2 * SM_UI_FLOW_OUTER;
-            was_depth = was - SM_UI_FLOW_OUTER;
-            was_side = was_depth < 0 ? -1 : 1;
-            if (was_depth < 0) was_depth = -was_depth;
-            if (done > SM_UI_FLOW_FRAMES) done = SM_UI_FLOW_FRAMES;
-
-            /* How far along the step is, NOT how much is left: lerp runs from
-               `was` at 0 to here at SM_UI_FLOW_FRAMES, so passing the
-               remaining count plays the slide backwards -- the shelf arrives
-               first and then retreats to where it came from. */
-            cover->x = lerp(slot_x[was], cover->x, done, SM_UI_FLOW_FRAMES);
-            cover->width = lerp(FLOW_DEPTH[was_depth].width, cover->width,
-                done, SM_UI_FLOW_FRAMES);
-            cover->near_height = lerp(FLOW_DEPTH[was_depth].near_height,
-                cover->near_height, done, SM_UI_FLOW_FRAMES);
-            cover->far_height = lerp(FLOW_DEPTH[was_depth].far_height,
-                cover->far_height, done, SM_UI_FLOW_FRAMES);
-            /* A cover crossing the middle faces the way it came for the first
-               half of the step and the way it is going for the second. Setting
-               it from the destination alone mirrors the picture in one frame,
-               at the moment the card is most turned -- which is exactly when
-               it shows. */
-            if (done * 2u < SM_UI_FLOW_FRAMES)
-                cover->near_left = was_side > 0 || was_depth == 0;
-        }
+        cover->x = lerp(slot_x[SM_UI_FLOW_OUTER + side * rung],
+            slot_x[SM_UI_FLOW_OUTER + side * (rung + 1)], blend, 256u);
+        cover->width = lerp(FLOW_DEPTH[rung].width, FLOW_DEPTH[rung + 1].width, blend, 256u);
+        cover->near_height = lerp(FLOW_DEPTH[rung].near_height,
+            FLOW_DEPTH[rung + 1].near_height, blend, 256u);
+        cover->far_height = lerp(FLOW_DEPTH[rung].far_height,
+            FLOW_DEPTH[rung + 1].far_height, blend, 256u);
+        /* A card turns its near edge towards the middle. It changes sides as
+           it crosses the middle, where it is face on and both edges are the
+           same height, so the change is invisible. */
+        cover->near_left = depth >= 0.0f;
         cover->folder = (item & SM_UI_FOLDER_BIT) != 0u;
-        /* A blank tile now means one thing only: a cover that has not come off
+        /* A blank tile means one thing only: a cover that has not come off
            the card yet. */
         cover->placeholder = !cover->folder && !ui->slot_sprites[slot];
         shown++;
     }
 
     /* Narrowest first, so each nearer cover overlaps the ones behind it --
-       which is the whole illusion. Sorted by the width actually being drawn
-       rather than by the slot's resting depth: mid-slide the incoming centre
-       cover is still narrow while the outgoing one is still wide, and drawing
-       by resting depth painted the small one over the large one's edge. Nine
-       items, so the simplest sort that is obviously right. */
+       which is the whole illusion. Sorted by the width actually being drawn:
+       mid-glide the cover arriving in the middle is still narrow while the
+       one leaving is still wide. Nine items, so the simplest sort that is
+       obviously right. */
     for (int i = 1; i < shown; i++) {
         flow_cover_t key = covers[i];
         int j = i - 1;
@@ -2003,9 +2112,6 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
                 cover->near_height, cover->far_height);
             continue;
         }
-        /* A card on the left of the screen has its near edge on the right,
-           facing the middle, and the other way about on the right. A folder
-           goes through the identical path -- it is just a different picture. */
         {
             surface_t pixels;
             const surface_t *source;
@@ -2017,27 +2123,61 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
             }
             draw_cover_turned(s, cover->x, centre_y, source,
                 cover->width, cover->near_height, cover->far_height,
-                cover->near_left, cover->near_height / 3);
+                cover->near_left, cover->near_height / 4);
         }
     }
 
-    /* The title under the shelf, and the genre beside it. Coverflow gives up
-       the list's columns, so this is the only place the selection is named. */
+    /* Under the shelf, what the list's panel would say: the title, the
+       facts on one line, the start of the box back, and the strip of
+       initials. The rows stay put whatever a game lacks, so nothing jumps
+       about as the shelf moves. */
     if (catalog_get(c, ui->items[ui->selected] & ~SM_UI_FOLDER_BIT, &game)) {
-        int y = centre_y + SM_COVER_HEIGHT / 2 + SM_COVER_HEIGHT / 3 + 6;
-        if (y > l->footer_top - 22) y = l->footer_top - 22;
-        char name[64];
-        if (folder_label(c, ui->items[ui->selected], ui->folder, name, sizeof(name)))
+        int y = centre_y + SM_COVER_HEIGHT / 2 + reflection_of_centre + 6;
+        bool folder = (ui->items[ui->selected] & SM_UI_FOLDER_BIT) != 0u;
+        char name[64], facts[96];
+        if (folder && folder_label(c, ui->items[ui->selected], ui->folder, name, sizeof(name)))
             snprintf(label, sizeof(label), "[%s]", name);
         else
             snprintf(label, sizeof(label), "%s", game.title);
         graphics_set_color(graphics_make_color(255, 255, 255, 255), 0);
         draw_truncated(s, l->safe_left + 6, y, label, chars);
-        if (game.genre[0]) {
+
+        if (folder) {
+            snprintf(facts, sizeof(facts), "FOLDER");
+        } else {
+            size_t used = 0;
+            facts[0] = '\0';
+            if (game.genre[0])
+                used += (size_t)snprintf(facts + used, sizeof(facts) - used, "%s", game.genre);
+            if (game.year && used < sizeof(facts))
+                used += (size_t)snprintf(facts + used, sizeof(facts) - used, "%s%u",
+                    used ? "  " : "", (unsigned)game.year);
+            if (game.publisher[0] && used < sizeof(facts))
+                used += (size_t)snprintf(facts + used, sizeof(facts) - used, "%s%s",
+                    used ? "  " : "", game.publisher);
+            if (game.players && used < sizeof(facts))
+                snprintf(facts + used, sizeof(facts) - used, "%s%uP",
+                    used ? "  " : "", (unsigned)game.players);
+        }
+        if (facts[0]) {
             graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
-            draw_truncated(s, l->safe_left + 6, y + 11, game.genre, chars);
+            draw_truncated(s, l->safe_left + 6, y + 11, facts, chars);
+        }
+        /* Two lines of the box back: enough to tell two games apart, not so
+           much that the text competes with the covers. */
+        if (!folder && game.description && game.description[0]) {
+            int room = (strip_y - 6 - (y + 22)) / 10;
+            if (room > 2) room = 2;
+            if (room > 0) {
+                graphics_set_color(graphics_make_color(110, 125, 145, 255), 0);
+                draw_wrapped(s, l->safe_left + 6, y + 22, 10, game.description, chars, room);
+            }
         }
     }
+    /* History is in the order things were played, where initials mean
+       nothing. */
+    if (ui->genre_tab != SM_STRIP_HISTORY)
+        draw_letter_strip(s, l, ui, flow_initial(c, ui->items[ui->selected]), strip_y);
 }
 
 static void draw_panel(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,

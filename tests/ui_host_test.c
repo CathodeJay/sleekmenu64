@@ -148,7 +148,11 @@ static void layout_ntsc(void) {
 
 static const sm_actions_t NONE;
 
-static void frame(sm_actions_t actions) { ui_update(&ui, &CATALOG, actions, &layout); }
+/* A frame is a sixtieth of a second on the clock the shelf glides by. */
+static void frame(sm_actions_t actions) {
+    sm_test_now_us += 16667u;
+    ui_update(&ui, &CATALOG, actions, &layout);
+}
 static void idle(int frames) { while (frames-- > 0) frame(NONE); }
 static void settle(void) { idle(SM_UI_SETTLE_FRAMES + 2); }
 
@@ -844,18 +848,31 @@ int main(void) {
         assert(ui.slot_indices[SM_UI_FLOW_OUTER] == ui.items[0]);
         draw();                               /* and it draws in that state */
 
-        /* Right walks the shelf and the window follows it. */
+        /* Right walks the shelf and the window follows the shelf, which
+           glides after the selection. */
         frame(PRESS(right));
         assert(ui.selected == 1u);
+        idle(40);
         assert(ui.slot_base == 1 - SM_UI_FLOW_OUTER);
 
         /* One step costs one cover, not seven: the six that stay on screen
            are carried across rather than freed and read back. */
-        settle();
         sm_test_reset();
         frame(PRESS(right));
-        settle();
+        idle(40);
         assert(sm_test_sprite_loads == 1);
+
+        /* Two steps before the reads catch up, then rest: every cover on the
+           shelf arrives. A cover still waiting when the window moved again
+           used to be carried across as read-and-empty, and stayed a blank
+           tile for good. */
+        frame(PRESS(right)); frame(PRESS(right));
+        idle(60);
+        for (int slot = 1; slot < SM_UI_FLOW_SLOTS - 1; slot++)
+            if (ui.slot_indices[slot] != UINT32_MAX)
+                assert(ui.slot_sprites[slot] != NULL);
+        frame(PRESS(left)); frame(PRESS(left));
+        idle(60);
 
         /* L and R jump by initial. Five games per letter, so this is the
            difference between one press and five. */
@@ -899,7 +916,7 @@ int main(void) {
         assert(ui.slot_count == SM_UI_FLOW_SLOTS);
     }
 
-    /* ---- the coverflow slide ---------------------------------------- */
+    /* ---- the coverflow glide ---------------------------------------- */
     {
         static row_t rows[12];
         static char paths[12][16], titles[12][8];
@@ -914,62 +931,133 @@ int main(void) {
         frame(PRESS(toggle_view)); frame(PRESS(toggle_view));
         assert(ui.view == SM_VIEW_COVERFLOW);
         settle();
-        assert(ui.flow_frames == 0u);        /* settled */
+        assert(ui.flow.pos == 0.0f && ui.flow.vel == 0.0f);   /* at rest */
 
-        /* A step right starts the slide and says which way the shelf went.
-           The countdown happens before the movement handler runs, so the
-           press frame is started one short -- otherwise it would draw the
-           shelf exactly where it already was and every step would open with a
-           frame of stillness. */
-        frame(PRESS(right));
-        assert(ui.flow_dir == 1);
-        assert(ui.flow_frames == SM_UI_FLOW_FRAMES - 1u);
-        for (unsigned i = 0; i + 1u < SM_UI_FLOW_FRAMES; i++) {
+        /* A step right starts moving in the frame it is pressed -- no frame of
+           stillness at the front -- and glides forward every frame, never past
+           the cover, until it rests on it. */
+        {
+            float last;
+            int frames = 1;
+            frame(PRESS(right));
+            assert(ui.selected == 1u);
+            assert(ui.flow.pos > 0.0f && ui.flow.pos < 1.0f && ui.flow.vel > 0.0f);
+            last = ui.flow.pos;
+            while (sm_glide_moving(&ui.flow, 1.0f)) {
+                draw();
+                frame(NONE);
+                assert(ui.flow.pos >= last && ui.flow.pos <= 1.0f);
+                last = ui.flow.pos;
+                assert(++frames < 40);
+            }
+            assert(ui.flow.pos == 1.0f);
+            assert(frames <= 20);               /* about a fifth of a second */
             draw();
-            assert(ui.flow_frames > 0u);     /* still moving */
-            frame(NONE);
         }
-        assert(ui.flow_frames == 0u);        /* and it finishes on its own */
-        draw();                              /* settled, and still drawable */
 
         /* Left goes the other way. */
         frame(PRESS(left));
-        assert(ui.flow_dir == -1);
-        assert(ui.flow_frames > 0u);
+        assert(ui.flow.vel < 0.0f && ui.flow.pos < 1.0f);
 
-        /* It keeps counting down while the cursor is settling. ui_update
-           returns early during the settle delay, and a slide frozen half way
-           because the controller stopped is worse than no slide. */
+        /* A press mid-glide turns it; the shelf never jumps back to where the
+           first press started from. */
+        settle(); idle(30);
+        assert(ui.flow.pos == 0.0f);
+        frame(PRESS(right)); frame(NONE); frame(NONE);
         {
-            uint32_t before = ui.flow_frames;
+            float before = ui.flow.pos;
+            assert(before > 0.0f && before < 1.0f);
+            frame(PRESS(right));
+            assert(ui.selected == 2u);
+            assert(ui.flow.pos > before);
+        }
+
+        /* It keeps gliding while the cursor settles. ui_update returns early
+           during the settle delay, and a shelf frozen half way because the
+           controller stopped is worse than no glide. */
+        {
+            float before = ui.flow.pos;
             ui.settle = SM_UI_SETTLE_FRAMES;
             frame(NONE);
-            assert(ui.flow_frames == before - 1u);
+            assert(ui.flow.pos > before);
+        }
+
+        /* Covers wait for the shelf to stop, then come off the card from the
+           middle outwards. */
+        {
+            int frames = 0;
+            idle(40);
+            assert(!sm_glide_moving(&ui.flow, 2.0f));
+            sm_test_reset();
+            frame(PRESS(right));
+            while (sm_glide_moving(&ui.flow, 3.0f)) {
+                assert(sm_test_sprite_loads == 0);
+                frame(NONE);
+                assert(++frames < 60);
+            }
         }
 
         /* Changing view ends it: there is no shelf to have come from. */
         frame(PRESS(right));
-        assert(ui.flow_frames > 0u);
+        assert(sm_glide_moving(&ui.flow, (float)ui.selected));
         frame(PRESS(toggle_view));
-        assert(ui.flow_frames == 0u);
+        assert(!sm_glide_moving(&ui.flow, (float)ui.selected));
 
-        /* Nor does a slide survive the list changing underneath it. */
+        /* Nor does a glide survive the list changing underneath it. */
         frame(PRESS(toggle_view)); frame(PRESS(toggle_view));
         assert(ui.view == SM_VIEW_COVERFLOW);
         frame(PRESS(right));
-        assert(ui.flow_frames > 0u);
+        assert(sm_glide_moving(&ui.flow, (float)ui.selected));
         frame(PRESS(genre_next));            /* rebuilds onto favourites */
-        assert(ui.flow_frames == 0u);
+        assert(!sm_glide_moving(&ui.flow, (float)ui.selected));
 
-        /* Drawing mid-slide must be safe at both ends of the list, where a
-           cover is sliding in from a rung that is off screen. */
+        /* Drawing mid-glide must be safe at both ends of the list, where a
+           cover is gliding in from a rung that is off screen -- and with the
+           shelf trailing a stream of quick presses. */
         frame(PRESS(genre_prev));
         settle();
         frame(PRESS(right));
         draw();                              /* selection 1, near the start */
         for (int i = 0; i < 11; i++) { frame(PRESS(right)); draw(); }
         assert(ui.selected == 11u);          /* the end of the list */
+        assert(ui.flow.pos >= 11.0f - 3.0f); /* never more than three behind */
         draw();
+        idle(60);
+        assert(ui.flow.pos == 11.0f);
+        draw();
+        for (int i = 0; i < 11; i++) { frame(PRESS(left)); draw(); }
+        assert(ui.selected == 0u);
+        idle(60);
+        assert(ui.flow.pos == 0.0f);
+        draw();
+    }
+
+    /* ---- coverflow says what the list's panel would ------------------ */
+    {
+        static const row_t rows[] = {
+            {"a.z64", "Alpha Racer", "Racing", 0, "Nintendo", 1998,
+             "A racing game with a very long description that has to wrap over several lines and "
+             "then some more, so only the start of it fits under the shelf."},
+            {"b.z64", "Bravo", "Puzzle", 0, "", 0, NULL},
+            {"z.z64", "Zulu", "Sports", 0, "", 0, NULL},
+        };
+        start(rows, 3u);
+        frame(PRESS(toggle_view)); frame(PRESS(toggle_view));
+        assert(ui.view == SM_VIEW_COVERFLOW);
+        settle();
+        draw();
+        assert(sm_test_drew("Alpha Racer"));
+        assert(sm_test_drew("Racing  1998  Nintendo"));
+        assert(sm_test_drew("A racing game"));
+        assert(!sm_test_drew("so only the start of it fits"));   /* two lines, no more */
+        /* The strip of initials: every cell drawn, the list's letters known. */
+        assert(sm_test_drew("#") && sm_test_drew("A") && sm_test_drew("Z"));
+        assert(ui.initials == ((1u << 1) | (1u << 2) | (1u << 26)));
+        /* A game with fewer facts says what it has. */
+        frame(PRESS(right));
+        settle(); idle(30);
+        draw();
+        assert(sm_test_drew("Bravo") && sm_test_drew("Puzzle"));
     }
 
     /* ---- a folder in coverflow looks like a folder ------------------ */

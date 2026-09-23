@@ -117,4 +117,11 @@ void sm_test_dir_set(const char *path, const sm_test_dir_entry_t *entries, int c
 /* How many times a folder was opened for listing. */
 extern int sm_test_dir_opens;
 
+/* --- the clock ------------------------------------------------------------
+   The browser moves the coverflow shelf by elapsed time. The host's clock
+   is whatever a test says it is: the harness advances it a frame at a time. */
+extern uint64_t sm_test_now_us;
+uint64_t get_ticks_us(void);
+uint64_t get_ticks_ms(void);
+
 #endif

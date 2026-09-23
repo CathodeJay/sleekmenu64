@@ -236,6 +236,116 @@ int main(void) {
         sm_flow_positions(CENTRE, STEPS, HALF, NULL);
     }
 
+    /* ---- the shelf's glide ------------------------------------------ */
+    {
+        const float frame = 1.0f / 60.0f, smooth = 0.06f;
+        sm_glide_t glide = {0.0f, 0.0f};
+        float last = 0.0f;
+        int frames = 0;
+
+        /* One step: it starts at once, moves forward every frame, never
+           passes the cover, and comes to rest on it within a fifth of a
+           second or so. */
+        assert(!sm_glide_moving(&glide, 0.0f));
+        while (sm_glide_step(&glide, 1.0f, frame, smooth)) {
+            assert(glide.pos > last || (frames == 0 && glide.pos > 0.0f));
+            assert(glide.pos <= 1.0f);
+            last = glide.pos;
+            frames++;
+            assert(frames < 40);
+        }
+        assert(glide.pos == 1.0f && glide.vel == 0.0f);
+        assert(frames >= 6 && frames <= 20);
+
+        /* It eases: the first frame moves less than the middle ones. */
+        {
+            sm_glide_t g = {0.0f, 0.0f};
+            float first, second, third;
+            sm_glide_step(&g, 1.0f, frame, smooth); first = g.pos;
+            sm_glide_step(&g, 1.0f, frame, smooth); second = g.pos - first;
+            sm_glide_step(&g, 1.0f, frame, smooth); third = g.pos - first - second;
+            assert(first > 0.0f && second > first && third > 0.0f);
+        }
+
+        /* A second press mid-glide turns it, never sends it backwards. */
+        {
+            sm_glide_t g = {0.0f, 0.0f};
+            float before;
+            for (int i = 0; i < 3; i++) sm_glide_step(&g, 1.0f, frame, smooth);
+            before = g.pos;
+            sm_glide_step(&g, 2.0f, frame, smooth);
+            assert(g.pos > before);
+            while (sm_glide_step(&g, 2.0f, frame, smooth)) {}
+            assert(g.pos == 2.0f);
+        }
+
+        /* Left is the mirror of right. */
+        {
+            sm_glide_t g = {5.0f, 0.0f};
+            sm_glide_step(&g, 4.0f, frame, smooth);
+            assert(g.pos < 5.0f && g.vel < 0.0f);
+        }
+
+        /* Time, not frames: two half frames land where one frame does, near
+           enough, so a late frame moves the shelf further rather than slower. */
+        {
+            sm_glide_t a = {0.0f, 0.0f}, b = {0.0f, 0.0f};
+            sm_glide_step(&a, 1.0f, frame, smooth);
+            sm_glide_step(&b, 1.0f, frame / 2.0f, smooth);
+            sm_glide_step(&b, 1.0f, frame / 2.0f, smooth);
+            assert(a.pos - b.pos < 0.01f && b.pos - a.pos < 0.01f);
+            sm_glide_t c = {0.0f, 0.0f};
+            sm_glide_step(&c, 1.0f, frame * 2.0f, smooth);
+            assert(c.pos > a.pos);
+        }
+
+        /* A long jump glides only its last stretch. */
+        {
+            sm_glide_t g = {0.0f, 0.0f};
+            sm_glide_limit(&g, 50.0f, 2.0f);
+            assert(g.pos == 48.0f);
+            sm_glide_limit(&g, 10.0f, 2.0f);
+            assert(g.pos == 12.0f);
+            sm_glide_snap(&g, 7.0f);
+            assert(g.pos == 7.0f && g.vel == 0.0f && !sm_glide_moving(&g, 7.0f));
+        }
+
+        /* Nothing to do is not a crash. */
+        assert(!sm_glide_step(NULL, 1.0f, frame, smooth));
+        sm_glide_snap(NULL, 0.0f);
+        sm_glide_limit(NULL, 0.0f, 1.0f);
+    }
+
+    /* ---- held directions ------------------------------------------- */
+    {
+        sm_repeat_t r = {0};
+        int fired = 0;
+        /* The press itself moves once. */
+        assert(sm_repeat_fire(&r, true, 1000u));
+        /* Then nothing until the pause is over. */
+        for (uint32_t t = 1016u; t < 1000u + SM_REPEAT_DELAY_MS; t += 16u)
+            assert(!sm_repeat_fire(&r, true, t));
+        assert(sm_repeat_fire(&r, true, 1000u + SM_REPEAT_DELAY_MS));
+        /* Then steadily, and faster the longer it is held. */
+        for (uint32_t t = 1316u; t < 2300u; t += 16u) fired += sm_repeat_fire(&r, true, t);
+        assert(fired >= 6 && fired <= 10);          /* about eight a second */
+        fired = 0;
+        for (uint32_t t = 4000u; t < 5000u; t += 16u) fired += sm_repeat_fire(&r, true, t);
+        assert(fired >= 18);                        /* a lot more */
+        /* Letting go resets it: the next press is a fresh one. */
+        assert(!sm_repeat_fire(&r, false, 5010u));
+        assert(sm_repeat_fire(&r, true, 5026u));
+        assert(!sm_repeat_fire(&r, true, 5042u));
+        /* A clock that wraps keeps its order. */
+        {
+            sm_repeat_t w = {0};
+            assert(sm_repeat_fire(&w, true, 0xFFFFFF00u));
+            assert(!sm_repeat_fire(&w, true, 0xFFFFFF10u));
+            assert(sm_repeat_fire(&w, true, 0xFFFFFF00u + SM_REPEAT_DELAY_MS));
+        }
+        assert(!sm_repeat_fire(NULL, true, 0u));
+    }
+
     printf("list_view host checks passed\n");
     return 0;
 }

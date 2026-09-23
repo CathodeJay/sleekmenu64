@@ -9,6 +9,7 @@
 #include "save_sync.h"
 #include <libdragon.h>
 #include <stdio.h>
+#include <string.h>
 
 typedef struct {
     const sm_layout_t *layout;
@@ -33,6 +34,46 @@ static void scan_progress(const sm_discovery_progress_t *progress, void *context
        callback exposes no dir_t or pending-stack state. */
     if (now - display->last_redraw_ms >= 100) draw_scan_now(display, progress);
 }
+
+#ifdef SM_SHOW_FRAME_TIME
+/* A build for measuring (make perf): how long the browser works on each
+   frame, the worst of the last half second, and how many frames reached the
+   screen, over the right of the title bar. Work is ui_update and ui_draw,
+   not the wait for a free framebuffer, so it says how much of the 16.7 ms a
+   frame has at 60 Hz is used. */
+typedef struct {
+    uint64_t window_start_us, last_frame_us;
+    uint32_t frames, work_sum_us, work_max_us;
+    char line[48];
+} frame_meter_t;
+
+static void frame_meter(surface_t *surface, const sm_layout_t *layout, frame_meter_t *meter,
+    uint32_t work_us, uint64_t now_us) {
+    if (!meter->window_start_us) meter->window_start_us = now_us;
+    meter->frames++;
+    meter->work_sum_us += work_us;
+    if (work_us > meter->work_max_us) meter->work_max_us = work_us;
+    if (now_us - meter->window_start_us >= 500000u) {
+        uint32_t span = (uint32_t)(now_us - meter->window_start_us);
+        uint32_t average = meter->work_sum_us / meter->frames;
+        snprintf(meter->line, sizeof(meter->line), "%lu.%lums MAX %lu.%lu %luFPS",
+            (unsigned long)(average / 1000u), (unsigned long)(average % 1000u / 100u),
+            (unsigned long)(meter->work_max_us / 1000u),
+            (unsigned long)(meter->work_max_us % 1000u / 100u),
+            (unsigned long)((meter->frames * 1000000u + span / 2u) / span));
+        meter->window_start_us = now_us;
+        meter->frames = meter->work_sum_us = meter->work_max_us = 0;
+    }
+    if (meter->line[0]) {
+        int width = (int)strlen(meter->line) * SM_FONT_WIDTH;
+        int x = layout->safe_right - 3 - width;
+        graphics_draw_box(surface, x - 2, layout->safe_top, width + 4, SM_HEADER_HEIGHT,
+            graphics_make_color(90, 20, 20, 255));
+        graphics_set_color(graphics_make_color(255, 255, 255, 255), 0);
+        graphics_draw_text(surface, x, layout->safe_top + 3, meter->line);
+    }
+}
+#endif
 
 int main(void) {
     static sm_ui_t ui;
@@ -103,10 +144,25 @@ int main(void) {
         /* A save that just moved is more worth saying than a catalog count. */
         if (save_sync.ran) ui.status = save_sync.detail;
     }
+#ifdef SM_SHOW_FRAME_TIME
+    static frame_meter_t meter;
+#endif
     while (1) {
+#ifdef SM_SHOW_FRAME_TIME
+        uint64_t began = get_ticks_us();
+        ui_update(&ui, &catalog, app_input_poll(), &layout);
+        uint64_t updated = get_ticks_us();
+        surface_t *surface = app_display_begin();
+        uint64_t drawing = get_ticks_us();
+        ui_draw(surface, &layout, &catalog, &ui);
+        uint64_t drawn = get_ticks_us();
+        frame_meter(surface, &layout, &meter,
+            (uint32_t)((updated - began) + (drawn - drawing)), drawing);
+#else
         ui_update(&ui, &catalog, app_input_poll(), &layout);
         surface_t *surface = app_display_begin();
         ui_draw(surface, &layout, &catalog, &ui);
+#endif
         app_display_end(surface);
     }
 }

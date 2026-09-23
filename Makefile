@@ -7,7 +7,7 @@ COVERDB := data/coverdb.csv
 
 .PHONY: all help test card metadata coverdb card-art \
         covers-pak discover-sd check-n64 font-dfs slim clean \
-        curate refresh registry rom-db prep release gui
+        curate refresh registry rom-db prep release gui perf
 
 all: help
 
@@ -29,6 +29,7 @@ help:
 	@echo "Building the ROM (needs a libdragon toolchain in N64_INST):"
 	@echo "  make check-n64  Check for a usable libdragon installation"
 	@echo "  make slim       Build build/release/SleekMenu64.z64; art comes from the card"
+	@echo "  make perf       The same ROM with a frame-time readout, for measuring"
 	@echo ""
 	@echo "Maintaining the database:"
 	@echo "  make coverdb ROMS_ROOT=... LIBRETRO=... [FILE_CRC=1]"
@@ -242,6 +243,15 @@ slim: font-dfs
 	mkdir -p $(BUILD_DIR)/release
 	cp sleekmenu.z64 $(BUILD_DIR)/release/SleekMenu64.z64
 	@echo "Release: $(BUILD_DIR)/release/SleekMenu64.z64 (art comes from the card)"
+
+# The same ROM with a frame-time readout over the title bar: how long each
+# frame takes on the console, for measuring a change rather than guessing.
+perf: font-dfs
+	$(MAKE) -B -f Makefile.n64 N64_INST="$(N64_INST_AUTO)" LIBDRAGON_ROOT="$(LIBDRAGON_ROOT)" \
+		DFS_IMAGE="$(FONT_DFS)" PERF=1
+	mkdir -p $(BUILD_DIR)/release
+	cp sleekmenu.z64 $(BUILD_DIR)/release/SleekMenu64-perf.z64
+	@echo "Measuring build: $(BUILD_DIR)/release/SleekMenu64-perf.z64"
 
 clean:
 	rm -rf $(BUILD_DIR)

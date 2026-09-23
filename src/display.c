@@ -29,7 +29,14 @@ void app_display_init(sm_layout_t *layout) {
        hardware misbehaves on NTSC consoles (libdragon issue #66) and
        libdragon refuses with an assert at startup. A crisp picture at this
        width needs a 32-bit framebuffer, or 640 across. */
-    display_init(resolution, DEPTH_16_BPP, 2, GAMMA_NONE, FILTERS_RESAMPLE);
+    /* Three framebuffers when the Expansion Pak gives the room for one more
+       (150 KB): a frame that runs a little long is then shown at the next
+       vertical blank instead of making the one after it wait a whole extra
+       frame, which is the difference between an occasional late frame and
+       a picture that stutters between sixty and thirty. Without the pak the
+       catalog of a large card needs the memory more. */
+    display_init(resolution, DEPTH_16_BPP, is_memory_expanded() ? 3 : 2, GAMMA_NONE,
+        FILTERS_RESAMPLE);
 }
 
 void app_display_load_font(void) {

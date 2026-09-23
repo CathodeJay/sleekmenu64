@@ -202,7 +202,28 @@ On the console the work is split into small modules:
 grid shows twelve covers for scanning a folder. Coverflow shows one cover
 face-on with three receding either side, for when you don't know what you
 want yet; it drops the tab strip and page keys, and L/R jump by initial
-letter instead. Every step animates over six frames.
+letter instead. Under the shelf it says what the list's panel would: the
+title, the genre, year, publisher and players on one line, the first two
+lines of the box back, and a strip of initials with the current one lit and
+the ones the list has no game under dimmed.
+
+**The shelf glides.** Its position is a number of covers, a fraction while
+it moves, that follows the selection as a critically damped spring
+(`sm_glide_step`): it eases in and out, never overshoots, and is stepped by
+elapsed time rather than by frames, so a late frame moves it further instead
+of slowing it. A press mid-glide turns the glide rather than restarting it,
+and a held direction repeats (`sm_repeat_fire`: once, then after 300 ms, at
+eight, fourteen and then twenty-five steps a second) with the spring
+loosened so the speed stays even from one step to the next. A letter jump
+glides its last cover and a half. Each cover's size and place are the depth
+table's two nearest rungs, blended by its fractional distance from the
+middle. Covers are read only once the shelf is at rest, the middle one
+first. A turned cover is drawn column by column with the source row stepped
+as a whole part and a remainder rather than divided per pixel, and with an
+Expansion Pak the display has a third framebuffer, so an occasional long
+frame waits for the next vertical blank rather than halving the rate.
+`make perf` builds a ROM that shows each frame's working time over the title
+bar, for measuring on a console.
 
 **Browsing.** Folders first, then games; B goes up. The games can be in any
 folder on the card, and when every one of them is under the same folder the
@@ -252,7 +273,8 @@ inside a ROM, so nothing is read while the cursor moves: a cover and the
 highlighted game's save type are read a tenth of a second after you stop.
 The grid keeps the covers already on screen and fills the new row one cover
 per frame; coverflow carries six of its seven covers across a step and reads
-one. Covers live in a single `covers.pak` because opening a file by name on a
+one. A cover still waiting to be read when the window moves again keeps
+waiting: it is carried across as pending, not as read. Covers live in a single `covers.pak` because opening a file by name on a
 FAT card walks the folder from the start, and with long names that is over
 100 KB of reading per picture.
 

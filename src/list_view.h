@@ -76,4 +76,46 @@ typedef struct {
 void sm_flow_positions(int centre_x, const sm_flow_step_t *steps, int half,
     int *x_out);
 
+/* The coverflow shelf's position, in items: the index of the cover in the
+   middle, a fraction while the shelf is moving. It glides towards the
+   selection rather than stepping to it, so a press in the middle of a move
+   turns the move instead of restarting it, and a held direction reads as one
+   continuous slide rather than a series of hops.
+
+   The glide is a critically damped spring: it starts from rest, eases in and
+   out, and never overshoots. It is stepped by elapsed time, not by frames,
+   so a frame that runs late moves the shelf further rather than slowing it
+   down. */
+typedef struct {
+    float pos;
+    float vel;      /* items per second */
+} sm_glide_t;
+
+/* Move `seconds` towards `target`. `smooth` is roughly the time the glide
+   takes to cover most of a step; a single step settles in about three times
+   that. Returns true while the shelf is still moving. */
+bool sm_glide_step(sm_glide_t *glide, float target, float seconds, float smooth);
+/* At `target`, at rest: a list that changed underneath the shelf has
+   nothing to glide from. */
+void sm_glide_snap(sm_glide_t *glide, float target);
+/* No further than `lag` items from `target`, keeping the speed: a jump of
+   fifty covers glides the last `lag` of them rather than flying past fifty
+   pictures nobody can see. */
+void sm_glide_limit(sm_glide_t *glide, float target, float lag);
+bool sm_glide_moving(const sm_glide_t *glide, float target);
+
+/* A held direction repeats: once on the press, then after a pause, then
+   faster the longer it is held, so a short list is walked one step at a
+   time and a long one can be crossed without pressing three thousand
+   times. `now_ms` is any clock in milliseconds. Returns true on the polls
+   that should move the cursor. */
+typedef struct {
+    bool down;
+    uint32_t since_ms;   /* when the press started */
+    uint32_t next_ms;    /* when it next repeats */
+} sm_repeat_t;
+
+enum { SM_REPEAT_DELAY_MS = 300 };
+bool sm_repeat_fire(sm_repeat_t *repeat, bool down, uint32_t now_ms);
+
 #endif
