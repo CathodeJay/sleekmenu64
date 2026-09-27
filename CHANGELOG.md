@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 1.2.0
+
+**Upgrading from 1.1:** copy the new `SleekMenu64.z64` over the old one at
+the root of the card. The card does not need preparing again.
 
 - Coverflow glides: the shelf eases from cover to cover instead of
   stepping, a press in the middle of a move turns it instead of restarting

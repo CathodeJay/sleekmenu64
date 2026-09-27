@@ -9,4 +9,4 @@ tests/test_portability.py holds the two together. A release is a tag
 the number is changed here and in version.h before tagging, never after.
 """
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
