@@ -1060,6 +1060,67 @@ int main(void) {
         assert(sm_test_drew("Bravo") && sm_test_drew("Puzzle"));
     }
 
+    /* ---- a long box back creeps up after five seconds ------------------ */
+    {
+        static const row_t rows[] = {
+            {"a.z64", "Alpha", "Racing", 0, "Nintendo", 1998,
+             "One two three four five six seven eight nine ten eleven twelve thirteen "
+             "fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one "
+             "twenty-two twenty-three twenty-four twenty-five twenty-six twenty-seven "
+             "twenty-eight twenty-nine thirty thirty-one thirty-two thirty-three."},
+            {"b.z64", "Bravo", "Puzzle", 0, "", 0, "Short enough to fit."},
+        };
+        start(rows, 2u);
+        frame(PRESS(toggle_view)); frame(PRESS(toggle_view));
+        assert(ui.view == SM_VIEW_COVERFLOW);
+        settle();
+        assert(ui.flow_desc_lines > 2);
+        /* Still for most of five seconds: the two lines as they were. */
+        idle(280);
+        assert(!ui.flow_desc_scrolling && ui.flow_desc_offset == 0);
+        draw();
+        /* Then it creeps: about a line a second. */
+        idle(72);
+        assert(ui.flow_desc_scrolling);
+        assert(ui.flow_desc_offset >= 8 && ui.flow_desc_offset <= 13);
+        draw();
+        /* To the end, a hold there, and back to the top to wait again. */
+        {
+            int max = (ui.flow_desc_lines - 2) * 10, frames = 0, peak = 0;
+            while (ui.flow_desc_scrolling && frames < 60 * 60) {
+                if (ui.flow_desc_offset > peak) peak = ui.flow_desc_offset;
+                assert(ui.flow_desc_offset <= max);
+                frame(NONE);
+                frames++;
+            }
+            assert(peak == max);
+            assert(!ui.flow_desc_scrolling && ui.flow_desc_offset == 0);
+            draw();
+        }
+        /* Moving puts it back at the top at once. */
+        idle(400);
+        assert(ui.flow_desc_scrolling);
+        frame(PRESS(right));
+        assert(!ui.flow_desc_scrolling && ui.flow_desc_offset == 0);
+        draw();
+        /* A box back that fits never moves. */
+        idle(60 * 12);
+        assert(ui.selected == 1u && ui.flow_desc_lines <= 2);
+        assert(!ui.flow_desc_scrolling && ui.flow_desc_offset == 0);
+        /* The launch card takes the surface over; back on the shelf the text
+           is drawn again before it is shown scrolling. */
+        frame(PRESS(left));
+        idle(400);
+        assert(ui.flow_desc_scrolling && ui.flow_desc_item == ui.items[0]);
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        assert(ui.flow_desc_item == UINT32_MAX && !ui.flow_desc_scrolling);
+        frame(PRESS(back));
+        idle(400);
+        assert(ui.flow_desc_scrolling && ui.flow_desc_item == ui.items[0]);
+        draw();
+    }
+
     /* ---- a folder in coverflow looks like a folder ------------------ */
     {
         /* A folder used to get the same blank rectangle as a cover that had

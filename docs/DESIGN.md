@@ -205,7 +205,12 @@ want yet; it drops the tab strip and page keys, and L/R jump by initial
 letter instead. Under the shelf it says what the list's panel would: the
 title, the genre, year, publisher and players on one line, the first two
 lines of the box back, and a strip of initials with the current one lit and
-the ones the list has no game under dimmed.
+the ones the list has no game under dimmed. A box back longer than two
+lines waits five seconds after the shelf comes to rest, then creeps up a
+line a second through the two lines' window, holds three seconds at the end
+and starts over; the paragraph is drawn once into the launch card's text
+surface, which is never on screen at the same time, and the window is a row
+copy, as on the card.
 
 **The shelf glides.** Its position is a number of covers, a fraction while
 it moves, that follows the selection as a critically damped spring

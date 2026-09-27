@@ -8,7 +8,8 @@
   hold. Holding the D-pad or stick now repeats in every view.
 - Coverflow uses the space under the shelf: the genre, year, publisher and
   players on one line, the first two lines of the description, and a strip
-  of initials showing where you are and where L and R will jump.
+  of initials showing where you are and where L and R will jump. A longer
+  description creeps up slowly after five seconds on the same game.
 - Covers draw faster, and with an Expansion Pak the screen has a third
   buffer, so a slow frame no longer halves the frame rate.
 - A cover could stay blank for good after moving twice quickly in the grid

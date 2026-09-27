@@ -150,6 +150,20 @@ typedef struct {
        the glide advances once a frame whichever way ui_update leaves. */
     float frame_seconds;
     bool shelf_advanced;
+    /* Coverflow's two lines of box back, when there is more of it: once
+       the shelf has rested on a game for a while, the whole paragraph is
+       drawn into desc_surface (the launch card's, which is never on screen
+       at the same time) and shown through the two lines' window as it
+       creeps upward. `flow_rest_us` is when the shelf came to rest on
+       `flow_rest_item`, zero while it moves; `flow_desc_item` is whose text
+       the surface holds for coverflow, UINT32_MAX when the card has used
+       it since. */
+    uint64_t flow_rest_us;
+    uint32_t flow_rest_item;
+    uint32_t flow_desc_item;
+    int flow_desc_lines;
+    int flow_desc_offset;
+    bool flow_desc_scrolling;
     /* Which initials the current list has, for coverflow's letter strip: bit
        0 is the bucket for everything that is not a letter, bits 1 to 26 are
        A to Z. Worked out when the list is built, not every frame. */

@@ -86,7 +86,8 @@ static int draw_wrapped(surface_t *surface, int x, int y, int line_height,
             while (end > 0 && line[end - 1] == ' ') end--;
             memcpy(line + end, "...", 4);
         }
-        graphics_draw_text(surface, x, y + lines * line_height, line);
+        /* No surface: count the lines, draw nothing. */
+        if (surface) graphics_draw_text(surface, x, y + lines * line_height, line);
         lines++;
         at += take;
         while (*at == ' ') at++;
@@ -1192,6 +1193,7 @@ static int desc_max_offset(const sm_ui_t *ui, const sm_layout_t *l) {
    the card. Drawn against the screen's background so the window copied
    out of it is indistinguishable from text drawn in place. */
 static void render_description(sm_ui_t *ui, const sm_layout_t *l, const char *text) {
+    ui->flow_desc_item = UINT32_MAX;     /* the surface is the card's now */
     ui->desc_lines = 0;
     ui->desc_offset = 0;
     ui->desc_idle = 0;
@@ -1226,6 +1228,74 @@ static void scroll_description(sm_ui_t *ui, const sm_layout_t *l, sm_actions_t a
     if (ui->desc_idle > DESC_PAUSE_FRAMES + (unsigned)max * DESC_FRAMES_PER_PIXEL + DESC_HOLD_FRAMES) {
         ui->desc_offset = 0;
         ui->desc_idle = 0;
+    }
+}
+
+/* Coverflow's box back: two lines of it under the shelf, 10 px apart. When
+   the paragraph is longer, it waits five seconds after the shelf comes to
+   rest, creeps up a line a second, holds three seconds at the end, and
+   starts over -- by the clock, like the glide, so a slow frame does not
+   slow it. */
+enum { FLOW_DESC_LINE = 10, FLOW_DESC_ROWS = 2, FLOW_DESC_PX_PER_S = 10 };
+#define FLOW_DESC_WAIT_US 5000000u
+#define FLOW_DESC_HOLD_US 3000000u
+
+static int flow_desc_chars(const sm_layout_t *l) {
+    return (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH;
+}
+
+static void advance_flow_description(sm_ui_t *ui, const sm_catalog_t *catalog,
+    const sm_layout_t *l) {
+    uint32_t item;
+    sm_game_t game;
+    uint64_t elapsed;
+    int max, lines_fit;
+    if (ui->view != SM_VIEW_COVERFLOW || ui->screen != SM_SCREEN_LIBRARY || !ui->item_count ||
+        sm_glide_moving(&ui->flow, (float)ui->selected)) {
+        ui->flow_rest_us = 0;
+        ui->flow_desc_offset = 0;
+        ui->flow_desc_scrolling = false;
+        return;
+    }
+    item = ui->items[ui->selected];
+    if (!ui->flow_rest_us || ui->flow_rest_item != item) {
+        /* Just come to rest: count the lines, draw nothing yet. */
+        ui->flow_rest_us = ui->last_update_us ? ui->last_update_us : 1u;
+        ui->flow_rest_item = item;
+        ui->flow_desc_offset = 0;
+        ui->flow_desc_scrolling = false;
+        ui->flow_desc_lines = 0;
+        if (!(item & SM_UI_FOLDER_BIT) && catalog_get(catalog, item, &game) &&
+                game.description && game.description[0])
+            ui->flow_desc_lines = draw_wrapped(NULL, 0, 0, FLOW_DESC_LINE, game.description,
+                flow_desc_chars(l), DESC_LINE * DESC_MAX_LINES / FLOW_DESC_LINE);
+        return;
+    }
+    if (ui->flow_desc_lines <= FLOW_DESC_ROWS || !ui->desc_surface.buffer) return;
+    elapsed = ui->last_update_us - ui->flow_rest_us;
+    if (elapsed < FLOW_DESC_WAIT_US) return;
+    if (ui->flow_desc_item != item) {
+        /* The whole paragraph, once, into the card's surface. */
+        lines_fit = ui->desc_surface.height / FLOW_DESC_LINE;
+        graphics_fill_screen(&ui->desc_surface, graphics_make_color(8, 12, 20, 255));
+        graphics_set_color(graphics_make_color(110, 125, 145, 255), 0);
+        if (!catalog_get(catalog, item, &game) || !game.description) return;
+        ui->flow_desc_lines = draw_wrapped(&ui->desc_surface, 0, 0, FLOW_DESC_LINE,
+            game.description, flow_desc_chars(l), lines_fit);
+        ui->flow_desc_item = item;
+    }
+    ui->flow_desc_scrolling = true;
+    max = (ui->flow_desc_lines - FLOW_DESC_ROWS) * FLOW_DESC_LINE;
+    ui->flow_desc_offset = (int)((elapsed - FLOW_DESC_WAIT_US) * FLOW_DESC_PX_PER_S / 1000000u);
+    if (ui->flow_desc_offset >= max) {
+        ui->flow_desc_offset = max;
+        if (elapsed >= FLOW_DESC_WAIT_US + (uint64_t)max * 1000000u / FLOW_DESC_PX_PER_S +
+                FLOW_DESC_HOLD_US) {
+            /* Back to the top, and the wait again. */
+            ui->flow_rest_us = ui->last_update_us;
+            ui->flow_desc_offset = 0;
+            ui->flow_desc_scrolling = false;
+        }
     }
 }
 
@@ -1332,6 +1402,7 @@ void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const s
     ui->shelf_advanced = false;
     update(ui, catalog, actions, layout);
     advance_shelf(ui);
+    advance_flow_description(ui, catalog, layout);
 }
 
 static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout) {
@@ -1362,6 +1433,7 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
            tall enough for every line render_description can produce. */
         ui->desc_surface = surface_alloc(FMT_RGBA16,
             (uint16_t)(layout->safe_right - layout->safe_left - 6), DESC_LINE * DESC_MAX_LINES);
+        ui->flow_desc_item = UINT32_MAX;     /* nothing drawn into it for coverflow yet */
         sm_folder_scan_init(&ui->scan);
         rebuild(ui, catalog);
     }
@@ -2166,11 +2238,31 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
         /* Two lines of the box back: enough to tell two games apart, not so
            much that the text competes with the covers. */
         if (!folder && game.description && game.description[0]) {
-            int room = (strip_y - 6 - (y + 22)) / 10;
-            if (room > 2) room = 2;
-            if (room > 0) {
+            int room = (strip_y - 6 - (y + 22)) / FLOW_DESC_LINE;
+            if (room > FLOW_DESC_ROWS) room = FLOW_DESC_ROWS;
+            if (room == FLOW_DESC_ROWS && ui->flow_desc_scrolling &&
+                    ui->flow_desc_item == ui->items[ui->selected] &&
+                    surface_get_format(s) == surface_get_format(&ui->desc_surface)) {
+                /* Past the wait: the paragraph drawn whole, seen through the
+                   two lines' window. */
+                int rows = FLOW_DESC_ROWS * FLOW_DESC_LINE;
+                int width = ui->desc_surface.width;
+                const uint8_t *src = (const uint8_t *)ui->desc_surface.buffer +
+                    (size_t)ui->flow_desc_offset * ui->desc_surface.stride;
+                uint8_t *dst = (uint8_t *)s->buffer + (size_t)(y + 22) * s->stride +
+                    (size_t)(l->safe_left + 6) * 2u;
+                if (rows > ui->desc_surface.height - ui->flow_desc_offset)
+                    rows = ui->desc_surface.height - ui->flow_desc_offset;
+                if (width > l->safe_right - (l->safe_left + 6)) width = l->safe_right - (l->safe_left + 6);
+                for (int r = 0; r < rows; r++) {
+                    memcpy(dst, src, (size_t)width * 2u);
+                    src += ui->desc_surface.stride;
+                    dst += s->stride;
+                }
+            } else if (room > 0) {
                 graphics_set_color(graphics_make_color(110, 125, 145, 255), 0);
-                draw_wrapped(s, l->safe_left + 6, y + 22, 10, game.description, chars, room);
+                draw_wrapped(s, l->safe_left + 6, y + 22, FLOW_DESC_LINE, game.description,
+                    chars, room);
             }
         }
     }

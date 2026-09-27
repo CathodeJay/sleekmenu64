@@ -242,7 +242,8 @@ The **grid** shows twelve covers at a time, for scanning a folder by eye.
 **Coverflow** shows one game face on with its neighbours receding either
 side, gliding as you move; hold a direction and the shelf keeps sliding.
 Under it are the title, the genre, year, publisher and players, the start
-of the description, and a strip of initials showing where you are. L and R
+of the description (the rest creeps into view if you stay on a game for
+five seconds), and a strip of initials showing where you are. L and R
 jump to the next letter of the alphabet instead of paging.
 
 ![Coverflow: the selected box face on, the shelf receding on both sides](docs/screenshots/coverflow.jpg)
