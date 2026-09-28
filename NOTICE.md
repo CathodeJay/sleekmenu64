@@ -74,14 +74,18 @@ licence text travels with the file, and the built ROM carries the glyphs.
 
 ## Box art
 
-None is included in the repository or in a release, and none should be added.
+None is included in a release, and none should be added to the source.
 Cover images belong to their publishers and are not yours or ours to relicense
 — a permissive licence stamped over scanned box art is void as applied,
-whoever does it.
+whoever does it. The screenshots in `docs/screenshots/` show the browser
+running on a console, and the covers in them appear at the console's own
+resolution, as part of a picture of the software, to show what it does; they
+are not a source of box art and carry no licence of their own. Any of them
+will be removed on request.
 
 The prep tool reads the
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata)
-collection — the public-domain (Unlicense) set the N64FlashcartMenu and the
+collection — the Unlicense set the N64FlashcartMenu and the
 EverDrive-64 Pro's own menu draw on — from the user's card, and converts the
 boxes their library needs. A card that lacks the collection gets it fetched
 from that project's own releases page, by the user's machine, onto the
@@ -90,7 +94,7 @@ On request (`--hires`) it does the same with the 512-pixel boxes of
 [libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64),
 fetched one by one from that repository onto the user's card and recorded
 there with their address. That is the line this project holds: it never
-hosts a picture, never ships one, and never claims a licence over one. The
+hosts box art for use, never ships any, and never claims a licence over any. The
 collection's dedication covers its own contribution; the scans themselves,
 there and at libretro, remain the publishers'. A card prepared with the
 tool carries them the way a card prepared for either of those menus, or for

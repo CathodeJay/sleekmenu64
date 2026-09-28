@@ -136,7 +136,7 @@ interchangeably.
 
 Box art and descriptions come from
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata),
-a public-domain collection filed by the four-character game code in every
+a community-maintained collection filed by the four-character game code in every
 cartridge header. It is what the N64FlashcartMenu reads and what the
 EverDrive-64 Pro's menu is fed through krikzz's converter, so one download
 serves every menu you might run. The zip is read in place — 52 MB and 2,200

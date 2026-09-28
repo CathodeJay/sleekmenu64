@@ -10,7 +10,7 @@ Works on the EverDrive-64 X7 and the EverDrive-64 Pro with one and the same
 ROM. Saves go to the same `ED64/gamedata/` folder the stock menu uses, so a
 game started from either menu carries its save into the other.
 
-![The list view: folders and games on the left, the selected game's box, year, publisher, genre, region, save type and size on the right](docs/screenshots/list.jpg)
+![The list view: folders and games on the left, the selected game's box, year, publisher, genre, region, save type and size on the right](docs/screenshots/list.png)
 
 ## What you need
 
@@ -59,7 +59,7 @@ then.
 
 The box art and descriptions come from
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata/releases),
-a public-domain collection of box scans and descriptions for every
+a community-maintained collection of box scans and descriptions for every
 cartridge, shared with other N64 menus. SleekMenu ships none of it:
 Download puts its `release-metadata.zip` on the card, where it is read in
 place from then on.
@@ -237,7 +237,7 @@ the right, and the genre tabs across the top.
 
 The **grid** shows twelve covers at a time, for scanning a folder by eye.
 
-![The grid view: twelve box covers, the selected one framed](docs/screenshots/grid.jpg)
+![The grid view: twelve box covers, the selected one framed, its title in the bar below](docs/screenshots/grid.png)
 
 **Coverflow** shows one game face on with its neighbours receding either
 side, gliding as you move; hold a direction and the shelf keeps sliding.
@@ -246,7 +246,15 @@ of the description (the rest creeps into view if you stay on a game for
 five seconds), and a strip of initials showing where you are. L and R
 jump to the next letter of the alphabet instead of paging.
 
-![Coverflow: the selected box face on, the shelf receding on both sides](docs/screenshots/coverflow.jpg)
+![Coverflow: the selected box face on with the shelf receding on both sides; under it the title, the facts, the start of the description and a strip of initials](docs/screenshots/coverflow.png)
+
+**The details**: A on a game. The box, the year, publisher, genre, region
+and players, the save type, how many cheats are on, the size and what the
+game needs (a Controller Pak, a Rumble Pak), then the description, which
+scrolls. Start plays; C-up switches between a fast and a verified load; C-down
+opens the cheats; Z shows the diagnostics.
+
+![The details: the box on the left; the title, year, publisher, genre, region, players, save type, cheats, size and needed accessories beside it; the description below](docs/screenshots/detail.png)
 
 **The box**, full screen: A on a game's details. It is drawn from
 `covers-large.pak`, which the tool writes beside the small pack: the
@@ -257,7 +265,7 @@ Z opens the **filter** from any view: genre (with a count for each), region,
 players, publisher, year and favourites, combined. Z again clears it, B
 applies it. The header shows how many games match.
 
-![The filter screen: genres with counts, then region, players, publisher, year and favourites](docs/screenshots/filters.jpg)
+![The filter screen: genres with counts, then region, players, publisher, year and favourites](docs/screenshots/filters.png)
 
 ## Good to know
 

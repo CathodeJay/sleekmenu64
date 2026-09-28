@@ -24,8 +24,7 @@ covers/
 *.jpg
 *.jpeg
 *.webp
-# ...except the screenshots in the README: the browser's, and the prep
-# GUI's (a PNG, for its transparent edge).
+# ...except the screenshots in the README.
 !docs/screenshots/*.jpg
 !docs/screenshots/*.png
 
