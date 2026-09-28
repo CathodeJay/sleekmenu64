@@ -411,6 +411,12 @@ make perf N64_INST=/path/to/libdragon       # the ROM with a frame-time readout
 - [docs/CARD_LAYOUT.md](docs/CARD_LAYOUT.md) — every file on the card, who
   writes it, and how a game is matched to its box and its description
 
+## Support
+
+SleekMenu 64 is free. If it earned a place on your card and you would like
+to support its development, you can
+[buy me a coffee](https://buymeacoffee.com/CathodeJay).
+
 ## AI
 
 Yes, this project was built with AI tools.
