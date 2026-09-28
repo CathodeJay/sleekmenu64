@@ -119,7 +119,7 @@ SleekMenu 64 is free. If it earned a place on your card and you would like
 to support its development, you can
 [buy me a coffee](https://buymeacoffee.com/CathodeJay).
 
-[![Buy Me A Coffee](https://shields.io)](https://buymeacoffee.com/CathodeJay)
+[!["Buy Me A Coffee"](https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/CathodeJay)
 
 ## AI
 
