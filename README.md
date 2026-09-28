@@ -119,6 +119,8 @@ SleekMenu 64 is free. If it earned a place on your card and you would like
 to support its development, you can
 [buy me a coffee](https://buymeacoffee.com/CathodeJay).
 
+[![Buy Me A Coffee](https://shields.io)](https://buymeacoffee.com/CathodeJay)
+
 ## AI
 
 Yes, this project was built with AI tools.
