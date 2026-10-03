@@ -1354,8 +1354,14 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     ttk.Label(body, textvariable=last_var, foreground=colors["muted"]).grid(row=7, column=0, sticky="w")
 
     # -- the options, closed until asked for ----------------------------------
-    options_toggle = ttk.Button(body, text="▸ Options", style="Toolbutton")
-    options_toggle.grid(row=8, column=0, sticky="w", pady=(8, 0))
+    # Two ordinary buttons side by side, each opening what is under them.
+    ttk.Style(root).configure("Disclose.TButton", padding=(14, 6))
+    toggles = ttk.Frame(body)
+    toggles.grid(row=8, column=0, sticky="w", pady=(12, 0))
+    options_toggle = ttk.Button(toggles, text="▸ Options", style="Disclose.TButton")
+    options_toggle.pack(side="left")
+    details_toggle = ttk.Button(toggles, text="▸ Details", style="Disclose.TButton")
+    details_toggle.pack(side="left", padx=(8, 0))
     options = ttk.Frame(body, padding=(18, 4, 0, 0))
     options.columnconfigure(0, weight=1)
     ttk.Label(options, text="Where the games are").grid(row=0, column=0, sticky="w")
@@ -1393,8 +1399,6 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     note.grid(row=10, column=0, sticky="w")
 
     # -- the report, closed until asked for -------------------------------------
-    details_toggle = ttk.Button(body, text="▸ Show details", style="Toolbutton")
-    details_toggle.grid(row=10, column=0, sticky="w", pady=(2, 0))
     log = tk.Text(body, height=8, width=20, wrap="word", state="disabled",
                   font=("Menlo", 11) if sys.platform == "darwin"
                   else ("Consolas", 10) if sys.platform == "win32" else ("monospace", 10))
@@ -1403,14 +1407,14 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         """A line that opens and closes what is under it."""
         def show(shown: bool) -> None:
             if shown:
-                widget.grid(row=row, column=0, sticky="nsew" if grow else "ew", pady=(4, 0))
+                widget.grid(row=row, column=0, sticky="nsew" if grow else "ew", pady=(10, 0))
             else:
                 widget.grid_remove()
             body.rowconfigure(row, weight=1 if grow and shown else 0)
             toggle.configure(text=("▾ " if shown else "▸ ") + label)
         return show
     open_options = disclose(options_toggle, options, "Options", 9)
-    open_details = disclose(details_toggle, log, "Show details", 11, grow=True)
+    open_details = disclose(details_toggle, log, "Details", 11, grow=True)
 
     # One at a time, so the tab never grows past the window: the options
     # take the place of the last run's steps, and the report closes them.

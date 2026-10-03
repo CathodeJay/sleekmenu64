@@ -31,7 +31,7 @@ click the first time. With Python and Tk installed,
   (about 400 KB each). The four steps show where it is. Stop ends it; what
   was fetched is kept, and the next run carries on from there. A download
   that fails does not stop the run: the card gets its catalog, and the tab
-  says what is missing and to press the button again. Show details has the
+  says what is missing and to press the button again. Details has the
   report the command line prints.
 - **Options**, closed until you open them:
   - *Where the games are*: the whole card, or one folder (`ROMS`) to
