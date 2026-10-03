@@ -17,7 +17,9 @@ The file name is the No-Intro name with the characters libretro cannot
 put in a file name (& * / : ` < > ? \\ | ") turned into `_`. A code is
 tried under every name the database has for it, the name of the dump on
 the card first, so a beta whose own box does not exist still gets its
-game's. What is fetched is written verbatim and recorded in
+game's. libretro files a revision that shares its game's box as a link to
+it, and a link arrives as the name it points to rather than as a picture:
+the fetch follows it. What is fetched is written verbatim and recorded in
 `hires/downloads.json` -- address, date, SHA-256 -- which is how the window
 tells a box the tool fetched from one changed by hand, and how a re-fetch
 knows which files are its own. Nothing outside hires/ is ever written.
@@ -46,6 +48,15 @@ BASE_URL = ("https://raw.githubusercontent.com/libretro-thumbnails/Nintendo_-_Ni
 #: What libretro's file names cannot carry; each becomes an underscore.
 FORBIDDEN = re.compile(r'[&*/:`<>?\\|"]')
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+#: A link is the name of another file in the same folder and nothing else;
+#: anything longer than this is not one.
+LINK_LIMIT = 512
+#: Links followed for one name. libretro's point straight at a picture; a
+#: second hop is allowed and a chain is not chased.
+LINK_HOPS = 2
+#: The manifest's format. `missing` is trusted only in this one: a code
+#: listed there was looked for under every name, links followed.
+MANIFEST_VERSION = 2
 #: Connection failures in a row before the fetch gives up: one is a blip,
 #: three is being offline, and a card of 700 boxes must not wait out 700
 #: timeouts to find that out.
@@ -105,7 +116,9 @@ def manifest_path(hires_folder: Path) -> Path:
 def load_document(hires_folder: Path | None) -> dict:
     """The manifest as written: `boxes` (code -> name, url, sha256, date)
     and `missing` (code -> date libretro was found to have no box for it).
-    Empty for no manifest, or one that will not read."""
+    Empty for no manifest, or one that will not read. A manifest in
+    another format keeps its boxes and forgets its `missing`, so those
+    codes are looked for once more."""
     if hires_folder is None:
         return {}
     try:
@@ -114,8 +127,9 @@ def load_document(hires_folder: Path | None) -> dict:
         return {}
     if not isinstance(document, dict):
         return {}
-    return {key: value for key, value in document.items() if key in ("boxes", "missing")
-            and isinstance(value, dict)}
+    current = document.get("schema_version") == MANIFEST_VERSION
+    return {key: value for key, value in document.items() if isinstance(value, dict)
+            and (key == "boxes" or (key == "missing" and current))}
 
 
 def load_manifest(hires_folder: Path | None) -> dict:
@@ -126,7 +140,7 @@ def load_manifest(hires_folder: Path | None) -> dict:
 def save_manifest(hires_folder: Path, boxes: dict, missing: dict | None = None) -> None:
     hires_folder.mkdir(parents=True, exist_ok=True)
     manifest_path(hires_folder).write_text(
-        json.dumps({"schema_version": 1, "source": REPOSITORY_URL, "boxes": boxes,
+        json.dumps({"schema_version": MANIFEST_VERSION, "source": REPOSITORY_URL, "boxes": boxes,
                     "missing": missing or {}}, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
 
@@ -212,12 +226,47 @@ def _get(url: str) -> bytes | None:
         raise
 
 
+def link_target(data: bytes) -> str:
+    """The file a link points at, "" for anything that is not a link: one
+    short line naming a .png in the same folder. A path elsewhere is not
+    followed."""
+    if len(data) > LINK_LIMIT or data.startswith(PNG_SIGNATURE):
+        return ""
+    try:
+        text = data.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return ""
+    if not text.lower().endswith(".png") or text.startswith(".") or any(c in text for c in "/\\\n\r\0"):
+        return ""
+    return text
+
+
+def box_for(name: str, base_url: str) -> tuple[bytes, str] | None:
+    """The picture libretro has under `name` and the address it came from:
+    the file itself, or the one its link names. None when there is no
+    picture there -- no file, a link to nothing, or something else
+    entirely."""
+    url = address(name, base_url)
+    data = _get(url)
+    for _ in range(LINK_HOPS):
+        if data is None or data.startswith(PNG_SIGNATURE):
+            break
+        target = link_target(data)
+        if not target:
+            return None
+        url = base_url + urllib.parse.quote(target)
+        data = _get(url)
+    if data is None or not data.startswith(PNG_SIGNATURE):
+        return None
+    return data, url
+
+
 def fetch_boxes(wanted: list[Wanted], hires_folder: Path, progress_factory=None, cancel=None,
                 log=None, base_url: str | None = None) -> Report:
     """Fetch every Wanted box into hires/, verbatim, recording each in the
     manifest as it lands so a stop or a crash loses nothing already
-    fetched. A code whose every name is a 404 is reported missing; three
-    connection failures in a row end the run as offline."""
+    fetched. A code with no picture under any of its names is reported
+    missing; three connection failures in a row end the run as offline."""
     report = Report()
     if not wanted:
         return report
@@ -230,12 +279,12 @@ def fetch_boxes(wanted: list[Wanted], hires_folder: Path, progress_factory=None,
         if cancel is not None and cancel():
             report.stopped = True
             break
-        data, found_name = None, ""
+        data, found_name, found_url = None, "", ""
         try:
             for name in item.names:
-                data = _get(address(name, base_url))
-                if data is not None:
-                    found_name = name
+                found = box_for(name, base_url)
+                if found is not None:
+                    (data, found_url), found_name = found, name
                     break
             consecutive_failures = 0
         except (urllib.error.URLError, OSError, TimeoutError) as error:
@@ -252,7 +301,7 @@ def fetch_boxes(wanted: list[Wanted], hires_folder: Path, progress_factory=None,
                 bar.step(item.code)
             continue
         stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-        if data is None or not data.startswith(PNG_SIGNATURE):
+        if data is None:
             report.missing.append(item.code)
             missing[item.code] = stamp
             save_manifest(hires_folder, boxes, missing)
@@ -261,7 +310,7 @@ def fetch_boxes(wanted: list[Wanted], hires_folder: Path, progress_factory=None,
             part = item.destination.with_name(item.destination.name + ".part")
             part.write_bytes(data)
             os.replace(part, item.destination)
-            boxes[item.code] = {"name": found_name, "url": address(found_name, base_url),
+            boxes[item.code] = {"name": found_name, "url": found_url,
                                 "sha256": hashlib.sha256(data).hexdigest(), "date": stamp}
             missing.pop(item.code, None)
             save_manifest(hires_folder, boxes, missing)

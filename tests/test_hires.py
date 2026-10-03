@@ -132,6 +132,66 @@ class CardTests(unittest.TestCase):
         self.assertTrue(report.stopped)
         self.assertEqual(report.fetched, 0)
 
+    def test_a_link_is_followed_to_the_picture_it_names(self):
+        """libretro files a revision's box as a link to its game's, and the
+        link arrives as that file's name: the box is the file it names."""
+        png = box_png()
+        routes = {route("Castlevania (USA) (Rev 1)"): (200, b"Castlevania (USA).png"),
+                  route("Castlevania (USA)"): (200, png)}
+        wanted = [hires.Wanted("NDLE", ["Castlevania (USA) (Rev 1)"], self.hires / "NDLE.png")]
+        with Server(routes) as server:
+            base = server.url("/Named_Boxarts/")
+            report = hires.fetch_boxes(wanted, self.hires, base_url=base)
+            self.assertEqual(server.requests, [route("Castlevania (USA) (Rev 1)"), route("Castlevania (USA)")])
+        self.assertEqual((report.fetched, report.missing), (1, []))
+        self.assertEqual((self.hires / "NDLE.png").read_bytes(), png)
+        record = json.loads((self.hires / hires.MANIFEST).read_text())["boxes"]["NDLE"]
+        self.assertEqual(record["name"], "Castlevania (USA) (Rev 1)")
+        self.assertEqual(record["url"], base + urllib.parse.quote("Castlevania (USA).png"),
+                         "the address the bytes came from")
+        self.assertEqual(hires.origin(self.hires, self.hires / "NDLE.png"), provenance.COVER_LIBRETRO)
+
+    def test_a_name_with_no_picture_behind_it_gives_way_to_the_next(self):
+        png = box_png()
+        routes = {route("A (USA) (Rev 1)"): (200, b"Gone (USA).png"),        # a link to nothing
+                  route("A (USA) (Beta)"): (200, b"<html>not a picture</html>"),
+                  route("A (USA)"): (200, png)}
+        wanted = [hires.Wanted("NAAE", ["A (USA) (Rev 1)", "A (USA) (Beta)", "A (USA)"], self.hires / "NAAE.png")]
+        with Server(routes) as server:
+            report = hires.fetch_boxes(wanted, self.hires, base_url=server.url("/Named_Boxarts/"))
+        self.assertEqual((report.fetched, report.missing), (1, []))
+        self.assertEqual((self.hires / "NAAE.png").read_bytes(), png)
+        # and a code with nothing but those is missing, with nothing written
+        only = [hires.Wanted("NBBE", ["A (USA) (Rev 1)", "A (USA) (Beta)"], self.hires / "NBBE.png")]
+        with Server({key: value for key, value in routes.items() if key != route("A (USA)")}) as server:
+            report = hires.fetch_boxes(only, self.hires, base_url=server.url("/Named_Boxarts/"))
+        self.assertEqual((report.fetched, report.missing), (0, ["NBBE"]))
+        self.assertFalse((self.hires / "NBBE.png").exists())
+
+    def test_only_a_plain_file_name_is_a_link(self):
+        self.assertEqual(hires.link_target(b"Castlevania (USA).png\n"), "Castlevania (USA).png")
+        for other in (b"../Named_Snaps/x.png", b"a\\b.png", b"<html></html>", b"two\nlines.png", b".png",
+                      box_png(), b"x" * hires.LINK_LIMIT + b".png", b"\xff\xfe.png"):
+            self.assertEqual(hires.link_target(other), "", other[:24])
+
+    def test_a_card_that_recorded_boxes_missing_before_links_were_followed_asks_again(self):
+        self.hires.mkdir(parents=True)
+        earlier = {"schema_version": 1, "boxes": {"NSME": {"name": "Super Mario 64 (USA)"}},
+                   "missing": {"NWRE": "2026-09-20T00:00:00+00:00"}}
+        (self.hires / hires.MANIFEST).write_text(json.dumps(earlier))
+        self.assertEqual(hires.load_manifest(self.hires), earlier["boxes"], "the boxes are kept")
+        self.assertIn("NWRE", [w.code for w in hires.plan(self.card, self.rom_paths, DATABASE, self.art)])
+        # looked for again and still not there: recorded, and not asked for a third time
+        wanted = [w for w in hires.plan(self.card, self.rom_paths, DATABASE, self.art) if w.code == "NWRE"]
+        with Server({}) as server:
+            hires.fetch_boxes(wanted, self.hires, base_url=server.url("/Named_Boxarts/"))
+        written = json.loads((self.hires / hires.MANIFEST).read_text())
+        self.assertEqual(written["schema_version"], hires.MANIFEST_VERSION)
+        self.assertIn("NSME", written["boxes"])
+        self.assertNotIn("NWRE", [w.code for w in hires.plan(self.card, self.rom_paths, DATABASE, self.art)])
+        self.assertIn("NWRE", [w.code for w in hires.plan(self.card, self.rom_paths, DATABASE, self.art,
+                                                           retry_missing=True)])
+
     def test_the_cover_plan_takes_a_fetched_box_after_the_owners_and_before_the_collection(self):
         write_collection(self.card / "release-metadata.zip", "NSME", "NWRE", zipped=True)
         self.hires.mkdir(parents=True)

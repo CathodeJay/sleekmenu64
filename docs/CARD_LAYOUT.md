@@ -146,7 +146,9 @@ ED64/metadata/                    the EverDrive-64 Pro menu's layout (edmeta)
 pictures. `--hires` fetches `Named_Boxarts/<No-Intro name>.png` from
 libretro-thumbnails for every game code on the card the database knows,
 into `sleekmenu/art/hires/<CODE>.png`, skipping what is there, and records
-each in `sleekmenu/art/hires/downloads.json` (address, date, SHA-256).
+each in `sleekmenu/art/hires/downloads.json` (address, date, SHA-256). A
+revision that libretro files as a link to its game's box gets that box,
+and a name with no picture behind it gives way to the code's next name.
 That manifest is how the tool tells a box it fetched (`libretro`) from one
 changed or put there by hand (`libretro, modified`), and the only record it
 keeps: downloads write nothing outside `hires/`, so a re-fetch cannot touch

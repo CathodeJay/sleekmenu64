@@ -11,9 +11,9 @@ ABA51D09C668BAD9,,"40 Winks (Europe) (En,Es,It) (Proto) (1999-10-07)",Platform,P
 AA94493C3736CC22,,40 Winks (USA) (Proto) (2000-01-10),Platform,Piko Interactive,1999,2,USA
 B98BA4565B2B76AF,NTWJ,64 de Hakken!! Tamagotchi - Minna de Tamagotchi World (Japan),Simulation,Bandai,1997,4,JAPAN
 36F22FBF318912F2,NHFJ,64 Hanafuda - Tenshi no Yakusoku (Japan),Board,Altron,1999,2,JAPAN
-9C961069F5EA488D,NOSJ,64 Oozumou (Japan),Sports,Bottom Up Interactive,1997,2,JAPAN
-85C18B16DF9622AF,NO2J,64 Oozumou 2 (Japan),Sports,Bottom Up Interactive,1999,2,JAPAN
-7A6081FCFF8F7A78,NTCJ,64 Trump Collection - Alice no Wakuwaku Trump World (Japan),Gambling,Bottom Up Interactive,1998,4,JAPAN
+9C961069F5EA488D,NOSJ,64 Oozumou (Japan),Sports,Bottom Up Interactive,1997,2,JAPAN
+85C18B16DF9622AF,NO2J,64 Oozumou 2 (Japan),Sports,Bottom Up Interactive,1999,2,JAPAN
+7A6081FCFF8F7A78,NTCJ,64 Trump Collection - Alice no Wakuwaku Trump World (Japan),Gambling,Bottom Up Interactive,1998,4,JAPAN
 62F6BE95F102D6D6,NSAP,"AeroFighters Assault (Europe) (En,Fr,De)",Shooter,Video System,1998,2,EUROPE
 1B598BF1ECA29B45,NERE,AeroFighters Assault (USA),Shooter,Video System,1997,2,USA
 D83045C8F29D3A36,NAGP,"AeroGauge (Europe) (En,Fr,De)",Racing,ASCII Corporation,1998,2,EUROPE
@@ -183,9 +183,9 @@ FD73F7759724755A,NDYP,"Diddy Kong Racing (Europe) (En,Fr,De)",Racing,Rareware,19
 7435C9BB39763CF4,NDYJ,Diddy Kong Racing (Japan),Racing,Rareware,1997,4,JAPAN
 53D440E77519B011,NDYE,"Diddy Kong Racing (USA) (En,Fr)",Racing,Rareware,1997,4,USA
 E402430DD2FCFC9D,NDYE,"Diddy Kong Racing (USA) (En,Fr) (Rev 1)",Racing,Rareware,1997,4,USA
-870611BAD8B1226C,,Die Hard 64 (USA) (Proto) (Level 1),Shooter,Bits Studios,,1,USA
-08D4926203763D39,,Die Hard 64 (USA) (Proto) (Level 2),Shooter,Bits Studios,,1,USA
-A1F51C2516D61291,,Die Hard 64 (USA) (Proto) (Level 3),Shooter,Bits Studios,,1,USA
+870611BAD8B1226C,,Die Hard 64 (USA) (Proto) (Level 1),Shooter,Bits Studios,,1,USA
+08D4926203763D39,,Die Hard 64 (USA) (Proto) (Level 2),Shooter,Bits Studios,,1,USA
+A1F51C2516D61291,,Die Hard 64 (USA) (Proto) (Level 3),Shooter,Bits Studios,,1,USA
 C16C421BA21580F7,NDQE,"Donald Duck - Goin' Quackers (USA) (En,Fr,De,Es,It)",Adventure,Ubisoft,2000,1,USA
 3DF17480193DED5A,NDQP,"Donald Duck - Quack Attack (Europe) (En,Fr,De,Es,It)",Adventure,Ubisoft,2000,1,EUROPE
 11936D8C6F2C4B43,NDOP,"Donkey Kong 64 (Europe) (En,Fr,De,Es)",Platform,Nintendo,1999,4,EUROPE
@@ -623,7 +623,7 @@ E6419BC569011DE3,NOBE,Ogre Battle 64 - Person of Lordly Caliber (USA),Strategy,A
 AE2D3A3524F0D41A,NHNP,"Olympic Hockey 98 (Europe) (En,Fr,De,Es)",Sports,GT Interactive,1998,4,EUROPE
 90F430375C5370F5,NHNJ,Olympic Hockey 98 (Japan),Sports,GT Interactive,1998,4,JAPAN
 7EC22587EF1AE323,NHNE,Olympic Hockey 98 (USA),Sports,GT Interactive,1998,4,USA
-DC649466572FF0D9,NOMJ,Onegai Monsters (Japan),Role-playing (RPG),Bottom Up Interactive,1999,1,JAPAN
+DC649466572FF0D9,NOMJ,Onegai Monsters (Japan),Role-playing (RPG),Bottom Up Interactive,1999,1,JAPAN
 D5898CAF6007B65B,NWDP,"Operation WinBack (Europe) (En,Fr,De,Es,It)",Shooter,Virgin Interactive,2000,4,EUROPE
 74554B3BF4AEBCB5,NPCJ,Pachinko 365 Nichi (Japan),Gambling,SETA Corporation,1998,1,JAPAN
 19AB29AFC71BCD28,NMQP,"Paper Mario (Europe) (En,Fr,De,Es)",Role-playing (RPG),Nintendo,2001,1,EUROPE
@@ -846,7 +846,7 @@ F3F2F3856E490C7F,NBWJ,Super Bowling (Japan),Sports,UFO Interactive,1999,4,JAPAN
 AA1D215A91CBBE9A,NBWE,Super Bowling (USA),Sports,UFO Interactive,2001,4,USA
 A03CF036BCC1C5D2,NSMP,"Super Mario 64 (Europe) (En,Fr,De)",Platform,Nintendo,1997,1,EUROPE
 4EAA3D0E74757C24,NSMJ,Super Mario 64 (Japan),Platform,Nintendo,1996,1,JAPAN
-D6FBA4A86326AA2C,NSMJ,Super Mario 64 (Japan) (Rev 3) (Shindou Edition),,Nintendo,1997,1,JAPAN
+D6FBA4A86326AA2C,NSMJ,Super Mario 64 (Japan) (Rev 3) (Shindou Edition),Platform,Nintendo,1997,1,JAPAN
 635A2BFF8B022326,NSME,Super Mario 64 (USA),Platform,Nintendo,1996,1,USA
 81300A19FFA52CB7,NSME,Super Mario 64 (USA),Platform,Nintendo,1996,1,USA
 6657208028E348E1,NSSJ,Super Robot Spirits (Japan),Fighting,Banpresto,1998,1,JAPAN
@@ -896,7 +896,7 @@ E7641245DB045341,NTQE,Tony Hawk's Pro Skater 2 (USA) (Beta) (2001-04-20),Sports,
 404E8D717A07DD64,NTQE,Tony Hawk's Pro Skater 2 (USA) (v012) (Beta) (2001-06-04),Sports,Activision,2001,2,USA
 1A7F70B500B7B9FD,N3TE,Tony Hawk's Pro Skater 3 (USA),Sports,Activision,2002,2,USA
 9F8926A50587B409,NTFP,Tony Hawk's Skateboarding (Europe),Sports,Activision,2001,2,EUROPE
-9A746EBF2802EA99,,Toon Panic (Japan) (Proto),Sports,Bottom Up Interactive,2000,4,JAPAN
+9A746EBF2802EA99,,Toon Panic (Japan) (Proto),Sports,Bottom Up Interactive,2000,4,JAPAN
 5F3F49C60DC714B0,NGBP,Top Gear Hyper Bike (Europe),Racing,Kemco,2000,2,EUROPE
 845B026957DE9502,NGBJ,Top Gear Hyper Bike (Japan),Racing,Kemco,2000,2,JAPAN
 8ECC02F07F8BDE81,NGBE,Top Gear Hyper-Bike (USA),Racing,Kemco,2000,2,USA

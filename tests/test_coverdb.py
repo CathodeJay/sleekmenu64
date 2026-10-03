@@ -113,3 +113,62 @@ class SchemaHistoryTests(unittest.TestCase):
     def test_a_header_that_is_neither_is_still_refused(self):
         with self.assertRaisesRegex(coverdb.CoverDBError, "header must be"):
             coverdb.loads("crc,name\n1,2\n")
+
+
+class ShippedDatabaseTests(unittest.TestCase):
+    """data/coverdb.csv itself. It is edited by hand and reseeded from
+    libretro, and a row that is wrong in a way a rule can state should stop
+    here rather than reach a card."""
+
+    PATH = Path(__file__).resolve().parent.parent / "data" / "coverdb.csv"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = cls.PATH.read_text(encoding="utf-8")
+        cls.entries = list(coverdb.loads(cls.text).values())
+
+    def test_the_file_is_in_the_form_the_tool_writes(self):
+        """So a correction is a one-line diff, whoever makes it and however."""
+        self.assertEqual(coverdb.dumps(self.entries), self.text)
+
+    def test_names_genres_and_publishers_are_plain_text(self):
+        """A no-break space or a doubled one cannot be seen in the file and
+        makes "Bottom Up Interactive" two publishers in the console's filter."""
+        for entry in self.entries:
+            for field in ("name", "genre", "publisher"):
+                value = getattr(entry, field)
+                plain = all(ch == " " or (ch.isprintable() and not ch.isspace()) for ch in value)
+                self.assertTrue(plain and value == value.strip() and "  " not in value,
+                                f"{entry.name}: {field} is {value!r}")
+
+    def test_every_genre_is_one_the_genre_map_knows(self):
+        """As libretro spells it or as the browser shows it; anything else is
+        a typo that would grow a tab of its own."""
+        from tools import genre_map
+        mapping = genre_map.load()
+        known = set(mapping) | {shown.casefold() for shown in mapping.values()}
+        for entry in self.entries:
+            if entry.genre:
+                self.assertIn(entry.genre.casefold(), known, entry.name)
+
+    def test_years_players_and_game_codes_are_possible(self):
+        """The console came out in 1996; the latest dumps in the file are the
+        GameCube releases of 2003."""
+        import re
+        for entry in self.entries:
+            self.assertTrue(entry.year == 0 or 1996 <= entry.year <= 2003, f"{entry.name}: year {entry.year}")
+            self.assertTrue(0 <= entry.players <= 8, f"{entry.name}: {entry.players} players")
+            self.assertRegex(entry.serial, re.compile(r"^([A-Z0-9]{4})?$"), entry.name)
+
+    def test_dumps_of_one_game_agree_on_what_it_is(self):
+        """A revision is the same game as its first release: same title and
+        game code, so the same genre, publisher and players. The code alone
+        is not enough -- both Goemon games carry NGME."""
+        games: dict[tuple[str, str], list] = {}
+        for entry in self.entries:
+            if entry.serial:
+                games.setdefault((entry.name.split(" (")[0], entry.serial), []).append(entry)
+        for (title, serial), dumps in games.items():
+            for field in ("genre", "publisher", "players"):
+                values = {getattr(dump, field) for dump in dumps}
+                self.assertEqual(len(values), 1, f"{title} [{serial}]: {field} is {sorted(map(str, values))}")
