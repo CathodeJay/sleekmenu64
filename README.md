@@ -33,25 +33,28 @@ Open Anyway in System Settings → Privacy & Security (earlier macOS:
 right-click → Open). On Windows: More info → Run anyway. On Linux:
 `chmod +x SleekMenu-Prep-linux` first.
 
-**4. Prepare the card.** It is picked for you when it is the only removable
-disk. Press **Download** the first time, to fetch the box
-art and descriptions onto the card (about 52 MB, once), then **Prepare**. A
-card of three thousand games takes under a minute.
+**4. Set up the card.** It is picked for you when it is the only removable
+disk. Press **Set up card**: it fetches a box and a description for each of
+your games onto the card, then writes the catalog. Up to about 330 MB for a
+complete library, once; you can stop and carry on later.
 
 **5. Put the card back in the cart and start `SleekMenu64.z64` from the
 EverDrive menu.** Start plays a game,
 A shows its details; reset the console to get back to the EverDrive menu.
 
-**Adding games later:** copy them on, open the prep GUI, press Prepare —
-seconds, since only what changed is read. Until then a new game still shows
-up and plays, just without its box.
+**Adding games later:** copy them on, open the prep GUI, press **Update
+card**. Only what changed is read and only the new games' boxes are
+fetched. Until then a new game still shows up and plays, just without its
+box.
 
 The prep GUI also shows your card the way the console will, and lets you
 give any game your own picture, description or facts; see
-[docs/PREP.md](docs/PREP.md). Box art and descriptions come from the
+[docs/PREP.md](docs/PREP.md). Descriptions come from the
 community-maintained
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata)
-collection; SleekMenu ships none of it.
+collection and boxes from
+[libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64);
+SleekMenu ships none of them.
 
 ## Using it
 

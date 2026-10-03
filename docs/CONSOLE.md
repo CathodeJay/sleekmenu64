@@ -77,13 +77,13 @@ from the drive's IPL, which the Pro's menu keeps in `ED64/64ddipl/`; a
 `.ndd` in the same folder as a cartridge ROM is attached to that ROM as its
 expansion disk. Experimental: not yet run on hardware.
 
-## Games added after the last Prepare
+## Games added after the last update
 
 The browser reads the folder it is in off the card and lists anything the
 catalog does not know — a game you copied on last night, a folder of them —
 where its name sorts, under its file name, with an outline where the genre
 chip would be and `NOT IN CATALOG` where the box would be. It plays like any
-other; the status line says how many are waiting, and the next Prepare gives
+other; the status line says how many are waiting, and the next update gives
 them their boxes and facts. Only the folders the browser shows are read:
 with the whole library under one folder, a new folder beside it at the card
 root is not seen until the card is prepared again. A ROM-shaped file the

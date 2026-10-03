@@ -37,19 +37,21 @@ checks the result still works, boxes included.
 
 **One tool, two faces.** The card is prepared by `tools/sleekmenu_prep.run()`,
 whether the command line or the window asks: the window
-(`tools/sleekmenu_gui.py`, Tkinter) collects five answers and hands them
-over, and reports the same lines and progress the terminal prints. Its Stop
-button is a flag the run reads before every progress step and between two
-pieces of a download (`tools/progress.stoppable()`), so a stop lands between
-two files, never inside one, and before the catalog or covers are written;
+(`tools/sleekmenu_gui.py`, Tkinter) collects a handful of answers and hands
+them over, and draws the run's own passes and lines as four steps -- read,
+fetch, build, write, which is the order the run works in. Its Stop button
+is a flag the run reads before every progress step and between two pieces
+of a download (`tools/progress.stoppable()`), so a stop lands between two
+files, never inside one, and before the catalog or covers are written;
 Ctrl-C on the command line ends the same way. The two faces differ in one
-deliberate place: the window will not prepare without the collection. It
-shows whether the card has one, opened and counted, with a Download button
-that runs the same fetch the command line does, and keeps Prepare off until
-there is one -- a card without boxes or descriptions is never what a person
-at the window meant. The command line still prepares without one, for a
-card of homebrew with art of its own or a machine that cannot reach
-GitHub. The
+deliberate place: what they fetch unasked. The window has one button and
+asks nothing, so it fetches whatever the card lacks -- the collection, then
+a high-resolution box per game code -- unless told not to download; the
+command line fetches the collection the same way and the boxes only with
+`--hires`, and keeps them complete after. A download that fails does not
+fail the run: the card gets its catalog, the run records what it could not
+fetch (`sleekmenu_prep.Outcome`), and the window says so and to press the
+button again. The
 downloadable builds are that window frozen with its Python by PyInstaller,
 one per platform, built by `.github/workflows/release.yml` on every tag and
 proven there by preparing a card from the frozen binary; the same workflow
@@ -109,12 +111,12 @@ the files, so a file dropped into `sleekmenu/art/` by hand is shown the
 same way, and nothing goes stale.
 
 **Save is applied, not only saved.** The console reads `catalog.ebc` and
-nothing else, so an owner's file that no Prepare has read changes nothing
-there -- and a Save that stopped at the file looked done in the window and
-was not. Save and Remove now start the same run as Prepare, with the
-choices the card remembers (its games folder, its high-resolution boxes)
-rather than whatever is half-typed on the Prepare tab; the run is
-incremental, so it costs seconds. One run at a time: an edit saved while
+nothing else, so an owner's file that no run has read changes nothing
+there -- and a Save that stopped at the file would look done in the window
+and not be. Save and Remove start the same run as the Card tab's button,
+with the choices the card remembers (its games folder, its boxes) rather
+than whatever is half-set under Options, and with nothing downloaded; the
+run is incremental, so it costs seconds. One run at a time: an edit saved while
 one goes is applied after it. There is no second writer of the catalog,
 which is why this is a whole run and not a patch of one record.
 
@@ -245,7 +247,7 @@ is committed; replaying a game moves it up rather than adding it twice).
 
 **What the catalog does not know is read off the card.** The catalog is
 built on a computer, so a game copied on afterwards is not in it. Rather
-than wait for the next Prepare, the browser reads the folder it is in --
+than wait for the next update, the browser reads the folder it is in --
 thirty-two directory entries a frame, from the frame the list appears --
 and adds what the catalog lacks as *extras*: entries past the catalog's own
 count, served by the same `catalog_get`, so every view, the filters and

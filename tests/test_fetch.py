@@ -215,6 +215,63 @@ class RunTests(unittest.TestCase):
         self.assertFalse((self.card / "sleekmenu" / "covers.pak").exists())
         self.assertFalse((self.card / "release-metadata.zip").exists())
 
+    def test_the_games_are_read_before_anything_is_fetched(self):
+        """Read, fetch, build, write: the order the window's steps are in."""
+        events: list[str] = []
+
+        class Bar:
+            def __init__(self, total, label):
+                events.append(label)
+
+            def step(self, detail="", n=1):
+                pass
+
+            def done(self, summary=""):
+                pass
+        with Server({"/release-metadata.zip": (200, self.zip_bytes)}) as server, \
+             mock.patch.object(fetch, "release_addresses", lambda *a, **k: [server.url("/release-metadata.zip")]):
+            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card), log=events.append,
+                                      progress_factory=Bar)
+        self.assertEqual(code, 0, events)
+        first = lambda start: next(i for i, event in enumerate(events) if event.startswith(start))
+        order = [first(marker) for marker in ("scanning", "fetching", "covers:", "sprites", "writing:", "wrote")]
+        self.assertEqual(order, sorted(order), events)
+
+    def test_a_collection_on_the_card_that_will_not_open_is_fetched_again(self):
+        (self.card / "release-metadata.zip").write_bytes(b"PK cut short by a pulled card")
+        with Server({"/release-metadata.zip": (200, self.zip_bytes)}) as server:
+            code, text = self.run_with([server.url("/release-metadata.zip")])
+        self.assertEqual(code, 0, text)
+        self.assertIn("will not open", text)
+        self.assertEqual((self.card / "release-metadata.zip").read_bytes(), self.zip_bytes)
+        self.assertTrue((self.card / "sleekmenu" / "covers.pak").is_file())
+        # one named with --metadata is the owner's to fix: said, not replaced
+        (self.card / "mine.zip").write_bytes(b"not a zip")
+        with Server({"/release-metadata.zip": (200, self.zip_bytes)}) as server:
+            code, text = self.run_with([server.url("/release-metadata.zip")], metadata=self.card / "mine.zip")
+            self.assertEqual(server.requests, [])
+        self.assertEqual(code, 1, text)
+
+    def test_what_a_finished_run_could_not_fetch_is_recorded(self):
+        from tools import hires
+        outcome = sleekmenu_prep.Outcome()
+        log = Log()
+        with Server({}) as server:
+            dead = server.url("/Named_Boxarts/")
+        with mock.patch.object(fetch, "release_addresses", lambda *a, **k: ["http://127.0.0.1:9/none.zip"]), \
+             mock.patch.object(hires, "BASE_URL", dead), contextlib.redirect_stdout(io.StringIO()):
+            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, hires=True), log=log, fail=log,
+                                      outcome=outcome)
+        self.assertEqual(code, 0, log.text())
+        self.assertTrue(outcome.collection_failed)
+        self.assertEqual(outcome.boxes_unreached, 1, "the one game code on the card")
+        # and nothing is recorded for a run that had everything
+        outcome = sleekmenu_prep.Outcome()
+        write_collection(self.card / "release-metadata.zip", "NWRE", zipped=True)
+        with contextlib.redirect_stdout(io.StringIO()):
+            sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card), log=Log(), outcome=outcome)
+        self.assertEqual(outcome, sleekmenu_prep.Outcome())
+
     def test_no_download_and_the_environment_both_keep_it_off_the_network(self):
         with Server({"/release-metadata.zip": (200, self.zip_bytes)}) as server:
             code, text = self.run_with([server.url("/release-metadata.zip")], no_download=True)

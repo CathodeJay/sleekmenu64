@@ -292,6 +292,7 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
     destination = card / CARD_FOLDER
     written: list[str] = []
     if not dry_run:
+        log(f"writing:  the catalog and the covers to {destination}")
         destination.mkdir(parents=True, exist_ok=True)
         shutil.copy2(catalog, destination / CATALOG_NAME)
         written.append(f"{CARD_FOLDER}/{CATALOG_NAME}")

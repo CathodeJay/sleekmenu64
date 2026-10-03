@@ -335,7 +335,7 @@ def fetch_for_card(roms_root: Path, rom_paths: list[str], database_path: Path, a
     target = folder(art_folder)
     if log is not None:
         how = "" if asked else " (the card has them; keeping them complete)"
-        log(f"hires:    {len(wanted)} boxes to fetch from libretro (about 250 KB each){how}"
+        log(f"hires:    {len(wanted)} boxes to fetch from libretro (about 400 KB each){how}"
             if wanted else "hires:    every box the database knows is already in "
                            f"{target.parent.name}/{FOLDER}/{how}")
     report = fetch_boxes(wanted, target, progress_factory, cancel, log)

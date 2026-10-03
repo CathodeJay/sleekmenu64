@@ -82,7 +82,7 @@ size and digest of each pack written, so a pack that would come out the
 same is not written again. A `set_aside` list names the ROM-shaped files the tool found
 in the games folder and refused, with the reason (`not a ROM: no N64
 header` -- a 64DD IPL dump, a broken download), so the window can say so
-rather than count them as games still to add. The window's Catalog tab
+rather than count them as games still to add. The window's Games tab
 reads it; so does `make refresh`. The browser never does: `catalog.ebc`
 carries the result and nothing about where it came from -- except the
 set-asides, which it carries as records with a flag (`SM_FLAG_SET_ASIDE`,
@@ -99,9 +99,10 @@ use the same rule (`src/folder_scan.c`, `tools/card_layout.py`): the
 whole card at boot when there is no catalog, and otherwise the folder being
 browsed, read for the games the catalog does not have yet. Those are listed
 by file name and play; the next run of the tool gives them their box and
-facts. The tool's card line counts them as "added since the last Prepare".
+facts. The window's Card tab counts them as "added since the last update".
 
-Or one folder, chosen: `--roms ROMS`, or the window's Games folder. Then
+Or one folder, chosen: `--roms ROMS`, or Where the games are under the
+window's Options. Then
 only it is walked, the catalog records paths from the card root as always
 (`ROMS/...`), so the browser opens inside it, and the report counts and
 names the ROM-shaped files elsewhere on the card that were left out. The
@@ -173,7 +174,7 @@ The window's catalog tab writes these same files and no others: Save copies
 the chosen picture as it is into `sleekmenu/art/` under the ROM's name or
 its code and writes the `.txt` beside it; Remove my edit deletes the files
 in `sleekmenu/art/` the selected game uses, never one beside a ROM, which it
-only names. The two sizes a picture becomes are made at the next Prepare,
+only names. The two sizes a picture becomes are made at the next update,
 so nothing is stored twice and a better picture later is one file to
 replace.
 
@@ -202,7 +203,7 @@ set that one field, checked the way the catalog checks it (a year in
 usual spellings), and the first line that is not a header starts the
 description. The window's edit panel writes this same file
 (`tools/custom_art.py`), and reads it back to show the edit as the next
-Prepare will catalog it.
+update will catalog it.
 
 ## Covers
 

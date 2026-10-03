@@ -22,7 +22,7 @@ from unittest import mock
 from tests.rom_fixtures import write_rom
 from tests.test_custom_art import picture
 from tests.test_sleekmenu_prep import stay_offline, write_collection
-from tools import fetch, sleekmenu_gui, sleekmenu_prep
+from tools import fetch, hires, sleekmenu_gui, sleekmenu_prep
 
 
 class VolumeTests(unittest.TestCase):
@@ -51,43 +51,141 @@ class VolumeTests(unittest.TestCase):
 
 
 class FieldTests(unittest.TestCase):
-    def test_the_fields_become_the_runs_options(self):
-        options = sleekmenu_gui.options_from("/Volumes/CARD", "", True, False)
+    def test_the_choices_become_the_runs_options(self):
+        options = sleekmenu_gui.options_from("/Volumes/CARD")
         self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD"), roms=sleekmenu_prep.WHOLE_CARD,
-                                                         hires=False),
-                         "an empty games folder is the whole card and an unticked box is no fetch, "
-                         "said so -- never 'as remembered'")
-        options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", False, True, hires=True,
-                                             roms=" ROMS/ ")
+                                                         hires=True),
+                         "an empty games folder is the whole card, said so -- never 'as remembered' -- "
+                         "and the boxes are asked for")
+        options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", " ROMS/ ", fix_checksums=True,
+                                             offline=True, remembered=True)
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
         self.assertEqual(options.roms, Path("ROMS"))
-        self.assertTrue(options.no_checksums and options.fix_checksums and options.hires)
+        self.assertTrue(options.fix_checksums and options.no_download)
+        self.assertFalse(options.no_checksums, "hacks are always checked")
+        self.assertIsNone(options.hires, "a card that has its boxes keeps them complete, "
+                                         "without asking again about the ones libretro lacks")
         self.assertFalse(options.rebuild, "a run keeps what the last one remembered unless told")
-        self.assertTrue(sleekmenu_gui.options_from("/Volumes/CARD", "", True, False, rebuild=True).rebuild)
+        rebuilt = sleekmenu_gui.options_from("/Volumes/CARD", rebuild=True, remembered=True)
+        self.assertTrue(rebuilt.rebuild and rebuilt.hires, "from scratch asks for every box again")
         self.assertFalse(options.no_large_covers, "the window always builds the box view's pack")
 
-    def test_a_card_is_described_in_one_line(self):
+
+class CardStatusTests(unittest.TestCase):
+    """What the Card tab says about a card, and what its button is called."""
+
+    def test_no_card_and_an_empty_card(self):
+        nothing = sleekmenu_gui.card_status(None)
+        self.assertEqual(nothing.headline, "Pick your card")
+        self.assertFalse(nothing.ready)
+        with tempfile.TemporaryDirectory() as scratch:
+            empty = sleekmenu_gui.card_status(Path(scratch))
+            self.assertEqual(empty.headline, "No games on this card yet")
+            self.assertEqual(empty.action, sleekmenu_gui.SET_UP)
+            self.assertTrue(empty.ready, "the button makes the folders")
+
+    def test_a_card_that_was_never_set_up_says_what_setting_up_fetches(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch)
-            self.assertEqual(sleekmenu_gui.describe_card(card), "no ROMs")
             write_rom(card / "Games" / "A.z64", 1, 2)
-            (card / "SleekMenu64.z64").write_bytes(b"\x80\x37\x12\x40")
-            (card / "release-metadata.zip").write_bytes(b"PK")
-            self.assertEqual(sleekmenu_gui.describe_card(card),
-                             "1 ROMs, SleekMenu64.z64 present")
+            status = sleekmenu_gui.card_status(card)
+            self.assertEqual((status.headline, status.action), ("Set up this card", sleekmenu_gui.SET_UP))
+            self.assertEqual(status.detail, "1 game found on it. Nothing is moved or renamed.")
+            self.assertIn("Fetches a box and a description", status.explain)
+            self.assertEqual(status.last, "")
+            offline = sleekmenu_gui.card_status(card, offline=True)
+            self.assertIn("Downloads are off", offline.explain)
+            self.assertNotIn("Fetches", offline.explain)
+            # the packed catalog of an earlier version, with nothing to read beside it
+            (card / "sleekmenu").mkdir()
+            (card / "sleekmenu" / "catalog.ebc").write_bytes(b"x")
+            earlier = sleekmenu_gui.card_status(card)
+            self.assertEqual((earlier.headline, earlier.action), ("Update this card", sleekmenu_gui.UPDATE))
+            self.assertIn("earlier version", earlier.detail)
 
-    def test_the_card_line_counts_the_games_added_since_the_last_prepare(self):
+    def test_a_set_up_card_counts_its_games_the_new_ones_and_the_ones_with_no_box(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             write_rom(card / "ROMS" / "A.z64", 1, 2)
-            self.assertIsNone(sleekmenu_gui.added_since(card, ["ROMS/A.z64"]), "no catalog to compare with")
             with contextlib.redirect_stdout(io.StringIO()), \
                  unittest.mock.patch.dict(os.environ, {"SLEEKMENU_NO_DOWNLOAD": "1"}):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card, roms=Path("ROMS"))), 0)
-            self.assertNotIn("added since", sleekmenu_gui.describe_card(card))
+            status = sleekmenu_gui.card_status(card)
+            self.assertEqual((status.headline, status.action), ("1 game on this card", sleekmenu_gui.UPDATE))
+            self.assertEqual(status.detail, "1 has no box.")
+            self.assertIn("Nothing new on the card", status.explain)
+            self.assertRegex(status.last, r"^Last update: \d{1,2} \w{3} \d{4}, \d\d:\d\d$")
             write_rom(card / "ROMS" / "B.z64", 3, 4)
             write_rom(card / "Other" / "C.z64", 5, 6)     # outside the chosen folder: not counted
-            self.assertIn("1 added since the last Prepare", sleekmenu_gui.describe_card(card))
+            status = sleekmenu_gui.card_status(card)
+            self.assertEqual(status.detail, "1 added since the last update. 1 has no box.")
+            self.assertEqual(status.explain,
+                             "Adds the 1 new game with its box and description, then rewrites the catalog.")
+            self.assertEqual(sleekmenu_gui.added_since(card, ["ROMS/A.z64", "ROMS/B.z64", "Other/C.z64"]), 1)
+            self.assertTrue(sleekmenu_gui.card_status(card, offline=True).explain.endswith(
+                "Downloads are off: only what is already on the card is used."))
+
+    def test_the_last_update_is_said_in_this_computers_time(self):
+        self.assertRegex(sleekmenu_gui.when("2026-09-20T02:52:10+00:00"), r"^(19|20) Sep 2026, \d\d:\d\d$")
+        self.assertEqual(sleekmenu_gui.when("yesterday"), "")
+        self.assertEqual(sleekmenu_gui.when(""), "")
+
+
+class StepTests(unittest.TestCase):
+    """A run's reports as the four steps the tab draws."""
+
+    def test_the_passes_and_lines_of_a_run_move_through_the_steps(self):
+        steps = sleekmenu_gui.Steps()
+        self.assertEqual(steps.current, -1, "nothing to draw before a run")
+        steps.start()
+        self.assertEqual([steps.state(i) for i in range(4)], ["now", "next", "next", "next"])
+        steps.progress("scanning", 3, 10)
+        self.assertEqual(steps.notes[0], "3 of 10")
+        steps.progress("scanning", 10, 10)
+        self.assertEqual(steps.notes[0], "10 files")
+        steps.progress("checksums", 1, 2)
+        self.assertEqual((steps.current, steps.notes[0]), (0, "10 files"), "still reading the games")
+        steps.line("metadata: not on the card; fetching release-metadata.zip")
+        self.assertEqual(steps.current, 1)
+        steps.progress("fetching", 8, 208)
+        self.assertEqual(steps.notes[1], "2 of 52 MB")
+        steps.progress("boxes", 212, 716)
+        self.assertEqual(steps.notes[1], "212 of 716 boxes")
+        self.assertAlmostEqual(steps.fraction, 212 / 716)
+        steps.progress("boxes", 716, 716)
+        self.assertEqual(steps.notes[1], "716 boxes")
+        steps.line("covers:   900 ROMs have a box, 4 do not")
+        self.assertEqual((steps.current, steps.fraction), (2, 0.0))
+        steps.progress("sprites", 5, 900)
+        steps.progress("scanning", 1, 1)
+        self.assertEqual(steps.current, 2, "a step is never gone back to")
+        steps.line("writing:  the catalog and the covers to /Volumes/CARD/sleekmenu")
+        self.assertEqual([steps.state(i) for i in range(4)], ["done", "done", "done", "now"])
+        steps.end(0)
+        self.assertEqual([steps.state(i) for i in range(4)], ["done"] * 4)
+
+    def test_a_run_that_stopped_stays_where_it_was_and_one_with_nothing_to_do_shows_nothing(self):
+        steps = sleekmenu_gui.Steps()
+        steps.start()
+        steps.progress("scanning", 2, 2)
+        steps.progress("boxes", 4, 9)
+        steps.end(3)
+        self.assertEqual([steps.state(i) for i in range(4)], ["done", "now", "next", "next"])
+        steps.start()
+        steps.end(0)
+        self.assertEqual(steps.current, -1, "a card with no games: nothing was read, fetched or written")
+
+    def test_how_a_run_ended_is_one_sentence(self):
+        status = sleekmenu_gui.CardStatus("x", action=sleekmenu_gui.UPDATE, ready=True)
+        line = sleekmenu_gui.finished_line
+        self.assertTrue(line(0, sleekmenu_prep.Outcome(), status).startswith("Done. Eject the card"))
+        self.assertIn("press Update card to carry on", line(3, sleekmenu_prep.Outcome(), status))
+        self.assertIn("could not be downloaded. Check the connection",
+                      line(0, sleekmenu_prep.Outcome(collection_failed=True), status))
+        self.assertIn("2 boxes could not be downloaded", line(0, sleekmenu_prep.Outcome(boxes_unreached=2), status))
+        self.assertIn("1 box could", line(0, sleekmenu_prep.Outcome(boxes_unreached=1), status))
+        self.assertIn("Copy your games onto the card", line(0, sleekmenu_prep.Outcome(), status, games_on_card=False))
+        self.assertEqual(line(1, sleekmenu_prep.Outcome(), status), "", "the run's own error line says it")
 
 
 class CatalogLineTests(unittest.TestCase):
@@ -130,7 +228,7 @@ class CatalogLineTests(unittest.TestCase):
         self.assertEqual(sleekmenu_gui.megabytes(54_252_321), "52 MB")
         self.assertEqual(sleekmenu_gui.megabytes(1_572_864), "1.5 MB")
 
-    def test_the_collection_line_says_whether_prepare_can_go(self):
+    def test_the_collection_line_says_what_a_run_will_read(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             card.mkdir()
@@ -138,8 +236,11 @@ class CatalogLineTests(unittest.TestCase):
             with mock.patch.dict(os.environ):
                 os.environ.pop(fetch.OFFLINE_VARIABLE, None)
                 missing = sleekmenu_gui.collection_status(card)
+                chosen_offline = sleekmenu_gui.collection_status(card, offline=True)
             self.assertFalse(missing.ready)
             self.assertTrue(missing.downloadable)
+            self.assertIn("it is fetched the first time", missing.line)
+            self.assertFalse(chosen_offline.ready or chosen_offline.downloadable, "the owner's own choice")
             with mock.patch.dict(os.environ, {fetch.OFFLINE_VARIABLE: "1"}):
                 offline = sleekmenu_gui.collection_status(card)
             self.assertFalse(offline.ready or offline.downloadable)
@@ -150,7 +251,7 @@ class CatalogLineTests(unittest.TestCase):
             self.assertFalse(present.downloadable)
             self.assertIn("2 boxes", present.line)
             self.assertEqual(present.path, card / "release-metadata.zip")
-            # a file chosen in the field is checked, not trusted
+            # a file chosen under Options is checked, not trusted
             junk = Path(scratch) / "junk.zip"
             junk.write_bytes(b"not a zip")
             chosen = sleekmenu_gui.collection_status(card, str(junk))
@@ -159,6 +260,14 @@ class CatalogLineTests(unittest.TestCase):
             chosen = sleekmenu_gui.collection_status(None, str(card / "release-metadata.zip"))
             self.assertTrue(chosen.ready)
             self.assertEqual(chosen.line, "✓ Using release-metadata.zip: 2 boxes.")
+            # the card's own copy, cut short: the next update fetches it again
+            (card / "release-metadata.zip").write_bytes(b"PK cut short")
+            with mock.patch.dict(os.environ):
+                os.environ.pop(fetch.OFFLINE_VARIABLE, None)
+                broken = sleekmenu_gui.collection_status(card)
+            self.assertFalse(broken.ready)
+            self.assertTrue(broken.downloadable)
+            self.assertIn("fetched again at the next update", broken.line)
 
     def test_the_box_view_line_says_what_the_console_will_draw(self):
         self.assertIn("high-resolution", sleekmenu_gui.box_view_line({"sources": {"cover": "libretro"}}))
@@ -179,7 +288,7 @@ class RunnerTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_the_run_reports_every_line_and_its_progress(self):
-        runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from(str(self.card), "", True, False))
+        runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from(str(self.card)))
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(runner.run_inline(), 0)
         events = runner.drain()
@@ -193,7 +302,7 @@ class RunnerTests(unittest.TestCase):
         self.assertTrue((self.card / "sleekmenu" / "catalog.ebc").is_file())
 
     def test_a_bad_card_is_an_error_line_and_a_code_never_a_traceback(self):
-        runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from("/nonexistent/card", "", True, False))
+        runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from("/nonexistent/card"))
         self.assertEqual(runner.run_inline(), 2)
         events = runner.drain()
         self.assertEqual(events[-1], ("done", 2))
@@ -203,7 +312,7 @@ class RunnerTests(unittest.TestCase):
         """Stop is a flag the run reads before each step; here it is raised
         before the run starts, so the first step -- scanning -- is where it
         ends, and the card gets no catalog."""
-        runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from(str(self.card), "", True, False))
+        runner = sleekmenu_gui.Runner(sleekmenu_gui.options_from(str(self.card)))
         runner.stop()
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(runner.run_inline(), 3)
@@ -380,54 +489,118 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(sleekmenu_prep.card_catalog.remembered_roms(card), "")
             root.destroy()
 
-    def test_without_a_collection_prepare_waits_and_download_fetches_it(self):
-        """No collection on the card: Prepare is off and says why, Download
-        is on. Download puts the zip on the card, the line under the field
-        turns to a tick with the box count, and Prepare comes on."""
+    def test_one_press_on_a_new_card_fetches_what_it_lacks_and_sets_it_up(self):
+        """No collection and no boxes on the card: the button is Set up
+        card, and one press fetches the collection and a box for the game,
+        goes through the four steps and leaves a card the console can read.
+        The button is Update card after, and nothing can start while the
+        run is going."""
         from tests.test_fetch import Server
+        from tests.test_hires import box_png, route
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
-            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
-            zipped = write_collection(Path(scratch) / "served.zip", "NWRE", zipped=True).read_bytes()
+            mario = next(entry for entry in hires.coverdb.load(sleekmenu_prep.data_file("coverdb.csv", Path(scratch)))
+                         .values() if entry.name == "Super Mario 64 (USA)")
+            write_rom(card / "ROMS" / "Super Mario 64 (USA).z64",
+                      int(mario.crc[:8], 16), int(mario.crc[8:], 16), game_code="SM")
+            zipped = write_collection(Path(scratch) / "served.zip", "NSME", zipped=True).read_bytes()
             with mock.patch.dict(os.environ):
                 os.environ.pop(fetch.OFFLINE_VARIABLE, None)
                 root = sleekmenu_gui.build(card=str(card))
                 root.update()
                 state = root.sleekmenu_state
-                buttons = state["buttons"]
-                self.assertEqual(str(buttons["prepare"].cget("state")), "disabled")
-                self.assertEqual(str(buttons["download"].cget("state")), "normal")
-                self.assertIn("Download the collection first", state["why"].get())
-                self.assertTrue(state["note"].get().startswith("✗ Not on the card: press Download"))
-                state["start"]()
-                self.assertIsNone(state["runner"], "Prepare refuses without a collection")
-                with Server({"/release-metadata.zip": (200, zipped)}) as server, \
-                     mock.patch.object(fetch, "release_addresses",
-                                       lambda: [server.url("/release-metadata.zip")]):
-                    state["download"]()
-                    self.assertEqual(str(buttons["prepare"].cget("state")), "disabled", "not while fetching")
-                    self.assertEqual(str(buttons["download"].cget("state")), "disabled")
+                words, buttons = state["words"], state["buttons"]
+                self.assertEqual(words["headline"].get(), "Set up this card")
+                self.assertEqual(str(buttons["action"].cget("text")), "Set up card")
+                self.assertEqual(str(buttons["action"].cget("state")), "normal", "no collection needed first")
+                self.assertIn("it is fetched the first time", words["pack"].get())
+                routes = {"/release-metadata.zip": (200, zipped), route("Super Mario 64 (USA)"): (200, box_png())}
+                with Server(routes) as server, \
+                     mock.patch.object(fetch, "release_addresses", lambda: [server.url("/release-metadata.zip")]), \
+                     mock.patch.object(hires, "BASE_URL", server.url("/Named_Boxarts/")):
+                    state["start"]()
+                    self.assertEqual(str(buttons["action"].cget("state")), "disabled", "not while it runs")
+                    self.assertEqual(state["steps"].current, 0)
                     while state["runner"] is not None:
                         root.update()
-            self.assertEqual(state["last_download"], 0)
+            self.assertEqual(state["last_code"], 0)
             self.assertTrue((card / "release-metadata.zip").is_file())
-            self.assertEqual(state["note"].get(),
-                             f"✓ release-metadata.zip is on the card: 1 boxes, "
-                             f"{sleekmenu_gui.megabytes((card / 'release-metadata.zip').stat().st_size)}. "
-                             "Ready to prepare.")
-            self.assertEqual(str(buttons["prepare"].cget("state")), "normal")
-            self.assertEqual(str(buttons["download"].cget("state")), "disabled", "nothing left to download")
-            self.assertEqual(state["why"].get(), "")
+            self.assertTrue((card / "sleekmenu" / "art" / "hires" / "NSME.png").is_file())
+            self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
+            self.assertEqual([state["steps"].state(i) for i in range(4)], ["done"] * 4)
+            self.assertEqual(state["steps"].notes[1], "1 box")
+            self.assertTrue(words["result"].get().startswith("Done. Eject the card"))
+            self.assertEqual(words["headline"].get(), "1 game on this card")
+            self.assertEqual(words["detail"].get(), "Everything is up to date.")
+            self.assertEqual(str(buttons["action"].cget("text")), "Update card")
+            self.assertEqual(str(buttons["action"].cget("state")), "normal")
+            self.assertTrue(words["last"].get().startswith("Last update: "))
+            self.assertTrue(words["pack"].get().startswith("✓ release-metadata.zip is on the card: 1 boxes"))
+            self.assertIn("Super Mario 64", state["catalog"].tree.item("ROMS/Super Mario 64 (USA).z64", "text"))
             root.destroy()
 
-    def test_a_build_check_on_a_card_with_no_collection_ends_rather_than_waits(self):
+    def test_a_download_that_fails_is_said_and_the_card_is_still_written(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
-            root = sleekmenu_gui.build(smoke=True, card=str(card))
+            with mock.patch.dict(os.environ):
+                os.environ.pop(fetch.OFFLINE_VARIABLE, None)
+                root = sleekmenu_gui.build(card=str(card))
+                root.update()
+                state = root.sleekmenu_state
+                with mock.patch.object(fetch, "release_addresses", lambda: ["http://127.0.0.1:9/nothing.zip"]), \
+                     mock.patch.object(hires, "BASE_URL", "http://127.0.0.1:9/Named_Boxarts/"):
+                    state["start"]()
+                    while state["runner"] is not None:
+                        root.update()
+            self.assertEqual(state["last_code"], 0)
+            self.assertTrue(state["outcome"].collection_failed)
+            self.assertIn("could not be downloaded. Check the connection and press Update card again",
+                          state["words"]["result"].get())
+            self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
+            root.destroy()
+
+    def test_the_options_are_closed_until_asked_for_and_downloads_can_be_turned_off(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            with mock.patch.dict(os.environ):
+                os.environ.pop(fetch.OFFLINE_VARIABLE, None)
+                root = sleekmenu_gui.build(card=str(card))
+                root.update()
+                state = root.sleekmenu_state
+                self.assertFalse(state["options"]["offline"].get())
+                self.assertIn("Fetches a box", state["words"]["explain"].get())
+                state["show"]["options"]()
+                state["options"]["offline"].set(True)
+                root.update()
+                self.assertIn("Downloads are off", state["words"]["explain"].get())
+                self.assertIn("downloads are off", state["words"]["pack"].get())
+                state["start"]()
+                while state["runner"] is not None:
+                    root.update()
+            self.assertEqual(state["last_code"], 0)
+            self.assertFalse((card / "release-metadata.zip").exists(), "nothing was fetched")
+            self.assertFalse((card / "sleekmenu" / "art" / "hires").exists())
+            self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
+            root.destroy()
+
+    def test_a_build_check_never_downloads_and_ends_on_its_own(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            with mock.patch.dict(os.environ):
+                os.environ.pop(fetch.OFFLINE_VARIABLE, None)
+                root = sleekmenu_gui.build(smoke=True, card=str(card))
+                self.assertTrue(root.sleekmenu_state["options"]["offline"].get())
+                root.mainloop()
+            self.assertEqual(root.sleekmenu_state["last_code"], 0)
+            self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
+            self.assertFalse((card / "release-metadata.zip").exists())
+            # and with no card at all it opens, finds nothing to act on, and closes
+            root = sleekmenu_gui.build(smoke=True, card=str(Path(scratch) / "nowhere"))
             root.mainloop()
             self.assertEqual(root.sleekmenu_state["last_code"], 1)
-            self.assertFalse((card / "sleekmenu").exists())
 
     def test_a_save_is_put_on_the_card_at_once_and_a_second_one_waits_its_turn(self):
         """The console reads only the catalog, so a Save that stopped at the
@@ -449,7 +622,7 @@ class WindowTests(unittest.TestCase):
             root.update()
             state = root.sleekmenu_state
             catalog = state["catalog"]
-            # a half-edited games folder on the Prepare tab is not what an
+            # a half-set games folder under the Card tab's Options is not what an
             # edit is applied with: the card's own choice is
             state["fields"]["roms"].set("")
             catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
@@ -514,7 +687,7 @@ class WindowTests(unittest.TestCase):
             self.assertTrue((card / "sleekmenu" / "art" / "Kaizo.png").is_file())
             self.assertEqual((card / "sleekmenu" / "art" / "Kaizo.txt").read_text(),
                              "Title: Kaizo Race\nGenre: Racing\nYear: 1996\nPlayers: 2\nRegions: USA\n\nHard.\n")
-            self.assertIn("press Prepare", catalog.edit_note.get())
+            self.assertIn("press the button on the Card tab", catalog.edit_note.get())
             self.assertEqual(str(catalog.remove_button["state"]), "normal")
             # shown at once, as the next Prepare will catalog it: the row,
             # the pane, the header's count, and the fields still filled in

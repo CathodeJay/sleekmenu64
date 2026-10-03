@@ -82,8 +82,8 @@ def why_missing(card: Path) -> str:
     packed = card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME
     if packed.is_file():
         return (f"This card has a {card_layout.CATALOG_NAME} the console can read, built by an "
-                "earlier version of this tool; press Prepare once and it shows here.")
-    return "No catalog on this card yet: press Prepare."
+                "earlier version of this tool; update the card once and it shows here.")
+    return "No catalog on this card yet: set it up on the Card tab."
 
 
 def tree(games: list[dict]) -> dict:

@@ -323,16 +323,30 @@ class Options:
                                     # the last run remembered
 
 
-def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None) -> int:
-    """The whole run. Every line of the report goes through `log`, errors
-    through `fail` (the same, by default), and the long passes take their
-    progress line from `progress_factory(total, label)` -- the terminal's
-    rewriting line by default, the window's bar when there is one. `cancel`,
-    when given, is asked before every progress step and between two pieces
-    of a download; true, and the run stops there with code 3, before the
-    catalog or covers are written. The command line and the window share
-    this, so the two can never do different things to a card."""
+@dataclass
+class Outcome:
+    """What a run that finished could not do. The report has a line for
+    each; this is the same for a caller that wants to say it in a sentence
+    of its own, as the window does."""
+    collection_failed: bool = False     # the collection was wanted and no address delivered it
+    boxes_unreached: int = 0            # high-resolution boxes the network would not give
+
+
+def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None,
+        outcome: Outcome | None = None) -> int:
+    """The whole run, in the order a person would say it: read the games,
+    fetch what the card lacks, build the catalog and the covers, write them.
+    Every line of the report goes through `log`, errors through `fail` (the
+    same, by default), and the long passes take their progress line from
+    `progress_factory(total, label)` -- the terminal's rewriting line by
+    default, the window's bar when there is one. `cancel`, when given, is
+    asked before every progress step and between two pieces of a download;
+    true, and the run stops there with code 3, before the catalog or covers
+    are written. `outcome`, when given, is filled with what could not be
+    done. The command line and the window share this, so the two can never
+    do different things to a card."""
     fail = fail or log
+    outcome = outcome if outcome is not None else Outcome()
     progress_factory = progress_factory or Progress
     if cancel is not None:
         progress_factory = progress.stoppable(progress_factory, cancel)
@@ -353,8 +367,8 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         log(f"          {len(found.outside)} ROM-shaped file{'s' if len(found.outside) != 1 else ''} elsewhere "
             f"on the card left out: {shown}")
     if found.how == "remembered":
-        log(f"          the folder was chosen last time; --roms . (or an empty Games folder in the window) "
-            "scans the whole card again")
+        log(f"          the folder was chosen last time; --roms . (or The whole card under the window's "
+            "Options) scans the whole card again")
     if not options.dry_run:
         for folder in lay_out(card):
             log(f"created   {folder.relative_to(card)}/")
@@ -373,18 +387,6 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
     work = Path(tempfile.mkdtemp(prefix="sleekmenu-prep-"))
     repo = None
     try:
-        if source is None and not options.dry_run and not options.no_download and not fetch.offline_by_request():
-            # The one thing the tool fetches, and only onto the card. A card
-            # that has the collection is never asked again.
-            log(f"metadata: not on the card; fetching {fetch.ASSET} (about 52 MB) "
-                f"from github.com/{fetch.REPOSITORY}")
-            try:
-                fetched = fetch.collection(card, progress_factory, cancel, log)
-                source = fetched.path
-                log(f"          {fetched.bytes / 1048576:.1f} MB written to {source}")
-            except fetch.FetchError as error:
-                log(f"          could not fetch it ({error})")
-
         # One pass over the card, with progress, before anything else asks.
         # Every later step reads headers through the cache and touches the
         # card no more -- and a file the last run read, unchanged since,
@@ -399,15 +401,45 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
 
         database_path = data_file("coverdb.csv", work)
         genres_path = data_file("genres.csv", work)
+        checksums = None
+        if not options.no_checksums:
+            checksums = report_checksums(roms, rom_paths, coverdb.load(database_path),
+                                         fix=options.fix_checksums and not options.dry_run,
+                                         log=log, progress_factory=progress_factory,
+                                         remembered=remembered_checksums(previous, found.chosen))
+
+        # What the card lacks, fetched onto the card and nowhere else: the
+        # collection once, then a box per game code.
+        offline = options.no_download or fetch.offline_by_request()
+        if source is not None and options.metadata is None and not options.dry_run and not offline:
+            # The card's own copy, cut short by a pulled card or a full one:
+            # fetched again rather than left to stop every run.
+            try:
+                MetadataRepo.open(source).close()
+            except RepoError as error:
+                log(f"metadata: {source} will not open ({error})")
+                source = None
+        if source is None and not options.dry_run and not offline:
+            # A card that has the collection is never asked again.
+            log(f"metadata: not on the card; fetching {fetch.ASSET} (about 52 MB) "
+                f"from github.com/{fetch.REPOSITORY}")
+            try:
+                fetched = fetch.collection(card, progress_factory, cancel, log)
+                source = fetched.path
+                log(f"          {fetched.bytes / 1048576:.1f} MB written to {source}")
+            except fetch.FetchError as error:
+                log(f"          could not fetch it ({error})")
+                outcome.collection_failed = True
         wants_hires = options.hires if options.hires is not None else hires.remembered(custom_art.art_dir(card))
         if wants_hires and not options.dry_run:
             # One file per game code, into sleekmenu/art/hires/, skipping
             # what is there: a second run costs nothing but the new games'.
-            if options.no_download or fetch.offline_by_request():
+            if offline:
                 log("hires:    not fetched; downloads are off")
             else:
-                hires.fetch_for_card(roms, rom_paths, database_path, custom_art.art_dir(card),
-                                     progress_factory, cancel, log, asked=bool(options.hires))
+                boxes = hires.fetch_for_card(roms, rom_paths, database_path, custom_art.art_dir(card),
+                                             progress_factory, cancel, log, asked=bool(options.hires))
+                outcome.boxes_unreached = len(boxes.failed)
         if source is None:
             log("metadata: no collection on the card; the card gets a catalog and no covers")
             log(f"          download {metadata_repo.RELEASE_ZIP_NAME} from "
@@ -416,12 +448,6 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         else:
             repo = MetadataRepo.open(source)
             log(f"metadata: {repo.art_count()} boxes in {source}")
-        checksums = None
-        if not options.no_checksums:
-            checksums = report_checksums(roms, rom_paths, coverdb.load(database_path),
-                                         fix=options.fix_checksums and not options.dry_run,
-                                         log=log, progress_factory=progress_factory,
-                                         remembered=remembered_checksums(previous, found.chosen))
         summary = prepare_card.prepare(
             roms=roms, card=card, database_path=database_path, repo=repo,
             work=work / "build", dry_run=options.dry_run, genres=genres_path, log=log,
@@ -480,7 +506,7 @@ def main(argv: list[str] | None = None) -> int:
                              "(about 90 KB a game)")
     parser.add_argument("--hires", action="store_true",
                         help="fetch a high-resolution box from libretro-thumbnails for every game the "
-                             "database knows, once (about 250 KB each), and build the covers from those; "
+                             "database knows, once (about 400 KB each), and build the covers from those; "
                              "a card that has them keeps them complete on every later run")
     parser.add_argument("--gui", action="store_true",
                         help="open the window instead of running in the terminal")

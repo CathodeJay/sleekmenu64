@@ -3,20 +3,22 @@
 """Prepare a card from a window: the same run as sleekmenu-prep, without a
 terminal.
 
-Pick the card (found on its own when it is the only removable disk), see
-whether the box-art collection is on it -- it is fetched onto the card when
-not -- press Prepare, watch the progress, Stop if it is taking too long.
-Nothing here decides anything about the card: the window collects five
-answers and hands them to tools/sleekmenu_prep.run(), which is what the
-command line runs. The downloadable builds are this file frozen with its
-Python; from a checkout it is `python3 tools/sleekmenu_gui.py`, or
+Pick the card (found on its own when it is the only removable disk), read
+what is on it, press the one button -- Set up card the first time, Update
+card after -- and watch the run go through its four steps, with a Stop if
+it is taking too long. What the card lacks is fetched by the run itself;
+the choices most people never change are under Options. Nothing here
+decides anything about the card: the window collects a handful of answers
+and hands them to tools/sleekmenu_prep.run(), which is what the command
+line runs. The downloadable builds are this file frozen with its Python;
+from a checkout it is `python3 tools/sleekmenu_gui.py`, or
 `python3 sleekmenu-prep.pyz --gui`.
 
 Tkinter is imported when the window is made, not when this module is,
 because a Python without it still has to run the command line and the
 tests. Everything that can be checked without a screen -- which disks look
-like cards, how the run reports into the window -- is kept apart from the
-widgets for that reason.
+like cards, what the tab says about one, how the run reports into the
+window -- is kept apart from the widgets for that reason.
 """
 
 from __future__ import annotations
@@ -26,7 +28,9 @@ import os
 import queue
 import sys
 import threading
+import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 
 # Runnable as a script as well as importable -- see tools/__init__.py.
@@ -44,7 +48,6 @@ DOWNLOAD_URL = metadata_repo.RELEASES_URL
 #: The box is 96x72 on the console; twice that on a desktop screen is
 #: legible without pretending to be the source picture.
 BOX_ZOOM = 2
-ROMS_HINT = "Empty: every game on the card. Or one folder, and only it is scanned; the menu opens there."
 
 
 def available() -> bool:
@@ -116,9 +119,9 @@ def _windows_removable() -> list[Path]:
 
 
 def newcomers(document: dict, roms: list[str]) -> list[str]:
-    """ROMs in the catalogued folder that the last Prepare did not
-    catalogue and did not set aside: games added since, which the browser
-    lists without a box until the next Prepare. `roms` is the card's walk;
+    """ROMs in the catalogued folder that the last run did not catalogue
+    and did not set aside: games added since, which the browser lists
+    without a box until the next update. `roms` is the card's walk;
     only the folder the catalog covers counts."""
     catalogued = {str(game.get("path", "")).casefold() for game in document.get("games", [])}
     aside = {str(entry.get("path", "")).casefold() for entry in document.get("set_aside", [])}
@@ -129,9 +132,8 @@ def newcomers(document: dict, roms: list[str]) -> list[str]:
 
 
 def added_since(card: Path, roms: list[str]) -> int | None:
-    """How many games were added since the last Prepare, or None when the
-    card has no catalog to compare with. The count is what tells a person
-    the card needs a Prepare at all."""
+    """How many games were added since the card was last updated, or None
+    when it has no catalog to compare with."""
     try:
         document = card_catalog.load(card)
     except card_catalog.CatalogJsonError:
@@ -141,20 +143,170 @@ def added_since(card: Path, roms: list[str]) -> int | None:
     return len(newcomers(document, roms))
 
 
-def describe_card(card: Path) -> str:
-    """One line about what is on a candidate card, for the picker."""
+SET_UP = "Set up card"
+UPDATE = "Update card"
+
+
+@dataclass(frozen=True)
+class CardStatus:
+    """The Card tab's words for one card: what is on it, what the button is
+    called, and what pressing it will do."""
+    headline: str
+    detail: str = ""
+    action: str = SET_UP        # the button's label
+    explain: str = ""           # the line under the button
+    last: str = ""              # when the card was last written, "" for never
+    ready: bool = False         # there is a card for the button to act on
+
+
+def plural(count: int, one: str, many: str | None = None) -> str:
+    return f"{count:,} {one if count == 1 else (many or one + 's')}"
+
+
+def when(built: str) -> str:
+    """A catalog's `built` stamp as a person's clock says it: "20 Sep 2026,
+    02:52" in this computer's time; "" for a stamp that will not read."""
     try:
-        roms = library.walk(card)
-    except library.LibraryError:
-        return "not a folder"
-    parts = [f"{len(roms)} ROMs"] if roms else ["no ROMs"]
-    new = added_since(card, roms)
+        moment = datetime.fromisoformat(str(built)).astimezone()
+    except ValueError:
+        return ""
+    return f"{moment.day} {moment.strftime('%b %Y, %H:%M')}"
+
+
+def card_status(card: Path | None, offline: bool = False, roms: list[str] | None = None) -> CardStatus:
+    """What the Card tab says about `card`. `roms` is the card's walk when
+    the caller already has it. `offline` is the owner's choice not to
+    download: the words under the button say what that leaves out."""
+    if card is None:
+        return CardStatus("Pick your card", "Plug it in and press Refresh, or choose its folder.")
+    if roms is None:
+        try:
+            roms = library.walk(card)
+        except library.LibraryError:
+            return CardStatus("That is not a card", "Choose the card itself: the folder its games are in.")
+    try:
+        document = card_catalog.load(card)
+    except card_catalog.CatalogJsonError:
+        document = None
+    kept = " Downloads are off: only what is already on the card is used." if offline else ""
+    if document is None:
+        if not roms:
+            return CardStatus("No games on this card yet",
+                              "Copy your games onto it, in any folders you like, then press Refresh.",
+                              SET_UP, "Makes the folders SleekMenu uses, and nothing else until there are games.",
+                              ready=True)
+        earlier = (card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).is_file()
+        found = f"{plural(len(roms), 'game')} found on it. Nothing is moved or renamed."
+        if earlier:
+            return CardStatus("Update this card", found + " It was prepared by an earlier version.", UPDATE,
+                              "Reads the games again, fetches their boxes and descriptions, and rewrites "
+                              "the catalog." + kept, ready=True)
+        return CardStatus("Set up this card", found, SET_UP,
+                          "Writes the catalog from what is already on the card. Downloads are off, so the "
+                          "games get no boxes or descriptions that are not there." if offline else
+                          "Fetches a box and a description for each game, then writes the catalog. Up to "
+                          "about 330 MB for a complete library, once. You can stop and carry on later.",
+                          ready=True)
+    games = document.get("games", [])
+    new = len(newcomers(document, roms))
+    boxless = sum(1 for game in games
+                  if str((game.get("sources") or {}).get("cover", provenance.NONE)) == provenance.NONE)
+    parts = []
     if new:
-        parts.append(f"{new} added since the last Prepare")
-    if (card / card_layout.BROWSER_ROM).is_file():
-        parts.append(card_layout.BROWSER_ROM + " present")
-    # The collection has a line of its own, under its field.
-    return ", ".join(parts)
+        parts.append(f"{new:,} added since the last update.")
+    if boxless:
+        parts.append(f"{boxless:,} {'has' if boxless == 1 else 'have'} no box.")
+    if new:
+        explain = (f"Adds the {plural(new, 'new game')} with {'its box and description' if new == 1 else 'their boxes and descriptions'}"
+                   ", then rewrites the catalog.")
+    else:
+        explain = "Nothing new on the card. Update after adding games or changing an option."
+    built = when(str(document.get("built", "")))
+    return CardStatus(f"{plural(len(games), 'game')} on this card", " ".join(parts) or "Everything is up to date.",
+                      UPDATE, explain + kept, f"Last update: {built}" if built else "", ready=True)
+
+
+# -- a run, in four steps -------------------------------------------------
+
+#: What a run does, as a person would say it. sleekmenu_prep.run() works in
+#: this order.
+STEPS = ("Read your games", "Fetch boxes and descriptions", "Build the catalog", "Write it to the card")
+#: The run's passes, by the label their progress carries, and the step each
+#: belongs to.
+STEP_OF_PASS = {"scanning": 0, "checksums": 0, "fetching": 1, "boxes": 1, "sprites": 2}
+#: Lines of the report that start a step with no pass of its own.
+STEP_OF_LINE = (("writing:", 3), ("covers:", 2), ("hires:", 1), ("metadata: not on the card", 1))
+
+
+class Steps:
+    """Where a run is, from what it reports: the step under way and a few
+    words beside each. Kept apart from the widgets, which only draw it."""
+
+    def __init__(self):
+        self.current = -1                   # -1: no run to show; len(STEPS): ended well
+        self.notes = [""] * len(STEPS)
+        self.fraction = 0.0                 # of the pass under way
+        self._seen = False
+
+    def start(self) -> None:
+        self.__init__()
+        self.current = 0
+
+    def _reach(self, step: int) -> None:
+        self._seen = True
+        if step > self.current:
+            self.current, self.fraction = step, 0.0
+
+    def progress(self, label: str, count: int, total: int) -> None:
+        step = STEP_OF_PASS.get(label)
+        if step is None:
+            return
+        self._reach(step)
+        self.fraction = count / total if total else 1.0
+        if label == "scanning":
+            self.notes[step] = plural(total, "file") if count >= total else f"{count:,} of {total:,}"
+        elif label == "fetching":
+            pieces = 1048576 // fetch.CHUNK
+            self.notes[step] = f"{count // pieces} of {max(1, total // pieces)} MB"
+        elif label == "boxes":
+            self.notes[step] = plural(total, "box", "boxes") if count >= total else f"{count:,} of {total:,} boxes"
+        elif label == "sprites":
+            self.notes[step] = plural(total, "cover") if count >= total else f"{count:,} of {total:,} covers"
+
+    def line(self, text: str) -> None:
+        for prefix, step in STEP_OF_LINE:
+            if text.startswith(prefix):
+                self._reach(step)
+                return
+
+    def end(self, code: int | None) -> None:
+        """A run that ended well has done every step; one that ended any
+        other way stays where it stopped. A run that had nothing to do --
+        a card with no games -- has no steps to show."""
+        if not self._seen:
+            self.current = -1
+        elif code == 0:
+            self.current, self.fraction = len(STEPS), 1.0
+
+    def state(self, step: int) -> str:
+        return "done" if step < self.current else "now" if step == self.current else "next"
+
+
+def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: bool = True) -> str:
+    """One sentence for how a run ended."""
+    if code == 3:
+        return f"Stopped. What was fetched is kept; press {status.action} to carry on."
+    if code != 0:
+        return ""
+    if not games_on_card:
+        return "The folders are ready. Copy your games onto the card, then press Refresh."
+    if outcome is not None and outcome.collection_failed:
+        return ("Done, but the boxes and descriptions could not be downloaded. Check the connection "
+                f"and press {status.action} again.")
+    if outcome is not None and outcome.boxes_unreached:
+        return (f"Done, but {plural(outcome.boxes_unreached, 'box', 'boxes')} could not be downloaded. "
+                f"Press {status.action} again when the connection is back.")
+    return "Done. Eject the card and start SleekMenu64.z64 from the EverDrive menu."
 
 
 def megabytes(size: int) -> str:
@@ -174,10 +326,11 @@ class Runner:
     a moment later, having written nothing more."""
 
     def __init__(self, options: sleekmenu_prep.Options | None = None, job=None, kind: str = "prepare"):
-        """`options` for a Prepare; or `job`, any callable taking (log, fail,
-        progress_factory, cancel) and returning an exit code, run the same
-        way -- the collection's download is one."""
+        """`options` for a run of the tool; or `job`, any callable taking
+        (log, fail, progress_factory, cancel) and returning an exit code,
+        run the same way. `outcome` is what a finished run could not do."""
         self.options = options
+        self.outcome = sleekmenu_prep.Outcome()
         self.job = job
         self.kind = kind
         self.events: queue.Queue = queue.Queue()
@@ -217,7 +370,8 @@ class Runner:
                 events.put(("log", summary or f"{self.label}: {self.count}/{self.total}"))
 
         job = self.job or (lambda log, fail, progress_factory, cancel: sleekmenu_prep.run(
-            self.options, log=log, fail=fail, progress_factory=progress_factory, cancel=cancel))
+            self.options, log=log, fail=fail, progress_factory=progress_factory, cancel=cancel,
+            outcome=self.outcome))
         try:
             runner.code = job(lambda line: events.put(("log", line)),
                               lambda line: events.put(("error", line)),
@@ -238,12 +392,12 @@ class Runner:
 
 @dataclass(frozen=True)
 class CollectionStatus:
-    """Whether a Prepare from the window has its collection, and the line
-    that says so under the field."""
+    """The collection a run would read, and the line that says so under
+    Options."""
     ready: bool
     line: str
     path: Path | None = None
-    downloadable: bool = False     # no collection, a card to put one on, downloads allowed
+    downloadable: bool = False     # none on the card, a card to put one on, downloads allowed
 
 
 _box_counts: dict[tuple[str, int, int], int] = {}
@@ -264,12 +418,11 @@ def count_boxes(path: Path) -> int:
     return _box_counts[key]
 
 
-def collection_status(card: Path | None, chosen: str = "") -> CollectionStatus:
-    """The collection a Prepare would use -- the file in the field, else
-    the one on the card -- opened and counted. The window prepares only
-    with one: without it a card gets no boxes and no descriptions, which
-    is never what a person pressing Prepare wants. (The command line still
-    can, for a card of homebrew with art of its own.)"""
+def collection_status(card: Path | None, chosen: str = "", offline: bool = False) -> CollectionStatus:
+    """The collection a run would use -- the file chosen under Options, else
+    the one on the card -- opened and counted. One that is not there is
+    fetched by the run, unless downloads are off."""
+    offline = offline or fetch.offline_by_request()
     if chosen.strip():
         path = Path(chosen.strip()).expanduser()
         try:
@@ -287,54 +440,39 @@ def collection_status(card: Path | None, chosen: str = "") -> CollectionStatus:
             boxes = count_boxes(found)
         except metadata_repo.RepoError as error:
             return CollectionStatus(False, f"✗ {found.name} on the card will not open ({error}): "
-                                           "download it again, or choose a copy with Browse.",
-                                    None, not fetch.offline_by_request())
+                                    + ("choose a copy (click here for GitHub)." if offline
+                                       else "it is fetched again at the next update."),
+                                    None, not offline)
         where = found.relative_to(card).as_posix() if found.is_relative_to(card) else str(found)
         size = f", {megabytes(found.stat().st_size)}" if found.is_file() else ""
-        return CollectionStatus(True, f"✓ {where} is on the card: {boxes} boxes{size}. Ready to prepare.",
-                                found)
-    if fetch.offline_by_request():
+        return CollectionStatus(True, f"✓ {where} is on the card: {boxes} boxes{size}.", found)
+    if offline:
         return CollectionStatus(False, f"✗ Not on the card, and downloads are off: choose a copy of "
-                                       f"{metadata_repo.RELEASE_ZIP_NAME} with Browse (click here for "
-                                       "GitHub).")
-    return CollectionStatus(False, "✗ Not on the card: press Download (about 52 MB, from GitHub), "
-                                   "or choose a copy with Browse.", None, True)
+                                       f"{metadata_repo.RELEASE_ZIP_NAME} (click here for GitHub).")
+    return CollectionStatus(False, "Not on the card yet: it is fetched the first time (about 52 MB, "
+                                   "from GitHub).", None, True)
 
 
-def download_job(card: Path):
-    """The collection's download as a Runner job: onto the card root, where
-    Prepare looks first, checked to hold boxes before it is kept."""
-    def job(log, fail, progress_factory, cancel) -> int:
-        log(f"Fetching {fetch.ASSET} from github.com/{fetch.REPOSITORY} onto {card}")
-        try:
-            fetched = fetch.collection(card, progress_factory, cancel, log)
-        except progress.Cancelled:
-            fail("Download stopped; nothing was kept.")
-            return 3
-        except fetch.FetchError as error:
-            fail(f"Could not download it ({error}). Download it from {metadata_repo.RELEASES_URL} "
-                 "and choose it with Browse.")
-            return 1
-        log(f"{fetched.bytes / 1048576:.1f} MB written to {fetched.path}")
-        return 0
-    return job
-
-
-def options_from(card: str, metadata: str, check_checksums: bool, fix_checksums: bool,
-                 hires: bool = False, roms: str = "", rebuild: bool = False) -> sleekmenu_prep.Options:
-    """The window's fields as the run takes them. An empty metadata field
-    means whatever is on the card, as on the command line. An empty games
-    folder is the whole card, said so, and an unticked box is no fetch,
-    said so: both fields show what the card remembers, so clearing one is
-    a choice, not an omission. The box view's pack is always built from
-    the window; --no-large-covers is the terminal's."""
+def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: bool = False,
+                 rebuild: bool = False, offline: bool = False,
+                 remembered: bool = False) -> sleekmenu_prep.Options:
+    """The window's choices as the run takes them. An empty collection
+    means whatever is on the card, fetched when there is none. An empty
+    games folder is the whole card, said so: the field shows what the card
+    remembers, so clearing it is a choice, not an omission.
+    High-resolution boxes are always wanted: asked for on a card that has
+    none or is being rebuilt, kept complete on one that has them
+    (`remembered`), where the boxes libretro was found not to have are not
+    asked about every time. Hacks are always checked; `fix_checksums`
+    rewrites the stale ones. The box view's pack is always built from the
+    window; --no-large-covers is the terminal's."""
     return sleekmenu_prep.Options(
         card=Path(card) if card.strip() else None,
         metadata=Path(metadata) if metadata.strip() else None,
         roms=Path(roms.strip().strip("/")) if roms.strip().strip("/") else sleekmenu_prep.WHOLE_CARD,
-        no_checksums=not check_checksums,
         fix_checksums=fix_checksums,
-        hires=bool(hires),
+        no_download=bool(offline),
+        hires=None if remembered and not rebuild else True,
         rebuild=bool(rebuild),
     )
 
@@ -538,7 +676,7 @@ class CatalogTab:
 
     def __init__(self, parent, card_of, apply=None):
         """`apply(path)`, when given, puts the owner's files on the card's
-        catalog -- a Prepare -- after a Save or a Remove, and answers
+        catalog -- a run of the tool -- after a Save or a Remove, and answers
         "started", "queued", or why not ("no card", "no collection"); the
         window calls applied() when that run ends."""
         import tkinter as tk
@@ -863,7 +1001,7 @@ class CatalogTab:
             self.photo = None
             if state == STATE_WAITING:
                 self.notes.set("Not in the catalog yet: the browser lists it in its folder, without "
-                               "a box, and plays it. Press Prepare to add its box and facts.")
+                               "a box, and plays it. Press Update card to add its box and facts.")
                 self.box.configure(image=self.placeholder, text="NOT YET")
             else:
                 self.notes.set(f"Set aside by the tool ({game.get('why', '')}): the browser never "
@@ -1015,9 +1153,8 @@ class CatalogTab:
         if answer in ("started", "queued"):
             return "Putting it on the card…"
         if answer == "no collection":
-            return ("The console shows it once the card is prepared: get the collection on the "
-                    "Prepare tab, then press Prepare.")
-        return "The console shows it once you press Prepare."
+            return "The console shows it once the card is updated: press the button on the Card tab."
+        return "The console shows it once you press Update card."
 
     def applied(self, path: str | None, code: int | None) -> None:
         """A run that put an edit on the card ended: read the catalog again,
@@ -1028,9 +1165,9 @@ class CatalogTab:
         if code == 0:
             message = "On the card: SleekMenu shows it the next time it starts."
         elif code == 3:
-            message = "Saved, but putting it on the card was stopped: press Prepare to finish."
+            message = "Saved, but putting it on the card was stopped: press Update card to finish."
         else:
-            message = "Saved, but the card was not updated: see the Prepare tab for why."
+            message = "Saved, but the card was not updated: see the Card tab for why."
         if path is not None:
             self.note_for = (path, message)
         self.reload()
@@ -1091,13 +1228,41 @@ class CatalogTab:
 
 # -- the window -------------------------------------------------------------
 
+#: The games-folder choice that means every game on the card.
+WHOLE_CARD_LABEL = "The whole card"
+STEP_MARKS = {"done": "✓", "now": "●", "next": "○"}
+
+
+def palette(root, tk, ttk) -> dict[str, str]:
+    """The three colours the window adds to the system's: a quieter text, a
+    good outcome and a warning, chosen against the background this window
+    actually has, so they read in a dark appearance as in a light one."""
+    def rgb(*names):
+        for name in names:
+            if not name:
+                continue
+            try:
+                return root.winfo_rgb(name)
+            except tk.TclError:
+                continue
+        return None
+    style = ttk.Style(root)
+    back = rgb(style.lookup("TFrame", "background"), "systemWindowBackgroundColor",
+               root.cget("background")) or (65535, 65535, 65535)
+    fore = rgb(style.lookup("TLabel", "foreground"), "systemTextColor", "black") or (0, 0, 0)
+    dark = sum(back) < sum(fore)
+    muted = "#%02x%02x%02x" % tuple(((f * 6 + b * 4) // 10) >> 8 for f, b in zip(fore, back))
+    return {"muted": muted, "good": "#7bd3a0" if dark else "#2e7d32", "warn": "#f0b46a" if dark else "#8a4b00"}
+
+
 def build(smoke: bool = False, card: str = "", metadata: str = ""):
     """The window, as a Tk root. `smoke` closes it after a moment, which is
     how a build is checked to start at all; with `card` as well it presses
-    Prepare and closes when the run is done, which is how the whole window
-    is checked to work."""
+    the button and closes when the run is done, which is how the whole
+    window is checked to work. A build check never downloads."""
     import tkinter as tk
     from tkinter import filedialog, ttk
+    from tkinter import font as tkfont
     import webbrowser
 
     root = tk.Tk()
@@ -1106,71 +1271,164 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     root.geometry("1080x720")
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True)
-    frame = ttk.Frame(notebook, padding=12)
-    notebook.add(frame, text="Prepare")
-    frame.columnconfigure(1, weight=1)
+    page = ttk.Frame(notebook, padding=12)
+    notebook.add(page, text="Card")
+    page.columnconfigure(0, weight=1)
+    page.rowconfigure(1, weight=1)
+    colors = palette(root, tk, ttk)
 
-    state = {"runner": None}
+    state: dict = {"runner": None, "steps": Steps(), "status": card_status(None), "walk": None}
     card_var = tk.StringVar()
-    card_note = tk.StringVar(value="Pick the card, or plug it in and press Refresh.")
-    roms_var = tk.StringVar()
-    roms_note = tk.StringVar(value=ROMS_HINT)
+    roms_var = tk.StringVar()               # "" is the whole card
+    roms_shown = tk.StringVar(value=WHOLE_CARD_LABEL)
     metadata_var = tk.StringVar()
     metadata_note = tk.StringVar()
-    check_var = tk.BooleanVar(value=True)
     fix_var = tk.BooleanVar(value=False)
-    hires_var = tk.BooleanVar(value=False)
     rebuild_var = tk.BooleanVar(value=False)
-    status_var = tk.StringVar(value="")
+    offline_var = tk.BooleanVar(value=smoke or fetch.offline_by_request())
+    headline_var = tk.StringVar()
+    detail_var = tk.StringVar()
+    explain_var = tk.StringVar()
+    result_var = tk.StringVar()
+    last_var = tk.StringVar()
 
-    ttk.Label(frame, text="Card").grid(row=0, column=0, sticky="w")
-    card_box = ttk.Combobox(frame, textvariable=card_var)
+    # -- which card ----------------------------------------------------------
+    top = ttk.Frame(page)
+    top.grid(row=0, column=0, sticky="ew")
+    top.columnconfigure(1, weight=1)
+    ttk.Label(top, text="Card").grid(row=0, column=0, sticky="w")
+    card_box = ttk.Combobox(top, textvariable=card_var)
     card_box.grid(row=0, column=1, sticky="ew", padx=6)
-    buttons = ttk.Frame(frame)
-    buttons.grid(row=0, column=2, sticky="w")
-    ttk.Label(frame, textvariable=card_note, foreground="#555").grid(row=1, column=1, sticky="w", padx=6)
+    card_buttons = ttk.Frame(top)
+    card_buttons.grid(row=0, column=2, sticky="e")
 
-    ttk.Label(frame, text="Games folder").grid(row=2, column=0, sticky="w", pady=(10, 0))
-    ttk.Entry(frame, textvariable=roms_var).grid(row=2, column=1, sticky="ew", padx=6, pady=(10, 0))
-    ttk.Label(frame, textvariable=roms_note, foreground="#555").grid(row=3, column=1, sticky="w", padx=6)
+    # -- what is on it, and the one button -------------------------------------
+    # A column of a readable width in the middle of the tab, whatever the
+    # window's.
+    width = 640
+    middle = ttk.Frame(page)
+    middle.grid(row=1, column=0, sticky="nsew", pady=(28, 0))
+    middle.columnconfigure(0, weight=1)
+    middle.columnconfigure(2, weight=1)
+    middle.rowconfigure(0, weight=1)
+    body = ttk.Frame(middle)
+    body.grid(row=0, column=1, sticky="nsew")
+    body.columnconfigure(0, weight=1)
+    ttk.Frame(body, width=width, height=1).grid(row=99, column=0)
 
-    ttk.Label(frame, text="Collection").grid(row=4, column=0, sticky="w", pady=(10, 0))
-    ttk.Entry(frame, textvariable=metadata_var).grid(row=4, column=1, sticky="ew", padx=6, pady=(10, 0))
-    note = ttk.Label(frame, textvariable=metadata_note, foreground="#555", cursor="hand2")
-    note.grid(row=5, column=1, sticky="w", padx=6)
-    collection_buttons = ttk.Frame(frame)
-    collection_buttons.grid(row=4, column=2, sticky="w", pady=(10, 0))
-
-    options = ttk.Frame(frame)
-    options.grid(row=6, column=1, sticky="w", padx=6, pady=(10, 0))
-    ttk.Checkbutton(options, text="Check hacks and homebrew for a stale header checksum",
-                    variable=check_var).pack(anchor="w")
-    ttk.Checkbutton(options, text="Rewrite a stale checksum in the file itself",
-                    variable=fix_var).pack(anchor="w")
-    ttk.Checkbutton(options, text="High-resolution boxes for the box view: fetch the missing ones "
-                                  "from libretro (about 250 KB a game)",
-                    variable=hires_var).pack(anchor="w")
-    # Off by default: a run keeps what the last one remembered for the files
-    # that have not changed, which is what makes it short. This is the way
-    # out when a card's catalog or covers look wrong.
-    ttk.Checkbutton(options, text="Start from nothing: read every ROM and convert every box again",
-                    variable=rebuild_var).pack(anchor="w")
-
-    bar = ttk.Progressbar(frame, mode="determinate")
-    bar.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(12, 2))
-    ttk.Label(frame, textvariable=status_var, foreground="#555").grid(row=8, column=0, columnspan=3, sticky="w")
-    log = tk.Text(frame, height=12, wrap="word", state="disabled", font=("Menlo", 11) if sys.platform == "darwin" else ("Consolas", 10) if sys.platform == "win32" else ("monospace", 10))
-    log.grid(row=9, column=0, columnspan=3, sticky="nsew", pady=(4, 8))
-    frame.rowconfigure(9, weight=1)
-    why_var = tk.StringVar(value="")
-    ttk.Label(frame, textvariable=why_var, foreground="#8a4b00").grid(row=10, column=0, columnspan=2, sticky="e",
-                                                                     padx=(0, 8))
-    actions = ttk.Frame(frame)
-    actions.grid(row=10, column=2, sticky="e")
+    big = tkfont.nametofont("TkDefaultFont").copy()
+    big.configure(size=int(abs(big.cget("size")) * 2.2) or 24, weight="bold")
+    strong = tkfont.nametofont("TkDefaultFont").copy()
+    strong.configure(weight="bold")
+    state["fonts"] = (big, strong)          # a font nothing holds is collected, and the label falls back
+    ttk.Label(body, textvariable=headline_var, font=big, wraplength=width, justify="left").grid(
+        row=0, column=0, sticky="w")
+    ttk.Label(body, textvariable=detail_var, foreground=colors["muted"], wraplength=width,
+              justify="left").grid(row=1, column=0, sticky="w", pady=(6, 0))
+    actions = ttk.Frame(body)
+    actions.grid(row=2, column=0, sticky="w", pady=(22, 0))
+    ttk.Style(root).configure("Action.TButton", font=strong, padding=(18, 8))
+    action = ttk.Button(actions, text=SET_UP, style="Action.TButton", default="active")
+    action.pack(side="left")
     stop = ttk.Button(actions, text="Stop", state="disabled")
-    stop.pack(side="left", padx=(0, 6))
-    prepare = ttk.Button(actions, text="Prepare")
-    prepare.pack(side="left")
+    ttk.Label(body, textvariable=explain_var, foreground=colors["muted"], wraplength=width - 80,
+              justify="left").grid(row=3, column=0, sticky="w", pady=(10, 0))
+
+    # The run's four steps, drawn once one starts.
+    steps_frame = ttk.Frame(body)
+    steps_frame.columnconfigure(1, weight=1)
+    step_rows = []
+    for index, name in enumerate(STEPS):
+        mark = ttk.Label(steps_frame, text=STEP_MARKS["next"], width=2)
+        label = ttk.Label(steps_frame, text=name)
+        note = ttk.Label(steps_frame, text="", foreground=colors["muted"])
+        mark.grid(row=index * 2, column=0, sticky="w", pady=(8, 0))
+        label.grid(row=index * 2, column=1, sticky="w", pady=(8, 0))
+        note.grid(row=index * 2, column=2, sticky="e", pady=(8, 0))
+        step_rows.append((mark, label, note))
+    bar = ttk.Progressbar(steps_frame, mode="determinate", maximum=1000)
+    result = ttk.Label(body, textvariable=result_var, wraplength=width, justify="left")
+    result.grid(row=5, column=0, sticky="w", pady=(16, 0))
+
+    ttk.Separator(body, orient="horizontal").grid(row=6, column=0, sticky="ew", pady=(18, 8))
+    ttk.Label(body, textvariable=last_var, foreground=colors["muted"]).grid(row=7, column=0, sticky="w")
+
+    # -- the options, closed until asked for ----------------------------------
+    options_toggle = ttk.Button(body, text="▸ Options", style="Toolbutton")
+    options_toggle.grid(row=8, column=0, sticky="w", pady=(8, 0))
+    options = ttk.Frame(body, padding=(18, 4, 0, 0))
+    options.columnconfigure(0, weight=1)
+    ttk.Label(options, text="Where the games are").grid(row=0, column=0, sticky="w")
+    where = ttk.Frame(options)
+    where.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+    where.columnconfigure(0, weight=1)
+    roms_box = ttk.Combobox(where, textvariable=roms_shown, values=[WHOLE_CARD_LABEL])
+    roms_box.grid(row=0, column=0, sticky="ew")
+    choose_roms = ttk.Button(where, text="Choose a folder…")
+    choose_roms.grid(row=0, column=1, padx=(6, 0))
+    roms_note = tk.StringVar()
+    ttk.Label(options, textvariable=roms_note, foreground=colors["muted"], wraplength=width - 40,
+              justify="left").grid(row=2, column=0, sticky="w")
+    for row, (variable, text, hint) in enumerate((
+            (fix_var, "Repair hacks that show a black screen on a console",
+             "Rewrites the checksum inside those files."),
+            (rebuild_var, "Rebuild everything from scratch",
+             "Slower. For a card whose boxes or names look wrong."),
+            (offline_var, "Do not download anything",
+             "Uses only what is already on the card.")), start=0):
+        ttk.Checkbutton(options, text=text, variable=variable).grid(row=3 + row * 2, column=0, sticky="w",
+                                                                    pady=(8, 0))
+        ttk.Label(options, text=hint, foreground=colors["muted"]).grid(row=4 + row * 2, column=0, sticky="w",
+                                                                       padx=(24, 0))
+    pack_row = ttk.Frame(options)
+    pack_row.grid(row=9, column=0, sticky="ew", pady=(10, 0))
+    pack_row.columnconfigure(0, weight=1)
+    ttk.Label(pack_row, text="Boxes and descriptions from a release-metadata.zip you already have").grid(
+        row=0, column=0, sticky="w")
+    choose_pack = ttk.Button(pack_row, text="Choose the file…")
+    choose_pack.grid(row=0, column=1, padx=(6, 0))
+    forget_pack = ttk.Button(pack_row, text="Use the card's")
+    note = ttk.Label(options, textvariable=metadata_note, foreground=colors["muted"], wraplength=width - 40,
+                     justify="left", cursor="hand2")
+    note.grid(row=10, column=0, sticky="w")
+
+    # -- the report, closed until asked for -------------------------------------
+    details_toggle = ttk.Button(body, text="▸ Show details", style="Toolbutton")
+    details_toggle.grid(row=10, column=0, sticky="w", pady=(2, 0))
+    log = tk.Text(body, height=8, width=20, wrap="word", state="disabled",
+                  font=("Menlo", 11) if sys.platform == "darwin"
+                  else ("Consolas", 10) if sys.platform == "win32" else ("monospace", 10))
+
+    def disclose(toggle, widget, label: str, row: int, grow: bool = False):
+        """A line that opens and closes what is under it."""
+        def show(shown: bool) -> None:
+            if shown:
+                widget.grid(row=row, column=0, sticky="nsew" if grow else "ew", pady=(4, 0))
+            else:
+                widget.grid_remove()
+            body.rowconfigure(row, weight=1 if grow and shown else 0)
+            toggle.configure(text=("▾ " if shown else "▸ ") + label)
+        return show
+    open_options = disclose(options_toggle, options, "Options", 9)
+    open_details = disclose(details_toggle, log, "Show details", 11, grow=True)
+
+    # One at a time, so the tab never grows past the window: the options
+    # take the place of the last run's steps, and the report closes them.
+    def show_options(shown: bool | None = None) -> None:
+        shown = not options.winfo_manager() if shown is None else shown
+        if shown:
+            open_details(False)
+        open_options(shown)
+        draw_steps()
+
+    def show_details(shown: bool | None = None) -> None:
+        shown = not log.winfo_manager() if shown is None else shown
+        if shown:
+            open_options(False)
+        open_details(shown)
+        draw_steps()
+    options_toggle.configure(command=show_options)
+    details_toggle.configure(command=show_details)
 
     def say(line: str) -> None:
         log.configure(state="normal")
@@ -1178,109 +1436,166 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         log.see("end")
         log.configure(state="disabled")
 
-    def refresh_cards() -> None:
-        found = removable_volumes()
-        card_box["values"] = [str(p) for p in found]
-        if len(found) == 1 and not card_var.get():
-            card_var.set(str(found[0]))
-        on_card_change()
-
     def current_card() -> Path | None:
-        card = card_var.get().strip()
-        return Path(card) if card and Path(card).is_dir() else None
+        chosen = card_var.get().strip()
+        return Path(chosen) if chosen and Path(chosen).is_dir() else None
+
+    def walk(fresh: bool = False) -> list[str] | None:
+        """The card's games, read once per card and again after a run or a
+        Refresh: the fields change far more often than the card does."""
+        chosen = current_card()
+        if chosen is None:
+            state["walk"] = None
+            return None
+        if fresh or state["walk"] is None or state["walk"][0] != str(chosen):
+            state["walked"] = time.monotonic()
+            try:
+                state["walk"] = (str(chosen), library.walk(chosen))
+            except library.LibraryError:
+                state["walk"] = (str(chosen), None)
+        return state["walk"][1]
+
+    def draw_steps() -> None:
+        steps = state["steps"]
+        if steps.current < 0 or (options.winfo_manager() and state["runner"] is None):
+            steps_frame.grid_remove()
+            return
+        steps_frame.grid(row=4, column=0, sticky="ew", pady=(14, 0))
+        running = state["runner"] is not None
+        for index, (mark, label, step_note) in enumerate(step_rows):
+            where_it_is = steps.state(index)
+            mark.configure(text=STEP_MARKS[where_it_is],
+                           foreground=colors["good"] if where_it_is == "done" else "")
+            label.configure(font=strong if where_it_is == "now" and running else "TkDefaultFont",
+                            foreground=colors["muted"] if where_it_is == "next" else "")
+            step_note.configure(text=steps.notes[index])
+        if running and 0 <= steps.current < len(STEPS):
+            bar.grid(row=steps.current * 2 + 1, column=1, columnspan=2, sticky="ew", pady=(4, 0))
+            bar["value"] = int(steps.fraction * 1000)
+        else:
+            bar.grid_remove()
 
     catalog_page = ttk.Frame(notebook)
-    notebook.add(catalog_page, text="Catalog")
+    notebook.add(catalog_page, text="Games")
+
     def apply_edits(path: str) -> str:
-        """A Save or a Remove on the Catalog tab, put on the card: the same
-        run as Prepare, with the choices the card remembers (its games
-        folder, its high-resolution boxes) rather than the fields on the
-        Prepare tab, which may be half-edited. Incremental, so seconds.
-        One at a time; a second edit while one runs is applied after it."""
-        card = current_card()
-        status = state.get("collection")
-        if card is None:
+        """A Save or a Remove on the Games tab, put on the card: the same
+        run as the button, with the choices the card remembers (its games
+        folder, its boxes) rather than the options on the Card tab, which
+        may be half-set, and with nothing downloaded. Incremental, so
+        seconds. One at a time; a second edit while one runs is applied
+        after it."""
+        chosen = current_card()
+        collection = state.get("collection")
+        if chosen is None:
             return "no card"
-        if status is None or not status.ready:
+        if collection is None or not collection.ready:
             return "no collection"
         if state["runner"] is not None:
             state["apply_pending"] = path
             return "queued"
         state["apply_path"] = path
-        chosen = metadata_var.get().strip()
-        begin(Runner(sleekmenu_prep.Options(card=card, metadata=Path(chosen).expanduser() if chosen else None),
-                     kind="apply"))
-        status_var.set("Putting your edit on the card…")
+        pack = metadata_var.get().strip()
+        begin(Runner(sleekmenu_prep.Options(card=chosen, metadata=Path(pack).expanduser() if pack else None,
+                                            no_download=True), kind="apply"))
+        result_var.set("Putting your edit on the card…")
         return "started"
 
     catalog = CatalogTab(catalog_page, current_card, apply=lambda path: apply_edits(path))
     state["catalog"] = catalog
 
-    def on_card_change(*_args) -> None:
-        card = card_var.get().strip()
-        if state.get("shown_card") != card:
-            state["shown_card"] = card
-            catalog.reload()
-            remembered = card_catalog.remembered_roms(Path(card)) if card and Path(card).is_dir() else ""
-            roms_var.set(remembered)
-            roms_note.set(f"Chosen last time; only {remembered}/ is scanned. Empty the field for the whole card."
-                          if remembered else ROMS_HINT)
-            # A card that has fetched boxes keeps them complete: the box is
-            # what the card remembers, and unticking it is a choice.
-            hires_var.set(bool(card) and Path(card).is_dir()
-                          and hires.remembered(custom_art.art_dir(Path(card))))
-        good = bool(card) and Path(card).is_dir()
-        if not good:
-            card_note.set("Pick the card, or plug it in and press Refresh.")
+    def refresh(*_args, fresh: bool = False) -> None:
+        """The tab's words for the card as it is now."""
+        chosen = current_card()
+        roms = walk(fresh)
+        typed = card_var.get().strip()
+        status = (card_status(chosen, offline_var.get(), roms) if chosen is not None and roms is not None
+                  else card_status(None) if not typed else
+                  CardStatus("That is not a card", "Choose the card itself: the folder its games are in."))
+        state["status"] = status
+        headline_var.set(status.headline)
+        detail_var.set(status.detail)
+        explain_var.set(status.explain)
+        last_var.set(status.last)
+        collection = collection_status(chosen, metadata_var.get(), offline_var.get())
+        state["collection"] = collection
+        metadata_note.set(collection.line)
+        note.configure(foreground=colors["good"] if collection.ready else colors["muted"]
+                       if collection.downloadable else colors["warn"])
+        if metadata_var.get().strip():
+            forget_pack.grid(row=0, column=2, padx=(6, 0))
         else:
-            card_note.set(describe_card(Path(card)))
-        status = collection_status(Path(card) if good else None, metadata_var.get())
-        state["collection"] = status
-        metadata_note.set(status.line)
-        note.configure(foreground="#2e7d32" if status.ready else "#8a4b00")
+            forget_pack.grid_remove()
+        folders = sorted({path.split("/", 1)[0] for path in roms or [] if "/" in path}, key=str.casefold)
+        roms_box.configure(values=[WHOLE_CARD_LABEL] + folders)
         update_buttons()
 
+    def on_card_change(*_args) -> None:
+        chosen = card_var.get().strip()
+        if state.get("shown_card") != chosen:
+            state["shown_card"] = chosen
+            catalog.reload()
+            remembered = card_catalog.remembered_roms(Path(chosen)) if chosen and Path(chosen).is_dir() else ""
+            roms_var.set(remembered)
+            state["steps"] = Steps()
+            result_var.set("")
+            draw_steps()
+        refresh()
+
+    def on_roms_change(*_args) -> None:
+        """The raw folder ("" for the whole card) and the words in the box,
+        kept the same whichever one changed."""
+        raw = roms_var.get().strip().strip("/")
+        shown = raw or WHOLE_CARD_LABEL
+        if roms_shown.get() != shown:
+            roms_shown.set(shown)
+        roms_note.set(f"Only {raw}/ is read, and the menu opens there." if raw else
+                      "Every game on the card, wherever it is.")
+
+    def on_roms_shown(*_args) -> None:
+        shown = roms_shown.get().strip()
+        raw = "" if shown == WHOLE_CARD_LABEL else shown.strip("/")
+        if roms_var.get().strip().strip("/") != raw:
+            roms_var.set(raw)
+
     def update_buttons() -> None:
-        """Prepare only with a card and a collection, Download only when
-        there is a card to put one on and none on it; neither while a run
-        or a download is going."""
+        """The button acts on a card and is named for what it will do;
+        nothing starts while a run is going, and only then can one stop."""
         busy = state["runner"] is not None
-        card = current_card()
-        status = state.get("collection")
-        ready = card is not None and status is not None and status.ready
-        prepare.configure(state="normal" if ready and not busy else "disabled")
-        download.configure(state="normal" if card is not None and status is not None
-                           and status.downloadable and not busy else "disabled")
+        status = state["status"]
+        action.configure(text=status.action, state="normal" if status.ready and not busy else "disabled")
         if busy:
-            why_var.set("")
-        elif card is None:
-            why_var.set("Pick the card first.")
-        elif not ready:
-            why_var.set("Download the collection first, or choose it with Browse.")
+            stop.pack(side="left", padx=(8, 0))
         else:
-            why_var.set("")
+            stop.pack_forget()
+
+    def refresh_cards() -> None:
+        found = removable_volumes()
+        card_box["values"] = [str(p) for p in found]
+        if len(found) == 1 and not card_var.get():
+            card_var.set(str(found[0]))
+        state["shown_card"] = None          # read the card again, even the same one
+        state["walk"] = None
+        on_card_change()
 
     def browse_card() -> None:
         chosen = filedialog.askdirectory(title="The card")
         if chosen:
             card_var.set(chosen)
-            on_card_change()
 
     def browse_roms() -> None:
-        card = current_card()
-        if card is None:
-            status_var.set("Pick the card first.")
+        chosen_card = current_card()
+        if chosen_card is None:
             return
-        chosen = filedialog.askdirectory(title="The folder your games are in", initialdir=str(card))
+        chosen = filedialog.askdirectory(title="The folder your games are in", initialdir=str(chosen_card))
         if not chosen:
             return
         try:
-            relative = Path(chosen).resolve().relative_to(card.resolve()).as_posix()
+            relative = Path(chosen).resolve().relative_to(chosen_card.resolve()).as_posix()
         except ValueError:
             roms_note.set("That folder is not on the card; the games must be on the card to launch.")
             return
         roms_var.set("" if relative == "." else relative)
-        roms_note.set(ROMS_HINT)
 
     def browse_metadata() -> None:
         chosen = filedialog.askopenfilename(
@@ -1288,7 +1603,6 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             filetypes=[("Collection zip", "*.zip"), ("All files", "*")])
         if chosen:
             metadata_var.set(chosen)
-            on_card_change()
 
     def open_download(_event=None) -> None:
         if "GitHub" in metadata_note.get():
@@ -1298,93 +1612,92 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         log.configure(state="normal")
         log.delete("1.0", "end")
         log.configure(state="disabled")
-        bar["value"] = 0
-        stop.configure(state="normal")
         state["runner"] = runner
+        open_options(False)
+        state["steps"].start()
+        result.configure(foreground="")
+        result_var.set("")
         update_buttons()
+        stop.configure(state="normal")
+        draw_steps()
         runner.start()
         root.after(100, poll)
-
-    def start_download() -> None:
-        card = current_card()
-        status = state.get("collection")
-        if state["runner"] is not None or card is None or status is None or not status.downloadable:
-            return
-        begin(Runner(job=download_job(card), kind="download"))
 
     def poll() -> None:
         runner = state["runner"]
         if runner is None:
             return
+        steps = state["steps"]
         for event in runner.drain():
             kind = event[0]
             if kind == "log":
                 say(event[1])
+                steps.line(event[1])
             elif kind == "error":
                 say(event[1])
-                status_var.set(event[1])
+                state["error"] = event[1]
             elif kind == "progress":
                 _kind, label, count, total = event
-                bar["maximum"] = max(total, 1)
-                bar["value"] = count
-                status_var.set(f"{label}: {count}/{total}")
-            elif kind == "detail":
-                status_var.set(f"{status_var.get().split('  ')[0]}  {event[1]}")
+                steps.progress(label, count, total)
             elif kind == "done":
-                state["runner"] = None
-                stop.configure(state="disabled")
-                bar["value"] = bar["maximum"]
-                if runner.kind == "apply":
-                    state["last_apply"] = event[1]
-                    on_card_change()
-                    status_var.set("Your edit is on the card." if event[1] == 0
-                                   else "Your edit was saved but the card was not updated; see above.")
-                    catalog.applied(state.pop("apply_path", None), event[1])
-                    waiting = state.pop("apply_pending", None)
-                    if waiting is not None:
-                        apply_edits(waiting)
-                    return
-                if runner.kind == "download":
-                    on_card_change()
-                    status = state.get("collection")
-                    if event[1] == 0 and status is not None and status.ready:
-                        status_var.set("Collection downloaded. Press Prepare.")
-                    elif event[1] == 3:
-                        status_var.set("Download stopped. Press Download to try again.")
-                    else:
-                        status_var.set("Download failed; see the last line above.")
-                    state["last_download"] = event[1]
-                    return
-                if event[1] == 0:
-                    status_var.set("Done. Eject the card and start SleekMenu64.z64 from the EverDrive menu.")
-                    say("")
-                    say("Eject the card and start SleekMenu64.z64 from the EverDrive menu.")
-                elif event[1] == 3:
-                    status_var.set("Stopped. Press Prepare to start again.")
-                else:
-                    status_var.set("Stopped; see the last line above.")
-                state["last_code"] = event[1]
-                on_card_change()
-                catalog.reload()
-                if smoke:
-                    root.after(200, root.destroy)
+                end_run(runner, event[1])
                 return
+        draw_steps()
         root.after(100, poll)
+
+    def end_run(runner: Runner, code: int | None) -> None:
+        steps = state["steps"]
+        state["runner"] = None
+        steps.end(code)
+        state["outcome"] = runner.outcome
+        error = state.pop("error", "")
+        if runner.kind == "apply":
+            state["last_apply"] = code
+            refresh(fresh=True)
+            draw_steps()
+            result.configure(foreground=colors["good"] if code == 0 else colors["warn"])
+            result_var.set("Your edit is on the card." if code == 0
+                           else "Your edit was saved but the card was not updated; see the details.")
+            catalog.applied(state.pop("apply_path", None), code)
+            waiting = state.pop("apply_pending", None)
+            if waiting is not None:
+                apply_edits(waiting)
+            return
+        state["last_code"] = code
+        # The card as the run left it: its catalog, and the games folder the
+        # run was given, which the card now remembers.
+        state["walk"] = None
+        catalog.reload()
+        refresh(fresh=True)
+        draw_steps()
+        line = finished_line(code, runner.outcome, state["status"], bool(walk()))
+        plain = code == 0 and line.startswith("Done.")
+        result.configure(foreground=colors["good"] if plain else colors["warn"])
+        result_var.set(line or error.removeprefix("sleekmenu-prep: ") or "Something went wrong; see the details.")
+        if code not in (0, 3):
+            show_details(True)
+        if smoke:
+            root.after(200, root.destroy)
 
     def start() -> None:
         if state["runner"] is not None:
             return
-        card = card_var.get().strip()
-        status = state.get("collection")
-        if not card or current_card() is None or status is None or not status.ready:
-            status_var.set(why_var.get() or "Pick the card first.")
+        chosen = current_card()
+        if chosen is None or not state["status"].ready:
             if smoke:
-                # nothing to prepare with: a build check says so and ends
+                # nothing to act on: a build check says so and ends
                 state["last_code"] = 1
                 root.after(200, root.destroy)
             return
-        begin(Runner(options_from(card, metadata_var.get(), check_var.get(), fix_var.get(),
-                                  hires_var.get(), roms_var.get(), rebuild_var.get())))
+        begin(Runner(options_from(str(chosen), metadata_var.get(), roms_var.get(), fix_var.get(),
+                                  rebuild_var.get(), offline_var.get(),
+                                  hires.remembered(custom_art.art_dir(chosen)))))
+
+    def on_focus(event) -> None:
+        """Back from copying games onto the card in another window: the
+        card is read again, so the tab counts them without a Refresh."""
+        if event.widget is root and state["runner"] is None and time.monotonic() - state.get("walked", 0) > 3:
+            refresh(fresh=True)
 
     def ask_stop() -> None:
         runner = state["runner"]
@@ -1392,33 +1705,40 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             return
         runner.stop()
         stop.configure(state="disabled")
-        status_var.set("Stopping…")
+        result.configure(foreground="")
+        result_var.set("Stopping…")
 
-    ttk.Button(buttons, text="Browse…", command=browse_card).pack(side="left")
-    ttk.Button(buttons, text="Refresh", command=refresh_cards).pack(side="left", padx=(6, 0))
-    ttk.Button(frame, text="Browse…", command=browse_roms).grid(row=2, column=2, sticky="w", pady=(10, 0))
-    ttk.Button(collection_buttons, text="Browse…", command=browse_metadata).pack(side="left")
-    download = ttk.Button(collection_buttons, text="Download", command=start_download, state="disabled")
-    download.pack(side="left", padx=(6, 0))
+    ttk.Button(card_buttons, text="Choose…", command=browse_card).pack(side="left")
+    ttk.Button(card_buttons, text="Refresh", command=refresh_cards).pack(side="left", padx=(6, 0))
+    choose_roms.configure(command=browse_roms)
+    choose_pack.configure(command=browse_metadata)
+    forget_pack.configure(command=lambda: metadata_var.set(""))
     note.bind("<Button-1>", open_download)
     card_box.bind("<<ComboboxSelected>>", on_card_change)
     card_var.trace_add("write", on_card_change)
-    metadata_var.trace_add("write", on_card_change)
-    prepare.configure(command=start)
+    metadata_var.trace_add("write", refresh)
+    offline_var.trace_add("write", refresh)
+    roms_var.trace_add("write", on_roms_change)
+    roms_shown.trace_add("write", on_roms_shown)
+    action.configure(command=start)
     stop.configure(command=ask_stop)
+    root.bind("<FocusIn>", on_focus)
+    on_roms_change()
     refresh_cards()
     if card:
         card_var.set(card)
     if metadata:
         metadata_var.set(metadata)
     state["last_code"] = None
-    # For the tests: the fields and the button, without walking widgets.
+    # For the tests: the fields and the buttons, without walking widgets.
     state["fields"] = {"card": card_var, "roms": roms_var, "metadata": metadata_var}
+    state["options"] = {"fix": fix_var, "rebuild": rebuild_var, "offline": offline_var}
+    state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var,
+                      "result": result_var, "last": last_var, "pack": metadata_note}
     state["start"] = start
-    state["download"] = start_download
-    state["buttons"] = {"prepare": prepare, "download": download}
-    state["why"] = why_var
-    state["note"] = metadata_note
+    state["stop"] = ask_stop
+    state["buttons"] = {"action": action, "stop": stop}
+    state["show"] = {"options": show_options, "details": show_details}
     root.sleekmenu_state = state  # type: ignore[attr-defined]
 
     if smoke and card:

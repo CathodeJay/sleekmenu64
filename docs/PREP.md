@@ -16,35 +16,39 @@ game your own picture, text or facts.
 click the first time. With Python and Tk installed,
 `python3 sleekmenu-prep.pyz --gui` opens the same window.
 
-### Prepare
+### Card
 
-- **Card** is picked for you when it is the only removable disk; Browse and
-  Refresh otherwise. The line under it counts the games copied on since the
-  last Prepare, which is when a card wants one: the catalog is built here,
-  not on the console, so a game copied on plays from the browser straight
-  away but has no box or facts until the next run.
-- **Games folder** is empty for the whole card, or names one folder
-  (`ROMS`) to catalog only that. The card remembers the choice.
-- **Collection** says, in the line under it, whether the card has the
-  box-art collection: a green tick with the number of boxes, or an amber
-  cross saying what to do. Download fetches it onto the card (about 52 MB
-  from GitHub, once); Browse picks a copy you already have. Prepare stays
-  off until the tick shows, since a card prepared without the collection
-  gets no boxes and no descriptions.
-- **Options.** Checking hacks and homebrew for a stale header checksum is
-  on; rewriting a stale one in the file itself is off until you tick it
-  (see [Hacks and homebrew](CONSOLE.md#hacks-and-homebrew)).
-  High-resolution boxes fetches libretro's 512-pixel boxes for the box view
-  (see [Your own art and text](#your-own-art-and-text)); a card that has them shows the box
-  ticked and keeps them complete. Start from nothing reads every ROM and
-  converts every box again, for a card that looks wrong.
+- **Card** is picked for you when it is the only removable disk; Choose and
+  Refresh otherwise.
+- **The headline** says what is on it: how many games, how many were copied
+  on since the last update, how many have no box. The catalog is built
+  here, not on the console, so a game copied on plays from the browser
+  straight away but has no box or facts until the next update.
+- **Set up card**, the first time, and **Update card** after, do
+  everything: read the games, fetch what the card lacks, build the catalog
+  and the covers, write them. What it fetches is the collection, once
+  (about 52 MB), and a 512-pixel box for each game the database knows
+  (about 400 KB each). The four steps show where it is. Stop ends it; what
+  was fetched is kept, and the next run carries on from there. A download
+  that fails does not stop the run: the card gets its catalog, and the tab
+  says what is missing and to press the button again. Show details has the
+  report the command line prints.
+- **Options**, closed until you open them:
+  - *Where the games are*: the whole card, or one folder (`ROMS`) to
+    catalog only that. The card remembers the choice.
+  - *Repair hacks that show a black screen on a console* rewrites a stale
+    header checksum in the file itself. Hacks and homebrew are always
+    checked (see [Hacks and homebrew](CONSOLE.md#hacks-and-homebrew)).
+  - *Rebuild everything from scratch* reads every ROM and converts every
+    box again, and asks libretro again for the boxes it did not have, for
+    a card that looks wrong.
+  - *Do not download anything* uses only what is already on the card.
+  - A `release-metadata.zip` you already have can be chosen in place of
+    the download; the line under it says which collection a run will read.
 
-Prepare runs it, with a progress bar and the same report the command line
-prints; Stop ends the run.
+### Games
 
-### Catalog
-
-![The Catalog tab: the card's folders and games with genre, year, publisher, players, region and where the box and text came from; the selected game's box, facts and description on the right; and the panel for your own art and text underneath](screenshots/prep-gui-catalog.png)
+![The Games tab: the card's folders and games with genre, year, publisher, players, region and where the box and text came from; the selected game's box, facts and description on the right; and the panel for your own art and text underneath](screenshots/prep-gui-catalog.png)
 
 The card as the browser will show it. The first line counts the games, says
 when the catalog was built, how many have a box and how many of those are
@@ -90,8 +94,8 @@ it — and the line under the choice says how many games that reaches.
 
 Save writes exactly the files described in [Your own art and text](#your-own-art-and-text)
 into `sleekmenu/art/`, the picture as it is, then puts them in the card's
-catalog and covers straight away. That is the same run as Prepare, with the
-games folder and the high-resolution choice the card remembers, and it
+catalog and covers straight away. That is the same run as Update card,
+with the games folder the card remembers and nothing downloaded, and it
 takes seconds since only what changed is redone. The console reads only the
 catalog, so this run is what makes the edit appear there, the next time
 SleekMenu starts. While it runs, or while the card has no collection to
@@ -140,21 +144,20 @@ a new game does; Save in the prep GUI does both at once.
 **High-resolution boxes.** The collection's scans are 158 pixels wide,
 enough for the console's 96×72 thumbnail and no more.
 [libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
-keeps a 512-pixel box for every retail cartridge; the prep GUI's
-"High-resolution boxes" box (`--hires`) fetches one for every game on the card the
-database knows, about 250 KB each, into `sleekmenu/art/hires/` by game
+keeps a 512-pixel box for every retail cartridge; the prep GUI (and
+`--hires` on the command line) fetches one for every game on the card the
+database knows, about 400 KB each, into `sleekmenu/art/hires/` by game
 code, and builds the covers from those — a 512-pixel box downscaled looks
 better than a 158-pixel one downscaled, and the box view (A on a game's
 details) draws them at full size. A card that has them keeps them
 complete: every later run fetches the boxes of the games added since,
-without being asked, and the prep GUI shows the box ticked. Only what is
-missing is fetched; a game libretro has no box for is noted and not asked
+without being asked. Only what is missing is fetched; a game libretro has no box for is noted and not asked
 about again unless you pass `--hires` yourself; a picture of your own
-still wins; Stop ends it between two boxes. The Catalog tab counts the
+still wins; Stop ends it between two boxes. The Games tab counts the
 high-resolution boxes and says, for each game, what the box view will
 draw.
 
-**From the prep GUI.** The Catalog tab writes these files for one game or
+**From the prep GUI.** The Games tab writes these files for one game or
 one game code and puts them on the card as you save: see
 [Editing a game](#editing-a-game).
 
@@ -171,10 +174,10 @@ cd /Volumes/CARD          # or wherever the card is mounted
 python3 sleekmenu-prep.pyz
 ```
 
-It does what Download and Prepare do in the prep GUI: fetches the
-collection onto a card that lacks it, finds every ROM on the card, matches
-each one to its box and description, and writes the catalog and the
-covers. Offline, the card still gets its catalog, without covers, and the
+It does what the prep GUI's button does: fetches the collection onto a card
+that lacks it, finds every ROM on the card, matches each one to its box and
+description, and writes the catalog and the covers. The 512-pixel boxes are
+fetched when you ask with `--hires`, and kept complete after. Offline, the card still gets its catalog, without covers, and the
 report says where to download the zip by hand — drop it at the root of the
 card and run the tool again. The options mirror the GUI's:
 

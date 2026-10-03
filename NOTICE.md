@@ -90,7 +90,7 @@ EverDrive-64 Pro's own menu draw on — from the user's card, and converts the
 boxes their library needs. A card that lacks the collection gets it fetched
 from that project's own releases page, by the user's machine, onto the
 user's card: the same download the collection's page offers, made for them.
-On request (`--hires`) it does the same with the 512-pixel boxes of
+It does the same with the 512-pixel boxes of
 [libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64),
 fetched one by one from that repository onto the user's card and recorded
 there with their address. That is the line this project holds: it never
