@@ -45,6 +45,9 @@ ART_FOLDER = "art"
 #: (tools/cheat_codes.py). src/card_paths.h has the same two names.
 CHEATS_FOLDER = "cheats"
 CHEATS_FETCHED_FOLDER = "libretro"
+#: Under CARD_FOLDER: the colour theme the browser starts in, as the first
+#: word of a text file (tools/themes.py). src/card_paths.h has the same name.
+THEME_FILE = "theme.txt"
 #: Under FIRMWARE_FOLDER on an EverDrive-64 X7: the stock OS itself, and
 #: the ROM it starts on its own at power-on when there is one
 #: (tools/direct_boot.py).

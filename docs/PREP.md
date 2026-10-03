@@ -67,10 +67,14 @@ only that. The card remembers the choice.
   box again, and asks libretro again for the boxes it did not have, for a
   card that looks wrong.
 
-**Console**, on a card for an EverDrive-64 X7: **Start the console in
-SleekMenu** makes the console power on in SleekMenu instead of the
-EverDrive menu. See
-[Starting the console in SleekMenu](#starting-the-console-in-sleekmenu).
+**Console**
+
+- **Theme** picks the browser's colours; the squares beside it show the
+  theme's background, title band, selection, accent and text. See
+  [Themes](#themes).
+- **Start the console in SleekMenu**, on a card for an EverDrive-64 X7,
+  makes the console power on in SleekMenu instead of the EverDrive menu.
+  See [Starting the console in SleekMenu](#starting-the-console-in-sleekmenu).
 
 ### Games
 
@@ -214,6 +218,26 @@ stay, and the console goes on reading them.
 On the console a file of your own in `sleekmenu/cheats/`, named like the
 ROM, always comes first. See [Cheats](CONSOLE.md#cheats).
 
+## Themes
+
+The browser has six sets of colours, built into `SleekMenu64.z64`:
+
+| Theme | Looks like |
+|---|---|
+| Midnight | navy with a pale gold accent; the default |
+| Charcoal | neutral greys with an orange accent |
+| Jungle | deep green with a lime accent |
+| Grape | purple with a pink accent |
+| Fire | dark red with an amber accent |
+| Ice | teal with an ice-blue accent |
+
+Choose one under **Console** on the Card tab (`--theme jungle` on the
+command line) and press Update card: the choice is written to
+`sleekmenu/theme.txt`, and the browser reads it the next time it starts. A
+theme changes colours only: every screen is laid out the same, a warning is
+still amber and an error red, and the buttons on the help bar keep the
+colours they have on the controller.
+
 ## Starting the console in SleekMenu
 
 On an EverDrive-64 X7 the stock OS starts the file `ED64/autoexec.v64` by
@@ -259,7 +283,8 @@ card and run the tool again. The options mirror the GUI's:
   nothing; `--fix-checksums` rewrites a hack's stale header checksum, and
   `--no-checksums` skips the check.
 - `--cheats` fetches the cheat codes and `--no-cheats` stops;
-  `--direct-boot on` and `--direct-boot off` set an X7's start-up switch.
+  `--direct-boot on` and `--direct-boot off` set an X7's start-up switch;
+  `--theme` takes a theme's name in lower case (`--theme grape`).
 - `--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps
   the tool off the network altogether; `--dry-run` writes nothing.
 - `--gui` opens the prep GUI; `--version` says which release it is; `--help`
@@ -284,6 +309,7 @@ What the tool writes, and what it leaves alone:
 /sleekmenu/covers-large.pak the same covers at 256×180, for the box view
 /sleekmenu/art/hires/      the 512-pixel boxes, one per game code
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump, when asked for
+/sleekmenu/theme.txt       the browser's theme, when you chose one
 /ED64/autoexec.v64         a copy of SleekMenu64.z64, when an X7 starts in it
 /sleekmenu/favorites.txt   written by the browser as you star games
 /sleekmenu/history.txt     the last fifteen games you launched

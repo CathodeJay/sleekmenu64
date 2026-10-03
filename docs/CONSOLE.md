@@ -41,6 +41,19 @@ applies it. The header shows how many games match.
 
 ![The filter screen: genres with counts, then region, players, publisher, year and favourites](screenshots/filters.png)
 
+The bar along the bottom of every screen says what the buttons do on that
+screen. Each button is a small picture in the colour it has on the
+controller: a blue A, a green B, a red Start with an S, the yellow C
+buttons with their arrow, grey Z, L and R, and a cross for the D-pad.
+
+## Themes
+
+The colours are a theme: Midnight, Charcoal, Jungle, Grape, Fire and Ice.
+Midnight is the default. The card says which one in `sleekmenu/theme.txt`,
+written by the prep tool ([PREP.md](PREP.md#themes)); the browser reads it
+as it starts. The buttons' colours, the favourite star, a warning and an
+error are the same in every theme.
+
 ## Starting the console in SleekMenu
 
 **EverDrive-64 X7.** The stock OS starts a file by itself at power-on when

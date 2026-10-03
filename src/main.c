@@ -7,6 +7,7 @@
 #include "launch.h"
 #include "ui.h"
 #include "save_sync.h"
+#include "theme.h"
 #include <libdragon.h>
 #include <stdio.h>
 #include <string.h>
@@ -109,6 +110,8 @@ int main(void) {
         scan_display.note = "Moving the last game's save to ED64/gamedata";
         draw_scan_now(&scan_display, NULL);
         cart->save_sync_flush(&save_sync);
+        /* The card's choice of colours, before the first screen that stays. */
+        sm_theme_load(SM_THEME_PATH);
         /* The catalog is the only source of genre, publisher, year and cover
            art: a bare SD scan can read headers, and headers do not carry any
            of them. Without it the browser still works, just plainly. */

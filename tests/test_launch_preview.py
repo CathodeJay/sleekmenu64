@@ -104,7 +104,8 @@ class HostModuleTests(unittest.TestCase):
         to be indistinguishable from the browser's side, and the only way to
         know they are is to hold the behaviour fixed and swap the source."""
         sources = ["tests/ui_host_test.c", "tests/stubs/libdragon_stub.c",
-                   "src/ui.c", "src/genre.c", "src/favorites.c", "src/history.c",
+                   "src/ui.c", "src/theme.c", "src/buttons.c", "src/genre.c", "src/favorites.c",
+                   "src/history.c",
                    "src/list_view.c", "src/save_type.c", "src/cover_pack.c",
                    "src/folder_scan.c", "src/rom_db.c"] + CHEATS_SOURCES
         for packed in (False, True):
@@ -127,6 +128,26 @@ class HostModuleTests(unittest.TestCase):
                      f'-DSM_COVER_PACK_PATH="{pack}"',
                      f'-DSM_COVER_PACK_LARGE_PATH="{large}"'],
                 )
+
+    def test_host_theme_module(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            build_and_run("theme-test", ["src/theme.c", "tests/stubs/libdragon_stub.c", "tests/theme_test.c"],
+                          ["-Itests/stubs"], [scratch])
+
+    def test_host_buttons_module_and_every_line_of_help_fits_the_bar(self):
+        """The lines are taken from the browser's source, so one written
+        too long for the bar fails here rather than on a television. A
+        line with a %s in it is measured at its longest."""
+        source = (ROOT / "src/ui.c").read_text(encoding="utf-8")
+        lines = sorted({line for line in re.findall(r'"((?:[^"\\]|\\.)*)"', source)
+                        if re.search(r"\{[ABSZLR^v<>+|-]\}", line)})
+        self.assertGreaterEqual(len(lines), 8, "the help lines were not found in src/ui.c")
+        whole = [line for line in lines if "%s" not in line and not line.startswith(" ")]
+        whole.append("VERIFIED LOAD {A}BOX {^}SWITCH {Z}DETAILS {v}CHEATS")
+        self.assertIn("%s LOAD {A}BOX {^}SWITCH {Z}DETAILS%s", lines)
+        self.assertIn(" {v}CHEATS", lines)
+        build_and_run("buttons-test", ["src/buttons.c", "tests/stubs/libdragon_stub.c", "tests/buttons_test.c"],
+                      ["-Itests/stubs"], whole)
 
     def test_host_list_view_module(self):
         build_and_run("list-view-test",

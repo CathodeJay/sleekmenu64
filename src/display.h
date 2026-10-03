@@ -29,7 +29,9 @@ typedef struct {
 enum {
     SM_HEADER_HEIGHT = 14,
     SM_TABS_HEIGHT = 11,
-    SM_FOOTER_HEIGHT = 10,
+    /* Tall enough for a button's picture, nine pixels, with air around it. */
+    SM_FOOTER_HEIGHT = 11,
+    SM_FOOTER_TEXT_Y = 2,
     SM_ROW_HEIGHT = 10,
     SM_COVER_WIDTH = 96,
     SM_COVER_HEIGHT = 72,

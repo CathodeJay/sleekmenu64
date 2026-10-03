@@ -7,6 +7,8 @@ int sm_test_box_count;
 int sm_test_sprite_loads;
 int sm_test_sprite_frees;
 const char *sm_test_present_cover;
+#define SM_TEST_BOX_MAX 4096
+static uint32_t box_colours[SM_TEST_BOX_MAX];
 
 void sm_test_reset(void) {
     sm_test_text_count = 0;
@@ -16,8 +18,16 @@ void sm_test_reset(void) {
 }
 
 void graphics_draw_box(surface_t *s, int x, int y, int w, int h, uint32_t c) {
-    (void)s; (void)x; (void)y; (void)w; (void)h; (void)c;
+    (void)s; (void)x; (void)y; (void)w; (void)h;
+    if (sm_test_box_count < SM_TEST_BOX_MAX) box_colours[sm_test_box_count] = c;
     sm_test_box_count++;
+}
+
+int sm_test_boxes_of(uint32_t colour) {
+    int found = 0;
+    for (int i = 0; i < sm_test_box_count && i < SM_TEST_BOX_MAX; i++)
+        if (box_colours[i] == colour) found++;
+    return found;
 }
 
 void graphics_draw_text(surface_t *s, int x, int y, const char *text) {

@@ -54,7 +54,7 @@ from pathlib import Path
 
 from tools import (build_catalog, card_catalog, card_layout, cheat_codes, cover_pack, coverdb, custom_art,
                    direct_boot, fetch, headers, hires, library, make_sprite, metadata_repo, n64_checksum,
-                   pack_covers, prepare_card, progress, version)
+                   pack_covers, prepare_card, progress, themes, version)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 
@@ -322,6 +322,7 @@ class Options:
                                     # card remembers (it asked before: keep them complete)
     direct_boot: bool | None = None  # an X7 starts in SleekMenu: True, False, or None to leave
                                      # the card as it is and keep the copy in step
+    theme: str | None = None        # the browser's colours, by a theme's id; None leaves the card's
     no_large_covers: bool = False   # skip the box view's covers-large.pak
     rebuild: bool = False           # read every header and convert every box again, whatever
                                     # the last run remembered
@@ -383,6 +384,11 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
             direct_boot.sync(card, options.direct_boot, log)
         except OSError as error:
             log(f"boot:     not changed ({error})")
+        # So are its colours.
+        try:
+            themes.sync(card, options.theme, log)
+        except OSError as error:
+            log(f"theme:    not changed ({error})")
     if found.created is not None:
         log(f"created   {found.created.relative_to(card)}/")
         log("")
@@ -540,6 +546,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--direct-boot", choices=("on", "off"), default=None,
                         help="EverDrive-64 X7: start the console in SleekMenu (on copies the card's "
                              f"{card_layout.BROWSER_ROM} to {direct_boot.AUTOEXEC_SHOWN}, off removes it)")
+    parser.add_argument("--theme", choices=[theme.id for theme in themes.THEMES], default=None,
+                        help="the browser's colours on this card (the default is "
+                             f"{themes.DEFAULT.id}); the card keeps the choice")
     parser.add_argument("--gui", action="store_true",
                         help="open the window instead of running in the terminal")
     parser.add_argument("--version", action="version", version=f"%(prog)s {version.VERSION}")
@@ -563,6 +572,7 @@ def main(argv: list[str] | None = None) -> int:
                            hires=True if args.hires else None,
                            cheats=False if args.no_cheats else True if args.cheats else None,
                            direct_boot=None if args.direct_boot is None else args.direct_boot == "on",
+                           theme=args.theme,
                            no_large_covers=args.no_large_covers, rebuild=args.rebuild),
                    log=print, fail=lambda message: print(message, file=sys.stderr))
     except KeyboardInterrupt:

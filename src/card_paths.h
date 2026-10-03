@@ -52,6 +52,12 @@
 #ifndef SM_CHEATS_FETCHED_DIR
 #define SM_CHEATS_FETCHED_DIR SM_CHEATS_DIR "/libretro"
 #endif
+/* Which colour theme to start in: the first word is a theme's id. Written
+   by the prep tool, read once at start; tools/card_layout.py has the same
+   name. */
+#ifndef SM_THEME_PATH
+#define SM_THEME_PATH SM_CARD_DIR "/theme.txt"
+#endif
 
 /* The stock firmware's own folder. Excluded from the library scan for the same
    reason: it holds saves and system state, not games. */

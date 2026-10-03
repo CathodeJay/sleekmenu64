@@ -54,6 +54,10 @@ the console powers on in SleekMenu; a reset inside a game returns to the
 EverDrive menu. Untick it and update to go back. The EverDrive-64 Pro has
 no such switch: see [docs/CONSOLE.md](docs/CONSOLE.md#starting-the-console-in-sleekmenu).
 
+**Themes:** the browser comes in six sets of colours: Midnight, Charcoal,
+Jungle, Grape, Fire and Ice. Pick one under **Console** on the prep GUI's
+Card tab and press Update card.
+
 The prep GUI also shows your card the way the console will, and lets you
 give any game your own picture, description or facts; see
 [docs/PREP.md](docs/PREP.md). Descriptions come from the
@@ -78,6 +82,10 @@ SleekMenu ships none of them.
 | C-down | Favourite | Cheats |
 | L / R | Page up / down (coverflow: previous / next letter) | — |
 | Z | Filters | Diagnostics |
+
+The bar along the bottom of every screen says what the buttons do there,
+each button drawn in its own colour: a blue A, a green B, a red Start, the
+yellow C buttons with their arrow.
 
 The first two tabs are your favourites and the last fifteen games you
 played. The **grid** shows twelve covers at a time; **coverflow** shows one

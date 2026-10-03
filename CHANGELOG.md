@@ -32,6 +32,7 @@ once. Your catalog, boxes and edits are kept.
   a game returns to the EverDrive menu; untick to go back. The
   EverDrive-64 Pro has no such start-up file, so the switch is not shown
   for its cards.
+- **Theme**, on the Card tab: the browser's colours, chosen from six.
 - The card is chosen in a row above the tabs. The options sit beside the
   button on the Card tab, in groups, and the run's report is on the Log
   tab. The window reads the card again when you come back to it.
@@ -39,6 +40,11 @@ once. Your catalog, boxes and edits are kept.
 
 ### On the console
 
+- Themes: Midnight, Charcoal, Jungle, Grape, Fire and Ice. Midnight is the
+  look it always had; the card's theme is chosen in the prep GUI.
+- The help bar shows each button as a picture in the button's own colour:
+  a blue A, a green B, a red Start, yellow C buttons with their arrow,
+  grey Z, L and R, a cross for the D-pad.
 - Cheats: a game the EverDrive's cheat pack has no file for, or none for
   the cartridge's region, uses the file the prep GUI fetched for it.
 

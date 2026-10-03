@@ -8,9 +8,11 @@
    none of them is visible in a source scan. So the UI gets driven here, with
    libdragon stood in for and the card counted. */
 #include "ui.h"
+#include "buttons.h"
 #include "favorites.h"
 #include "launch.h"
 #include "rom_load.h"
+#include "theme.h"
 #include "version.h"
 #include <assert.h>
 #include <stdio.h>
@@ -140,9 +142,9 @@ static void layout_ntsc(void) {
     layout.safe_left = 24; layout.safe_top = 20;
     layout.safe_right = 296; layout.safe_bottom = 220;
     layout.row_height = SM_ROW_HEIGHT;
-    layout.tabs_top = 36; layout.list_top = 49; layout.list_height = 157;
+    layout.tabs_top = 36; layout.list_top = 49; layout.list_height = 156;
     layout.list_width = 168; layout.scrollbar_x = 192; layout.panel_x = 198;
-    layout.footer_top = 210;
+    layout.footer_top = 209;
     layout.visible_rows = layout.list_height / layout.row_height;
 }
 
@@ -162,6 +164,21 @@ static void settle(void) { idle(SM_UI_SETTLE_FRAMES + 2); }
 static uint16_t rgba16_of(unsigned red, unsigned green, unsigned blue) {
     return (uint16_t)(((red >> 3) << 11) | ((green >> 3) << 6) |
                       ((blue >> 3) << 1) | 1u);
+}
+/* A button's picture is boxes in the button's own colour, and a theme's
+   colour is seen the same way. */
+static bool drew_button(sm_button_t button) {
+    const unsigned char *rgb = sm_button_rgb(button);
+    return sm_test_boxes_of(graphics_make_color(rgb[0], rgb[1], rgb[2], 255)) > 0;
+}
+static int boxes_in(int theme, sm_colour_role_t role) {
+    int now = sm_theme_current(), found;
+    const unsigned char *rgb;
+    sm_theme_use(theme);
+    rgb = sm_colour_rgb(role);
+    found = sm_test_boxes_of(graphics_make_color(rgb[0], rgb[1], rgb[2], 255));
+    sm_theme_use(now);
+    return found;
 }
 static int count_pixels(uint16_t colour) {
     int found = 0;
@@ -591,13 +608,13 @@ int main(void) {
             assert(sm_test_drew("No large covers on this card"));
         }
         assert(sm_test_drew("Alpha"));
-        assert(sm_test_drew("B BACK"));
+        assert(sm_test_drew("BACK") && drew_button(SM_BUTTON_B) && drew_button(SM_BUTTON_START));
         frame(PRESS(back));
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
         assert(ui.box_sprite == NULL);
         assert(ui.cover_sprite != NULL);      /* the card's own cover is untouched */
         draw_clean();
-        assert(sm_test_drew("A BOX"));
+        assert(sm_test_drew("BOX ") && drew_button(SM_BUTTON_A));
         frame(PRESS(back));
         assert(ui.screen == SM_SCREEN_LIBRARY);
     }
@@ -1150,7 +1167,7 @@ int main(void) {
            has been loaded for it, and a cover with no sprite would be a plain
            box in the placeholder colour instead. */
         assert(ui.slot_sprites[SM_UI_FLOW_OUTER] == NULL);
-        assert(count_pixels(rgba16_of(28, 36, 48)) == 0);
+        assert(count_pixels(rgba16_of(35, 42, 52)) == 0);
 
         /* Turned, it keeps both bands of contrast -- that is what survives
            being squeezed to a fifth of the width at the end of the shelf. */
@@ -1188,7 +1205,7 @@ int main(void) {
         /* Nothing in flight: the card offers the decision. */
         assert(ui.load_total_kib == 0u);
         draw();
-        assert(sm_test_drew("START"));
+        assert(sm_test_drew(" play") && drew_button(SM_BUTTON_START));
 
         /* Mid-transfer the bar replaces the prompts. Offering "START play"
            under a ROM that is already half loaded invites a second press. */
@@ -1199,7 +1216,7 @@ int main(void) {
         assert(sm_test_drew("LOADING"));
         assert(sm_test_drew("25%"));
         assert(sm_test_drew("2/8 MB"));
-        assert(!sm_test_drew("START   play"));
+        assert(!sm_test_drew(" play") && !drew_button(SM_BUTTON_START));
 
         /* The verify pass is named, because a bar that fills, empties and
            fills again with no explanation reads as a failure. */
@@ -1214,7 +1231,7 @@ int main(void) {
         ui.load_done_kib = 0u;
         draw();
         assert(!sm_test_drew("LOADING"));
-        assert(sm_test_drew("START"));
+        assert(sm_test_drew(" play") && drew_button(SM_BUTTON_START));
 
         /* And a done figure past the total clamps rather than overrunning the
            bar off the side of the screen. */
@@ -1291,7 +1308,7 @@ int main(void) {
         max = ui.desc_lines * 9 - (layout.footer_top - 30 - (layout.safe_top + SM_HEADER_HEIGHT + 6 + 72 + 6));
         assert(max > 0);
         draw();
-        assert(sm_test_drew("START"));            /* the prompts are untouched */
+        assert(sm_test_drew(" play"));            /* the prompts are untouched */
         assert(sm_test_box_count > 0);            /* the bar at the edge */
 
         /* Left alone: nothing for two seconds, then a pixel every four
@@ -1389,7 +1406,8 @@ int main(void) {
         draw();
         assert(sm_test_drew("[ ] Invincible"));
         assert(sm_test_drew("[?] Choose Level"));
-        assert(sm_test_drew("A TOGGLE"));
+        assert(sm_test_drew("TOGGLE") && drew_button(SM_BUTTON_A));
+        assert(drew_button(SM_BUTTON_L) && sm_test_drew("BACK"));
         /* The page names the file, and says when the region is a guess. */
         assert(sm_test_drew("ED64/CHEATS/ALPHA.cht"));
         assert(sm_test_drew("No region tag: codes may be another region's"));
@@ -1468,7 +1486,11 @@ int main(void) {
         start(rows, 2u);
         settle();
         draw();
-        assert(sm_test_drew("START PLAY A INFO"));
+        /* The help bar: each button as its picture, in its own colour, and
+           the line whole -- its last word is there. */
+        assert(sm_test_drew("PLAY ") && drew_button(SM_BUTTON_START) && drew_button(SM_BUTTON_A));
+        assert(drew_button(SM_BUTTON_C_LEFT) && drew_button(SM_BUTTON_Z) && sm_test_drew("FILTER"));
+        assert(!sm_test_drew("START") && !sm_test_drew("C^"));
         fake_launches = 0;
 
         /* Start on a folder: nothing to play, nothing happens. */
@@ -1535,7 +1557,8 @@ int main(void) {
         frame(PRESS(toggle_view));            /* coverflow */
         settle();
         draw();
-        assert(sm_test_drew("START PLAY A INFO"));
+        assert(sm_test_drew("PLAY ") && drew_button(SM_BUTTON_START) && drew_button(SM_BUTTON_L));
+        assert(sm_test_drew("LETTER ") && sm_test_drew("FILTER"));
         frame(PRESS(start));
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 6);
         frame(PRESS(back));
@@ -1793,6 +1816,44 @@ int main(void) {
         frame(PRESS(back));
         assert(!strcmp(ui.folder, "ROMS") && ui.selected == 0u);
         sm_test_dir_set(NULL, NULL, 0);
+    }
+
+    /* ---- a theme changes the colours, and only the colours ---------------- */
+    {
+        static const row_t rows[] = {
+            {"Racing/a.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"b.z64", "Beta", "Racing", 0, "", 0, NULL},
+        };
+        int jungle = sm_theme_find("jungle");
+        int texts;
+        assert(sm_theme_current() == 0 && jungle > 0);
+        start(rows, 2u);
+        settle();
+        draw();
+        texts = sm_test_text_count;
+        assert(boxes_in(0, SM_C_SELECT) > 0 && boxes_in(jungle, SM_C_SELECT) == 0);
+        sm_theme_use(jungle);
+        draw();
+        assert(boxes_in(jungle, SM_C_SELECT) > 0 && boxes_in(0, SM_C_SELECT) == 0);
+        assert(boxes_in(jungle, SM_C_BAR) > 0 && boxes_in(jungle, SM_C_BAND) > 0);
+        assert(sm_test_text_count == texts);          /* the same words in the same places */
+        assert(drew_button(SM_BUTTON_A));             /* and a blue A, whatever the theme */
+
+        /* The folder on the coverflow shelf is a picture painted once: a
+           theme paints it again in its own colours. */
+        frame(PRESS(toggle_view)); frame(PRESS(toggle_view));
+        settle();
+        assert(ui.items[0] & SM_UI_FOLDER_BIT);
+        draw_clean();
+        {
+            const unsigned char *rgb = sm_colour_rgb(SM_C_FOLDER);
+            assert(count_pixels(rgba16_of(rgb[0], rgb[1], rgb[2])) > 1000);
+            assert(count_pixels(rgba16_of(78, 108, 150)) == 0);
+        }
+        sm_theme_use(0);
+        draw_clean();
+        assert(count_pixels(rgba16_of(78, 108, 150)) > 1000);
+        frame(PRESS(toggle_view));
     }
 
     /* ---- the start screen names the release ------------------------------ */

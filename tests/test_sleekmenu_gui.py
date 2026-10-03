@@ -82,6 +82,8 @@ class FieldTests(unittest.TestCase):
         self.assertIsNone(from_window("/c").direct_boot, "a card with no start-up switch is told nothing")
         self.assertIs(from_window("/c", direct_boot=True).direct_boot, True)
         self.assertIs(from_window("/c", direct_boot=False).direct_boot, False)
+        self.assertIsNone(from_window("/c").theme, "nothing chosen: the card's theme is left alone")
+        self.assertEqual(from_window("/c", theme="jungle").theme, "jungle")
 
 
 class CardStatusTests(unittest.TestCase):
@@ -872,6 +874,41 @@ class WindowTests(unittest.TestCase):
             while state["runner"] is not None:
                 root.update()
             self.assertEqual((card / "ED64" / "autoexec.v64").read_bytes(), theirs)
+            root.destroy()
+
+    def test_the_theme_is_read_from_the_card_and_put_on_it_by_the_run(self):
+        from tools import themes
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            theme = state["options"]["theme"]
+            self.assertEqual(theme.get(), "Midnight", "a card that never chose shows the default")
+            # the swatch beside the name is the theme's own colours
+            swatch = state["swatch"]
+            fills = [swatch.itemcget(item, "fill") for item in swatch.find_all()]
+            self.assertEqual(fills[0], "#%02x%02x%02x" % themes.DEFAULT.colours["bg"])
+            self.assertEqual(len(fills), len(sleekmenu_gui.SWATCH_ROLES))
+            theme.set("Jungle")
+            root.update()
+            fills = [swatch.itemcget(item, "fill") for item in swatch.find_all()]
+            self.assertEqual(fills[0], "#%02x%02x%02x" % themes.find("jungle").colours["bg"])
+            self.assertFalse(themes.path(card).exists(), "nothing is written until the button is pressed")
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(state["last_code"], 0)
+            self.assertEqual(themes.path(card).read_bytes(), b"jungle\n")
+            self.assertEqual(theme.get(), "Jungle")
+            root.destroy()
+
+            # opened again, the window shows the card's theme
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            self.assertEqual(root.sleekmenu_state["options"]["theme"].get(), "Jungle")
             root.destroy()
 
     def test_a_build_check_never_downloads_and_ends_on_its_own(self):

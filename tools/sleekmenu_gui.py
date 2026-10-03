@@ -43,7 +43,8 @@ if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
 from tools import (card_catalog, card_layout, cheat_codes, coverdb, custom_art, direct_boot, fetch, genre_map,
-                   hires, library, make_sprite, metadata_repo, progress, provenance, sleekmenu_prep, version)
+                   hires, library, make_sprite, metadata_repo, progress, provenance, sleekmenu_prep, themes,
+                   version)
 from tools.metadata_repo import MetadataRepo
 
 TITLE = f"SleekMenu 64 {version.VERSION} — prepare a card"
@@ -55,6 +56,8 @@ COFFEE_URL = "https://buymeacoffee.com/CathodeJay"
 #: nothing is downloaded.
 CHEATS_HINT = "From libretro, for the games the EverDrive's cheat pack does not cover. Needs an Expansion Pak."
 CHEATS_OFFLINE = "Not while downloads are off."
+#: The colours of a theme shown beside its name, in this order.
+SWATCH_ROLES = ("bg", "band", "select", "accent", "text")
 #: The box is 96x72 on the console; twice that on a desktop screen is
 #: legible without pretending to be the source picture.
 BOX_ZOOM = 2
@@ -465,7 +468,7 @@ def collection_status(card: Path | None, chosen: str = "", offline: bool = False
 def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: bool = False,
                  rebuild: bool = False, offline: bool = False, remembered: bool = False,
                  cheats: bool = False, cheats_remembered: bool = False,
-                 direct_boot: bool | None = None) -> sleekmenu_prep.Options:
+                 direct_boot: bool | None = None, theme: str | None = None) -> sleekmenu_prep.Options:
     """The window's choices as the run takes them. An empty collection
     means whatever is on the card, fetched when there is none. An empty
     games folder is the whole card, said so: the field shows what the card
@@ -479,7 +482,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
     Cheat codes are the owner's choice: ticked, they are asked for, or kept
     complete on a card that already asked (`cheats_remembered`); unticked,
     the card is told to stop. `direct_boot` is the X7's start-up switch as
-    the tab shows it, None on a card that has no such switch."""
+    the tab shows it, None on a card that has no such switch. `theme` is
+    the id of the colours chosen for the browser."""
     return sleekmenu_prep.Options(
         card=Path(card) if card.strip() else None,
         metadata=Path(metadata) if metadata.strip() else None,
@@ -489,6 +493,7 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
         hires=None if remembered and not rebuild else True,
         cheats=False if not cheats else None if cheats_remembered and not rebuild else True,
         direct_boot=direct_boot,
+        theme=theme,
         rebuild=bool(rebuild),
     )
 
@@ -1574,6 +1579,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     cheats_note = tk.StringVar(value=CHEATS_HINT)
     boot_var = tk.BooleanVar(value=False)
     boot_note = tk.StringVar()
+    theme_var = tk.StringVar(value=themes.DEFAULT.name)
     headline_var = tk.StringVar()
     detail_var = tk.StringVar()
     explain_var = tk.StringVar()
@@ -1712,11 +1718,34 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     option(13, rebuild_var, "Rebuild everything from scratch",
            "Slower. For a card whose boxes or names look wrong.")
 
-    # The X7's start-up switch: a group that is there only for an X7 card.
+    # What the console does with the card: the browser's colours, and on an
+    # X7 card the start-up switch, a row that is there only for one.
+    group(15, "Console")
+    theme_row = ttk.Frame(options)
+    theme_row.grid(row=16, column=0, sticky="w", pady=(6, 0))
+    ttk.Label(theme_row, text="Theme").grid(row=0, column=0, sticky="w")
+    theme_box = ttk.Combobox(theme_row, textvariable=theme_var, state="readonly", width=12,
+                             values=[theme.name for theme in themes.THEMES])
+    theme_box.grid(row=0, column=1, padx=(8, 10))
+    # The theme at a glance: its background, title band, selection, accent
+    # and text, side by side.
+    swatch_size = 14
+    swatch = tk.Canvas(theme_row, width=len(SWATCH_ROLES) * swatch_size, height=swatch_size,
+                       highlightthickness=1, highlightbackground=colors["muted"], borderwidth=0)
+    swatch.grid(row=0, column=2)
+
+    def draw_swatch(*_args) -> None:
+        theme = themes.by_name(theme_var.get()) or themes.DEFAULT
+        swatch.delete("all")
+        for index, role in enumerate(SWATCH_ROLES):
+            swatch.create_rectangle(index * swatch_size, 0, (index + 1) * swatch_size, swatch_size, width=0,
+                                    fill="#%02x%02x%02x" % theme.colours[role])
+    theme_var.trace_add("write", draw_swatch)
+    draw_swatch()
+
     boot_row = ttk.Frame(options)
     boot_row.columnconfigure(0, weight=1)
-    group(15, "Console", boot_row)
-    boot_check = option(16, boot_var, "Start the console in SleekMenu", boot_note, boot_row)
+    boot_check = option(0, boot_var, "Start the console in SleekMenu", boot_note, boot_row)
     fit(options, hints)
 
     # -- the run's report, on a tab of its own ----------------------------------
@@ -1851,7 +1880,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         boot = direct_boot.state(chosen) if chosen is not None else direct_boot.State()
         state["boot"] = boot
         if boot.cart == direct_boot.X7:
-            boot_row.grid(row=15, column=0, sticky="ew")
+            boot_row.grid(row=17, column=0, sticky="ew")
             boot_check.configure(state="normal" if boot.available else "disabled")
             boot_note.set("EverDrive-64 X7. A reset inside a game returns to the EverDrive menu; "
                           "untick to start in the EverDrive menu again." if boot.available else boot.why)
@@ -1866,11 +1895,12 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         update_buttons()
 
     def read_choices() -> None:
-        """The two switches the card itself remembers, set from the card:
-        when another card is chosen, and after a run has changed it."""
+        """The choices the card itself remembers, set from the card: when
+        another card is chosen, and after a run has changed it."""
         chosen = current_card()
         cheats_var.set(cheat_codes.remembered(chosen))
         boot_var.set(chosen is not None and direct_boot.state(chosen).on)
+        theme_var.set(themes.read(chosen).name)
 
     def on_card_change(*_args) -> None:
         chosen = card_var.get().strip()
@@ -2041,7 +2071,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                                   rebuild_var.get(), offline_var.get(),
                                   hires.remembered(custom_art.art_dir(chosen)),
                                   cheats=cheats_var.get(), cheats_remembered=cheat_codes.remembered(chosen),
-                                  direct_boot=boot_var.get() if state["boot"].available else None)))
+                                  direct_boot=boot_var.get() if state["boot"].available else None,
+                                  theme=(themes.by_name(theme_var.get()) or themes.DEFAULT).id)))
 
     def on_focus(event) -> None:
         """Back from copying games onto the card in another window: the
@@ -2083,7 +2114,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     # For the tests: the fields and the buttons, without walking widgets.
     state["fields"] = {"card": card_var, "roms": roms_var, "metadata": metadata_var}
     state["options"] = {"fix": fix_var, "rebuild": rebuild_var, "offline": offline_var,
-                        "cheats": cheats_var, "boot": boot_var}
+                        "cheats": cheats_var, "boot": boot_var, "theme": theme_var}
+    state["swatch"] = swatch
     state["boot_row"] = boot_row
     state["boot_note"] = boot_note
     state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var,

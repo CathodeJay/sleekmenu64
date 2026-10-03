@@ -5,7 +5,9 @@
 #include "list_view.h"
 #include "launch.h"
 #include "flashcart.h"
+#include "buttons.h"
 #include "rom_db.h"
+#include "theme.h"
 #include "version.h"
 #include <libdragon.h>
 #include <stdio.h>
@@ -49,6 +51,26 @@ static void draw_truncated(surface_t *surface, int x, int y, const char *text, i
     if (length > copy && copy >= 3) memcpy(line + copy - 3, "...", 3);
     line[copy] = '\0';
     graphics_draw_text(surface, x, y, line);
+}
+
+/* The help bar along the bottom of every screen: what the buttons do here,
+   each button as its picture, or a sentence when there is something to say
+   instead. Words are in the theme's colour; the buttons keep their own. */
+static void draw_help_bar(surface_t *s, const sm_layout_t *l) {
+    graphics_draw_box(s, l->safe_left, l->footer_top, l->safe_right - l->safe_left, SM_FOOTER_HEIGHT,
+        sm_colour(SM_C_BAR));
+    graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
+}
+
+static void draw_help(surface_t *s, const sm_layout_t *l, const char *hints) {
+    draw_help_bar(s, l);
+    sm_hints_draw(s, l->safe_left + 3, l->footer_top + SM_FOOTER_TEXT_Y, l->safe_right - 3, hints);
+}
+
+static void draw_help_sentence(surface_t *s, const sm_layout_t *l, const char *text) {
+    draw_help_bar(s, l);
+    draw_truncated(s, l->safe_left + 3, l->footer_top + SM_FOOTER_TEXT_Y, text,
+        (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH);
 }
 
 /* A paragraph, wrapped on spaces to fit `max_chars` columns, at most
@@ -156,26 +178,26 @@ void ui_draw_loading(surface_t *s, const sm_layout_t *l, const char *phase,
     static const char indicators[] = "|/-\\";
     char line[64];
     int max_chars = (l->safe_right - l->safe_left - 8) / FONT_WIDTH;
-    graphics_fill_screen(s, graphics_make_color(8, 12, 20, 255));
+    graphics_fill_screen(s, sm_colour(SM_C_BG));
     graphics_draw_box(s, l->safe_left, l->safe_top, l->safe_right-l->safe_left, 20,
-        graphics_make_color(24, 45, 72, 255));
-    graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
+        sm_colour(SM_C_BAND));
+    graphics_set_color(sm_colour(SM_C_ACCENT), 0);
     graphics_draw_text(s, l->safe_left+4, l->safe_top+6, "SLEEKMENU 64");
-    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+    graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
     graphics_draw_text(s, l->safe_right - 4 - (int)strlen(SM_VERSION) * FONT_WIDTH,
         l->safe_top+6, SM_VERSION);
-    graphics_set_color(graphics_make_color(240, 240, 232, 255), 0);
+    graphics_set_color(sm_colour(SM_C_TEXT), 0);
     snprintf(line, sizeof(line), "%c %s", indicators[indicator_frame % 4], phase);
     draw_truncated(s, l->safe_left+4, l->safe_top+38, line, max_chars);
     if (progress != NULL) {
-        graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
         graphics_draw_text(s, l->safe_left+4, l->safe_top+58, "PATH");
         draw_path_tail(s, l->safe_left+4, l->safe_top+69, progress->current_directory, max_chars);
         snprintf(line, sizeof(line), "DIR %lu  FILE %lu  ROM %lu", (unsigned long)progress->directories_scanned,
             (unsigned long)progress->entries_inspected, (unsigned long)progress->roms_found);
         graphics_draw_text(s, l->safe_left+4, l->safe_top+84, line);
     }
-    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+    graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
     draw_status(s, l, note ? note : "");
 }
 
@@ -364,7 +386,7 @@ static void draw_cover_scaled(surface_t *dst, int x, int y, sprite_t *sprite,
     int width, int height) {
     surface_t src = sprite_get_pixels(sprite);
     if (surface_get_format(dst) != FMT_RGBA16 || surface_get_format(&src) != FMT_RGBA16) {
-        graphics_draw_box(dst, x, y, width, height, graphics_make_color(35, 42, 52, 255));
+        graphics_draw_box(dst, x, y, width, height, sm_colour(SM_C_WELL));
         return;
     }
     if (x < 0 || y < 0 || x + width > dst->width || y + height > dst->height) return;
@@ -1199,8 +1221,8 @@ static void render_description(sm_ui_t *ui, const sm_layout_t *l, const char *te
     ui->desc_idle = 0;
     ui->desc_manual = false;
     if (!ui->desc_surface.buffer || !text || !text[0]) return;
-    graphics_fill_screen(&ui->desc_surface, graphics_make_color(8, 12, 20, 255));
-    graphics_set_color(graphics_make_color(190, 200, 214, 255), 0);
+    graphics_fill_screen(&ui->desc_surface, sm_colour(SM_C_BG));
+    graphics_set_color(sm_colour(SM_C_TEXT_BODY), 0);
     ui->desc_lines = draw_wrapped(&ui->desc_surface, 0, 0, DESC_LINE, text,
         (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH, DESC_MAX_LINES);
 }
@@ -1277,8 +1299,8 @@ static void advance_flow_description(sm_ui_t *ui, const sm_catalog_t *catalog,
     if (ui->flow_desc_item != item) {
         /* The whole paragraph, once, into the card's surface. */
         lines_fit = ui->desc_surface.height / FLOW_DESC_LINE;
-        graphics_fill_screen(&ui->desc_surface, graphics_make_color(8, 12, 20, 255));
-        graphics_set_color(graphics_make_color(110, 125, 145, 255), 0);
+        graphics_fill_screen(&ui->desc_surface, sm_colour(SM_C_BG));
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         if (!catalog_get(catalog, item, &game) || !game.description) return;
         ui->flow_desc_lines = draw_wrapped(&ui->desc_surface, 0, 0, FLOW_DESC_LINE,
             game.description, flow_desc_chars(l), lines_fit);
@@ -1309,7 +1331,7 @@ static void draw_description(surface_t *s, const sm_layout_t *l, const sm_ui_t *
     if (height < DESC_LINE) return;
     if (!ui->desc_lines || !ui->desc_surface.buffer ||
         surface_get_format(s) != surface_get_format(&ui->desc_surface)) {
-        graphics_set_color(graphics_make_color(190, 200, 214, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_BODY), 0);
         draw_wrapped(s, l->safe_left + 3, top, DESC_LINE, text,
             (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH, height / DESC_LINE);
         return;
@@ -1334,9 +1356,9 @@ static void draw_description(surface_t *s, const sm_layout_t *l, const sm_ui_t *
         int thumb = height * height / total;
         int travel = height - (thumb < 4 ? 4 : thumb);
         if (thumb < 4) thumb = 4;
-        graphics_draw_box(s, l->safe_right - 2, top, 2, height, graphics_make_color(35, 42, 52, 255));
+        graphics_draw_box(s, l->safe_right - 2, top, 2, height, sm_colour(SM_C_WELL));
         graphics_draw_box(s, l->safe_right - 2, top + travel * ui->desc_offset / max, 2, thumb,
-            graphics_make_color(150, 165, 185, 255));
+            sm_colour(SM_C_TEXT_MUTED));
     }
 }
 
@@ -1727,7 +1749,7 @@ static void draw_item_chip(surface_t *s, int x, int y, const sm_catalog_t *c, ui
     const char *genre) {
     if (!item_uncatalogued(c, item)) { draw_chip(s, x, y, genre); return; }
     {
-        uint32_t edge = graphics_make_color(150, 165, 185, 255);
+        uint32_t edge = sm_colour(SM_C_TEXT_MUTED);
         graphics_draw_box(s, x, y, 4, 1, edge);
         graphics_draw_box(s, x, y + 3, 4, 1, edge);
         graphics_draw_box(s, x, y + 1, 1, 2, edge);
@@ -1739,7 +1761,7 @@ static void draw_item_chip(surface_t *s, int x, int y, const sm_catalog_t *c, ui
    button looks like it did nothing -- which is exactly how the feature felt
    before it did anything. */
 static void draw_star(surface_t *s, int x, int y) {
-    uint32_t gold = graphics_make_color(250, 210, 90, 255);
+    uint32_t gold = sm_colour(SM_C_STAR);
     graphics_draw_box(s, x + 2, y, 1, 5, gold);
     graphics_draw_box(s, x, y + 2, 5, 1, gold);
     graphics_draw_box(s, x + 1, y + 1, 3, 3, gold);
@@ -1779,24 +1801,27 @@ static void draw_row_title(surface_t *s, int x, int y, int width, const char *ti
 /* The grid gives up the detail panel for cover size, so the bar carries the
    selected title instead of a key map. The list keeps the key map, because the
    panel already says what is selected. */
-static const char *footer_hint(const sm_catalog_t *c, const sm_ui_t *ui) {
+#define SM_HINTS_LIBRARY "{S}PLAY {A}INFO {<}{>}TABS {^}VIEW {v}STAR {Z}FILTER"
+#define SM_HINTS_COVERFLOW "{S}PLAY {A}INFO {L}{R}LETTER {^}VIEW {v}STAR {Z}FILTER"
+static const char *footer_hint(const sm_catalog_t *c, const sm_ui_t *ui, bool *sentence) {
     static char line[64];
     sm_game_t game;
     /* The line has to fit the safe area, or its tail -- where the favourite
-       key is named -- is lost. C-left and C-right walk the tab strip, which
+       button is -- is lost. C-left and C-right walk the tab strip, which
        is "all", favourites, then the genres -- so the word is TABS rather
        than GENRE, and starring a game is STAR rather than FAV, which would
        otherwise name two different things in one line. */
     /* Coverflow answers to different buttons: the strip is gone, and L and R
        jump by initial instead of by page. */
     /* Start plays, A shows the card; B is the one button nobody needs told
-       about, and dropping it is what makes the line fit at 54 characters. */
-    if (ui->view == SM_VIEW_COVERFLOW)
-        return "START PLAY A INFO L/R LETTER C^ VIEW Cv STAR Z FILTER";
-    if (ui->view != SM_VIEW_GRID)
-        return "START PLAY A INFO C</C> TABS C^ VIEW Cv STAR Z FILTER";
+       about. */
+    *sentence = false;
+    if (ui->view == SM_VIEW_COVERFLOW) return SM_HINTS_COVERFLOW;
+    if (ui->view != SM_VIEW_GRID) return SM_HINTS_LIBRARY;
     if (ui->item_count) {
         uint32_t item = ui->items[ui->selected];
+        /* A title is words, braces and all: it is drawn as a sentence. */
+        *sentence = true;
         /* A folder item carries the catalog index of the first game inside it,
            so reading its title here named the folder after a game. */
         if (folder_label(c, item, ui->folder, line, sizeof(line))) return line;
@@ -1804,8 +1829,9 @@ static const char *footer_hint(const sm_catalog_t *c, const sm_ui_t *ui) {
             snprintf(line, sizeof(line), "%s", game.title);
             return line;
         }
+        *sentence = false;
     }
-    return "START PLAY A INFO C</C> TABS C^ VIEW Cv STAR Z FILTER";
+    return SM_HINTS_LIBRARY;
 }
 
 static void draw_genre_tabs(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui) {
@@ -1816,7 +1842,7 @@ static void draw_genre_tabs(surface_t *s, const sm_layout_t *l, const sm_ui_t *u
     uint32_t count = strip_count(ui);
     uint32_t first = sm_genre_tab_window(ui->genre_tab, count, SM_GENRE_TABS_VISIBLE);
     graphics_draw_box(s, l->safe_left, l->tabs_top, l->list_width, SM_TABS_HEIGHT,
-        graphics_make_color(14, 20, 30, 255));
+        sm_colour(SM_C_BAR));
     for (uint32_t i = first; i < count; i++) {
         const sm_genre_tab_t *tab = strip_genre(ui, i);
         const char *code = tab ? tab->code
@@ -1830,10 +1856,10 @@ static void draw_genre_tabs(surface_t *s, const sm_layout_t *l, const sm_ui_t *u
         if (x + width > l->safe_left + l->list_width) break;
         if (active || marked)
             graphics_draw_box(s, x - 2, l->tabs_top, width + 3, SM_TABS_HEIGHT,
-                active ? graphics_make_color(45, 75, 110, 255)
-                       : graphics_make_color(30, 44, 62, 255));
-        graphics_set_color(active ? graphics_make_color(255, 255, 255, 255)
-            : tab ? genre_colour(tab->name) : graphics_make_color(245, 230, 160, 255), 0);
+                active ? sm_colour(SM_C_SELECT)
+                       : sm_colour(SM_C_TAB));
+        graphics_set_color(active ? sm_colour(SM_C_TEXT_BRIGHT)
+            : tab ? genre_colour(tab->name) : sm_colour(SM_C_ACCENT), 0);
         graphics_draw_text(s, x, l->tabs_top + 2, code);
         x += width + 3;
     }
@@ -1843,14 +1869,14 @@ static void draw_scrollbar(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui
     int track = l->list_height;
     int height, top;
     graphics_draw_box(s, l->scrollbar_x, l->list_top, 1, track,
-        graphics_make_color(28, 38, 54, 255));
+        sm_colour(SM_C_WELL));
     if (ui->item_count <= (uint32_t)l->visible_rows) return;
     height = track * l->visible_rows / (int)ui->item_count;
     if (height < 8) height = 8;
     top = l->list_top + (track - height) * (int)ui->first_visible /
         (int)(ui->item_count - (uint32_t)l->visible_rows);
     graphics_draw_box(s, l->scrollbar_x, top, 1, height,
-        graphics_make_color(90, 120, 155, 255));
+        sm_colour(SM_C_THUMB));
 }
 
 static void draw_list(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
@@ -1875,18 +1901,18 @@ static void draw_list(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
             title = label;
             if (!selected)
                 graphics_draw_box(s, l->safe_left, y, l->list_width, l->row_height,
-                    graphics_make_color(20, 32, 48, 255));
+                    sm_colour(SM_C_STRIPE));
         }
         if (selected) {
             graphics_draw_box(s, l->safe_left, y, l->list_width, l->row_height,
-                graphics_make_color(45, 75, 110, 255));
+                sm_colour(SM_C_SELECT));
             graphics_draw_box(s, l->safe_left, y, 2, l->row_height,
-                graphics_make_color(245, 230, 160, 255));
+                sm_colour(SM_C_ACCENT));
         }
         if (!(item & SM_UI_FOLDER_BIT)) draw_item_chip(s, l->safe_left + 6, y + 3, c, item, game.genre);
-        graphics_set_color(selected ? graphics_make_color(255, 255, 255, 255)
-            : (item & SM_UI_FOLDER_BIT) ? graphics_make_color(245, 230, 160, 255)
-            : graphics_make_color(200, 208, 220, 255), 0);
+        graphics_set_color(selected ? sm_colour(SM_C_TEXT_BRIGHT)
+            : (item & SM_UI_FOLDER_BIT) ? sm_colour(SM_C_ACCENT)
+            : sm_colour(SM_C_TEXT_BODY), 0);
         {
             bool favorite = item_is_favorite(ui, item, &game);
             int text_x = l->safe_left + ((item & SM_UI_FOLDER_BIT) ? 6 : 12);
@@ -1905,15 +1931,15 @@ static void draw_list(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
    names. */
 static void draw_folder_tile(surface_t *s, int x, int y, const char *name, bool selected) {
     const int w = SM_UI_TILE_WIDTH, h = SM_UI_TILE_HEIGHT;
-    uint32_t body = selected ? graphics_make_color(70, 95, 130, 255)
-                             : graphics_make_color(44, 60, 84, 255);
-    uint32_t edge = graphics_make_color(245, 230, 160, 255);
+    uint32_t body = selected ? sm_colour(SM_C_SELECT_HI)
+                             : sm_colour(SM_C_TAB);
+    uint32_t edge = sm_colour(SM_C_ACCENT);
     int top = y + 12, tab = w / 3;
-    graphics_draw_box(s, x, y, w, h, graphics_make_color(24, 32, 44, 255));
+    graphics_draw_box(s, x, y, w, h, sm_colour(SM_C_WELL));
     graphics_draw_box(s, x + 6, y + 7, tab, 5, edge);          /* the raised tab */
     graphics_draw_box(s, x + 6, top, w - 12, h - 22, body);
     graphics_draw_box(s, x + 6, top, w - 12, 1, edge);         /* lit top edge */
-    graphics_set_color(selected ? graphics_make_color(255, 255, 255, 255) : edge, 0);
+    graphics_set_color(selected ? sm_colour(SM_C_TEXT_BRIGHT) : edge, 0);
     draw_truncated(s, x + 2, y + h - 9, name, (w - 4) / SM_FONT_WIDTH);
 }
 
@@ -1935,7 +1961,7 @@ static void draw_grid(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
         selected = pos == ui->selected;
         if (selected)
             graphics_draw_box(s, x - 2, y - 2, SM_UI_TILE_WIDTH + 4, SM_UI_TILE_HEIGHT + 4,
-                graphics_make_color(245, 230, 160, 255));
+                sm_colour(SM_C_ACCENT));
         if (folder_label(c, ui->items[pos], ui->folder, name, sizeof(name))) {
             draw_folder_tile(s, x, y, name, selected);
             continue;
@@ -1945,8 +1971,8 @@ static void draw_grid(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
                 SM_UI_TILE_WIDTH, SM_UI_TILE_HEIGHT);
         else {
             graphics_draw_box(s, x, y, SM_UI_TILE_WIDTH, SM_UI_TILE_HEIGHT,
-                graphics_make_color(35, 42, 52, 255));
-            graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+                sm_colour(SM_C_WELL));
+            graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
             draw_truncated(s, x + 2, y + SM_UI_TILE_HEIGHT / 2 - 4, game.title,
                 (SM_UI_TILE_WIDTH - 4) / SM_FONT_WIDTH);
         }
@@ -2003,23 +2029,26 @@ static int lerp(int from, int to, uint32_t phase, uint32_t total) {
 
    Colours follow the grid's folder tile, so the two views agree about what a
    folder looks like. */
-static uint16_t rgba16(unsigned red, unsigned green, unsigned blue) {
-    return (uint16_t)(((red >> 3) << 11) | ((green >> 3) << 6) |
-                      ((blue >> 3) << 1) | 1u);
+static uint16_t rgba16(sm_colour_role_t role) {
+    const unsigned char *rgb = sm_colour_rgb(role);
+    return (uint16_t)(((rgb[0] >> 3) << 11) | ((rgb[1] >> 3) << 6) |
+                      ((rgb[2] >> 3) << 1) | 1u);
 }
 
 static const surface_t *flow_folder_surface(void) {
     static uint16_t pixels[SM_COVER_WIDTH * SM_COVER_HEIGHT];
     static surface_t surface;
-    static bool ready;
+    /* The picture is painted once per theme: one more than any theme's
+       index until the first is painted. */
+    static int painted_for = -1;
     const int w = SM_COVER_WIDTH, h = SM_COVER_HEIGHT;
-    const uint16_t backing = rgba16(24, 32, 44);
-    const uint16_t body = rgba16(78, 108, 150);
-    const uint16_t edge = rgba16(245, 230, 160);
-    const uint16_t shade = rgba16(40, 56, 80);
+    const uint16_t backing = rgba16(SM_C_BAR);
+    const uint16_t body = rgba16(SM_C_FOLDER);
+    const uint16_t edge = rgba16(SM_C_ACCENT);
+    const uint16_t shade = rgba16(SM_C_TAB);
     int x, y;
 
-    if (ready) return &surface;
+    if (painted_for == sm_theme_current()) return &surface;
     /* The folder fills its card, the way a cover fills its own. The first
        attempt drew a small icon on a dark field, which was legible face on and
        became an empty black rectangle the moment it turned -- most of what
@@ -2050,7 +2079,7 @@ static const surface_t *flow_folder_surface(void) {
     surface.height = (uint16_t)h;
     surface.stride = (uint16_t)(w * 2);
     surface.buffer = pixels;
-    ready = true;
+    painted_for = sm_theme_current();
     return &surface;
 }
 
@@ -2066,7 +2095,7 @@ static void draw_flow_placeholder(surface_t *s, int x, int centre_y, int width,
     int near_height, int far_height) {
     int height = near_height < far_height ? near_height : far_height;
     graphics_draw_box(s, x, centre_y - height / 2, width, height,
-        graphics_make_color(28, 36, 48, 255));
+        sm_colour(SM_C_WELL));
 }
 
 /* The strip of initials along the bottom: where the selection is in the
@@ -2083,12 +2112,12 @@ static void draw_letter_strip(surface_t *s, const sm_layout_t *l, const sm_ui_t 
         glyph[0] = b ? (char)('A' + b - 1) : '#';
         if ((unsigned)b == here) {
             graphics_draw_box(s, x, y - 1, cell - 1, SM_FONT_HEIGHT + 2,
-                graphics_make_color(245, 230, 160, 255));
-            graphics_set_color(graphics_make_color(20, 24, 32, 255), 0);
+                sm_colour(SM_C_ACCENT));
+            graphics_set_color(sm_colour(SM_C_ACCENT_INK), 0);
         } else if (ui->initials & (1u << b)) {
-            graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         } else {
-            graphics_set_color(graphics_make_color(55, 64, 78, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_FAINT), 0);
         }
         graphics_draw_text(s, x + (cell - SM_FONT_WIDTH) / 2, y, glyph);
     }
@@ -2116,7 +2145,7 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
     int chars = (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH;
 
     if (!ui->item_count) {
-        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         draw_truncated(s, l->safe_left + 6, centre_y,
             ui->genre_tab == SM_STRIP_HISTORY
                 ? "Nothing played yet. Launch something and it lands here."
@@ -2211,7 +2240,7 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
             snprintf(label, sizeof(label), "[%s]", name);
         else
             snprintf(label, sizeof(label), "%s", game.title);
-        graphics_set_color(graphics_make_color(255, 255, 255, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_BRIGHT), 0);
         draw_truncated(s, l->safe_left + 6, y, label, chars);
 
         if (folder) {
@@ -2232,7 +2261,7 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
                     used ? "  " : "", (unsigned)game.players);
         }
         if (facts[0]) {
-            graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
             draw_truncated(s, l->safe_left + 6, y + 11, facts, chars);
         }
         /* Two lines of the box back: enough to tell two games apart, not so
@@ -2260,7 +2289,7 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
                     dst += s->stride;
                 }
             } else if (room > 0) {
-                graphics_set_color(graphics_make_color(110, 125, 145, 255), 0);
+                graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
                 draw_wrapped(s, l->safe_left + 6, y + 22, FLOW_DESC_LINE, game.description,
                     chars, room);
             }
@@ -2283,7 +2312,7 @@ static void draw_panel(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c
         return;
     if (ui->items[ui->selected] & SM_UI_FOLDER_BIT) {
         char name[64];
-        graphics_set_color(graphics_make_color(130, 145, 160, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         if (folder_label(c, ui->items[ui->selected], ui->folder, name, sizeof(name)))
             draw_truncated(s, x, y + 2, name, chars);
         graphics_draw_text(s, x, y + 14, "FOLDER");
@@ -2295,20 +2324,23 @@ static void draw_panel(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c
         /* No box because nobody has looked, which is worth saying apart
            from no box because there is none. */
         graphics_draw_box(s, x, y, SM_COVER_WIDTH, SM_COVER_HEIGHT,
-            graphics_make_color(35, 42, 52, 255));
-        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+            sm_colour(SM_C_WELL));
+        graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         graphics_draw_text(s, x + (SM_COVER_WIDTH - 6 * SM_FONT_WIDTH) / 2, y + 26, "NOT IN");
         graphics_draw_text(s, x + (SM_COVER_WIDTH - 7 * SM_FONT_WIDTH) / 2, y + 36, "CATALOG");
     } else {
         graphics_draw_box(s, x, y, SM_COVER_WIDTH, SM_COVER_HEIGHT,
-            graphics_make_color(35, 42, 52, 255));
-        graphics_set_color(graphics_make_color(130, 145, 160, 255), 0);
+            sm_colour(SM_C_WELL));
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, x + (SM_COVER_WIDTH - 6 * SM_FONT_WIDTH) / 2, y + 32, "NO ART");
     }
     y += SM_COVER_HEIGHT + 4;
-    graphics_set_color(graphics_make_color(240, 240, 232, 255), 0);
+    graphics_set_color(sm_colour(SM_C_TEXT), 0);
     draw_truncated(s, x, y, game.title, chars);
-    y += 12;
+    /* Eleven, not twelve: the help bar is a pixel taller than the text it
+       used to hold, and this is where the panel gives that pixel back, so
+       the seven facts and the path under them all still fit on NTSC. */
+    y += 11;
 
     {
         static const char *LABELS[] = {"YEAR", "PUB", "GENRE", "REGION", "SAVE", "PAK", "SIZE"};
@@ -2341,18 +2373,18 @@ static void draw_panel(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c
         for (int row = 0; row < 7; row++) {
             int label_width = 6 * SM_FONT_WIDTH;
             if (y + SM_FONT_HEIGHT > l->footer_top - 10) break;
-            graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
             graphics_draw_text(s, x, y, LABELS[row]);
             graphics_set_color(row == 4
-                ? graphics_make_color(245, 230, 160, 255)
-                : graphics_make_color(240, 240, 232, 255), 0);
+                ? sm_colour(SM_C_ACCENT)
+                : sm_colour(SM_C_TEXT), 0);
             if (row == 2) draw_chip(s, x + label_width, y + 2, game.genre);
             draw_truncated(s, x + label_width + (row == 2 ? 6 : 0), y,
                 values[row][0] ? values[row] : "-",
                 chars - 6 - (row == 2 ? 1 : 0));
             y += 9;
         }
-        graphics_set_color(graphics_make_color(90, 105, 125, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         snprintf(line, sizeof(line), "%s", game.path);
         if (y + SM_FONT_HEIGHT <= l->footer_top - 2)
             draw_path_tail(s, x, l->footer_top - 10, line, chars);
@@ -2376,21 +2408,21 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
     char count[24];
 
     graphics_draw_box(s, l->safe_left, l->safe_top, width, SM_HEADER_HEIGHT,
-        graphics_make_color(24, 45, 72, 255));
-    graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
+        sm_colour(SM_C_BAND));
+    graphics_set_color(sm_colour(SM_C_ACCENT), 0);
     graphics_draw_text(s, l->safe_left + 3, l->safe_top + 3, "FILTERS");
     snprintf(count, sizeof(count), "%u shown", (unsigned)ui->item_count);
-    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+    graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
     graphics_draw_text(s, l->safe_right - 3 - (int)strlen(count) * SM_FONT_WIDTH,
         l->safe_top + 3, count);
 
     /* The genre grid: three across, every tab the card produced. */
     if (ui->filter_row == 0)
         graphics_draw_box(s, l->safe_left, y - 2, width, 12,
-            graphics_make_color(45, 75, 110, 255));
+            sm_colour(SM_C_SELECT));
     graphics_set_color(ui->filter_row == 0
-        ? graphics_make_color(255, 255, 255, 255)
-        : graphics_make_color(240, 240, 232, 255), 0);
+        ? sm_colour(SM_C_TEXT_BRIGHT)
+        : sm_colour(SM_C_TEXT), 0);
     graphics_draw_text(s, l->safe_left + 4, y, "GENRE");
     y += 13;
     {
@@ -2404,17 +2436,17 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
             const char *label = tab ? (tab->name[0] ? tab->name : "All genres")
                 : (i == SM_STRIP_HISTORY ? "Recently played" : "Favourites");
             graphics_draw_box(s, x, row_y - 1, cell - 3, 11,
-                active ? graphics_make_color(45, 75, 110, 255)
-                       : graphics_make_color(18, 25, 36, 255));
+                active ? sm_colour(SM_C_SELECT)
+                       : sm_colour(SM_C_BAR));
             if (tab) draw_chip(s, x + 3, row_y + 2, tab->name);
             else draw_star(s, x + 2, row_y + 2);
-            graphics_set_color(active ? graphics_make_color(255, 255, 255, 255)
-                : graphics_make_color(210, 218, 230, 255), 0);
+            graphics_set_color(active ? sm_colour(SM_C_TEXT_BRIGHT)
+                : sm_colour(SM_C_TEXT_BODY), 0);
             draw_truncated(s, x + 9, row_y, label, (cell - 30) / SM_FONT_WIDTH);
             snprintf(count, sizeof(count), "%lu", (unsigned long)(tab ? tab->count
                 : i == SM_STRIP_HISTORY ? sm_history_count(&ui->history)
                                         : ui->favorites.count));
-            graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
             graphics_draw_text(s, x + cell - 6 - (int)strlen(count) * SM_FONT_WIDTH,
                 row_y, count);
         }
@@ -2438,24 +2470,19 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
         if (row == 5) shown = ui->filter.favorites_only ? "Only" : "Any";
         if (row == ui->filter_row)
             graphics_draw_box(s, l->safe_left, y - 2, width, 11,
-                graphics_make_color(45, 75, 110, 255));
-        graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+                sm_colour(SM_C_SELECT));
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, l->safe_left + 4, y, LABELS[row]);
         graphics_set_color(row == ui->filter_row
-            ? graphics_make_color(255, 255, 255, 255)
-            : graphics_make_color(240, 240, 232, 255), 0);
+            ? sm_colour(SM_C_TEXT_BRIGHT)
+            : sm_colour(SM_C_TEXT), 0);
         draw_truncated(s, l->safe_left + 10 * SM_FONT_WIDTH + 4, y, shown,
             (l->safe_right - l->safe_left - 10 * SM_FONT_WIDTH - 8) / SM_FONT_WIDTH);
         y += 12;
     }
 
-    graphics_draw_box(s, l->safe_left, l->footer_top, width, SM_FOOTER_HEIGHT,
-        graphics_make_color(16, 22, 32, 255));
-    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
-    draw_truncated(s, l->safe_left + 3, l->footer_top + 2,
-        c->discovery_mode ? "No catalog: only folders filter.  B APPLY"
-                          : "UP/DOWN ROW   D-PAD <> CHANGE   Z CLEAR   B APPLY",
-        (width - 6) / SM_FONT_WIDTH);
+    draw_help(s, l, c->discovery_mode ? "No catalog: only folders filter. {B}APPLY"
+                                      : "{|}ROW {-}CHANGE {Z}CLEAR {B}APPLY");
 }
 
 /* What someone about to play a game wants to know, and nothing else: what it
@@ -2489,16 +2516,16 @@ static void draw_load_bar(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui)
     /* Track first, then its top edge, then the fill over both -- in that
        order. Drawing the edge last put a dark line along the top of the
        filled part, which is the opposite of what it is for. */
-    graphics_draw_box(s, x, y, width, 7, graphics_make_color(20, 28, 40, 255));
-    graphics_draw_box(s, x, y, width, 1, graphics_make_color(40, 54, 74, 255));
+    graphics_draw_box(s, x, y, width, 7, sm_colour(SM_C_BAR));
+    graphics_draw_box(s, x, y, width, 1, sm_colour(SM_C_TAB));
     if (filled > 0)
         graphics_draw_box(s, x, y, filled, 7, ui->load_verifying
-            ? graphics_make_color(200, 170, 70, 255)
-            : graphics_make_color(70, 140, 200, 255));
+            ? sm_colour(SM_C_PROGRESS_VERIFY)
+            : sm_colour(SM_C_PROGRESS));
     /* A bright leading edge, so a bar at 3% reads as a bar and not a smudge. */
     if (filled > 0 && filled < width)
         graphics_draw_box(s, x + filled - 1, y, 1, 7,
-            graphics_make_color(235, 245, 255, 255));
+            sm_colour(SM_C_PROGRESS_HEAD));
 
     /* Rounded up, not truncated: a 700 KiB homebrew showed "0/0 MB" beside a
        perfectly correct percentage. */
@@ -2507,7 +2534,7 @@ static void draw_load_bar(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui)
         (unsigned long)percent,
         (unsigned long)((ui->load_done_kib + 1023u) >> 10),
         (unsigned long)((ui->load_total_kib + 1023u) >> 10));
-    graphics_set_color(graphics_make_color(200, 214, 232, 255), 0);
+    graphics_set_color(sm_colour(SM_C_TEXT_BODY), 0);
     draw_truncated(s, x, y - 10, line, (width) / SM_FONT_WIDTH);
 }
 
@@ -2524,8 +2551,8 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
     char line[64];
 
     graphics_draw_box(s, l->safe_left, l->safe_top, width, SM_HEADER_HEIGHT,
-        graphics_make_color(24, 45, 72, 255));
-    graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
+        sm_colour(SM_C_BAND));
+    graphics_set_color(sm_colour(SM_C_ACCENT), 0);
     draw_truncated(s, l->safe_left + 3, l->safe_top + 3,
         ui->diagnostics ? "DIAGNOSTICS" : have ? game.title : "LAUNCH", chars);
 
@@ -2543,24 +2570,21 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
         snprintf(values[4], sizeof(values[4]), "%s", "D-PAD to run");
         snprintf(values[5], sizeof(values[5]), "%s", SM_ABOUT);
         for (int row = 0; row < 6; row++) {
-            graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
             graphics_draw_text(s, l->safe_left + 3, y, LABELS[row]);
-            graphics_set_color(graphics_make_color(240, 240, 232, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT), 0);
             if (row == 3) draw_path_tail(s, l->safe_left + 9 * SM_FONT_WIDTH + 6, y, values[row],
                 (l->safe_right - l->safe_left - 9 * SM_FONT_WIDTH - 10) / SM_FONT_WIDTH);
             else draw_truncated(s, l->safe_left + 9 * SM_FONT_WIDTH + 6, y, values[row],
                 (l->safe_right - l->safe_left - 9 * SM_FONT_WIDTH - 10) / SM_FONT_WIDTH);
             y += 11;
         }
-        graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
         /* A load can be started with the diagnostics page open -- Start is not
            gated on it -- and this branch returns before the card's own bar. */
         draw_load_bar(s, l, ui);
         draw_status(s, l, launch_status_message());
-        graphics_draw_box(s, l->safe_left, l->footer_top, width, SM_FOOTER_HEIGHT,
-            graphics_make_color(16, 22, 32, 255));
-        draw_truncated(s, l->safe_left + 3, l->footer_top + 2,
-            "D-PAD RUN PROBE   Z BACK TO GAME   B CANCEL", chars);
+        draw_help(s, l, "{+}RUN PROBE {Z}BACK TO GAME {B}CANCEL");
         return;
     }
 
@@ -2568,14 +2592,14 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
     if (ui->cover_sprite) draw_cover(s, l->safe_left + 3, y, ui->cover_sprite);
     else {
         graphics_draw_box(s, l->safe_left + 3, y, SM_COVER_WIDTH, SM_COVER_HEIGHT,
-            graphics_make_color(35, 42, 52, 255));
-        graphics_set_color(graphics_make_color(130, 145, 160, 255), 0);
+            sm_colour(SM_C_WELL));
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, l->safe_left + 3 + (SM_COVER_WIDTH - 6 * SM_FONT_WIDTH) / 2, y + 32, "NO ART");
     }
 
     {
         int info_y = y;
-        graphics_set_color(graphics_make_color(240, 240, 232, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT), 0);
         if (have) draw_truncated(s, text_x, info_y, game.title, text_chars);
         info_y += 12;
         if (have && (game.year || game.publisher[0])) {
@@ -2583,13 +2607,13 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
                 snprintf(line, sizeof(line), "%u  %s", (unsigned)game.year, game.publisher);
             else if (game.year) snprintf(line, sizeof(line), "%u", (unsigned)game.year);
             else snprintf(line, sizeof(line), "%s", game.publisher);
-            graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
             draw_truncated(s, text_x, info_y, line, text_chars);
         }
         info_y += 11;
         if (have && game.genre[0]) {
             draw_chip(s, text_x, info_y + 2, game.genre);
-            graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
             draw_truncated(s, text_x + 6, info_y, game.genre, text_chars - 1);
         }
         info_y += 11;
@@ -2602,7 +2626,7 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
                 size_t used = strlen(line);
                 snprintf(line + used, sizeof(line) - used, "%uP", (unsigned)game.players);
             }
-            graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
             draw_truncated(s, text_x, info_y, line[0] ? line : "-", text_chars);
         }
         info_y += 15;
@@ -2611,9 +2635,9 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
            to, and how big it is -- the second because a 64 MB image takes
            visibly longer to load than an 8 MB one, and because it is the first
            thing anyone checks about a hack. */
-        graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, text_x, info_y, "SAVE");
-        graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
+        graphics_set_color(sm_colour(SM_C_ACCENT), 0);
         draw_truncated(s, text_x + LABEL_COLUMN, info_y,
             launch_selected_is_disk() ? "ON THE 64DD DISK" : sm_save_type_name(launch_save_type()),
             text_chars - 6);
@@ -2621,44 +2645,44 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
         if (launch_sibling_disk()[0]) {
             /* The expansion disk found beside the ROM, by its file name. */
             const char *name = strrchr(launch_sibling_disk(), '/');
-            graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
             graphics_draw_text(s, text_x, info_y, "64DD");
-            graphics_set_color(graphics_make_color(240, 240, 232, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT), 0);
             draw_truncated(s, text_x + LABEL_COLUMN, info_y, name ? name + 1 : launch_sibling_disk(), text_chars - 6);
             info_y += 11;
         }
         if (launch_cheats_available()) {
             const sm_cheat_set_t *set = launch_cheats();
             uint32_t on = sm_cheats_enabled_count(set);
-            graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
             graphics_draw_text(s, text_x, info_y, "CHEATS");
             if (on && cheat_warning()) {
                 /* The column beside the cover is nineteen characters wide;
                    the reason is on the cheats page, one press away. */
                 snprintf(line, sizeof(line), "%lu on, WILL NOT RUN", (unsigned long)on);
-                graphics_set_color(graphics_make_color(255, 96, 80, 255), 0);
+                graphics_set_color(sm_colour(SM_C_ERROR), 0);
             } else {
                 snprintf(line, sizeof(line), "%lu of %lu on", (unsigned long)on, (unsigned long)set->count);
-                graphics_set_color(on ? graphics_make_color(245, 230, 160, 255)
-                                      : graphics_make_color(240, 240, 232, 255), 0);
+                graphics_set_color(on ? sm_colour(SM_C_ACCENT)
+                                      : sm_colour(SM_C_TEXT), 0);
             }
             draw_truncated(s, text_x + LABEL_COLUMN_WIDE, info_y, line, text_chars - 8);
             info_y += 11;
         }
-        graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, text_x, info_y, "SIZE");
         sm_format_rom_size(ui->selected_size, line, sizeof(line));
-        graphics_set_color(graphics_make_color(240, 240, 232, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT), 0);
         draw_truncated(s, text_x + LABEL_COLUMN, info_y, line, text_chars - 6);
         info_y += 11;
         if (ui->selected_features) {
-            graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
             graphics_draw_text(s, text_x, info_y, "NEEDS");
             snprintf(line, sizeof(line), "%s%s%s",
                 (ui->selected_features & SM_FEAT_CPAK) ? "CTRL PAK " : "",
                 (ui->selected_features & SM_FEAT_RPAK) ? "RUMBLE " : "",
                 (ui->selected_features & SM_FEAT_TPAK) ? "TRANSFER" : "");
-            graphics_set_color(graphics_make_color(240, 240, 232, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT), 0);
             draw_truncated(s, text_x + LABEL_COLUMN, info_y, line, text_chars - 6);
             info_y += 11;
         }
@@ -2676,22 +2700,19 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
            under "START play" while the ROM is already halfway in. */
         draw_load_bar(s, l, ui);
     } else if (launch_last_result() != SM_LAUNCH_OK) {
-        graphics_set_color(graphics_make_color(255, 96, 80, 255), 0);
+        graphics_set_color(sm_colour(SM_C_ERROR), 0);
         draw_truncated(s, l->safe_left + 3, y, launch_status_message(), chars);
     } else {
-        graphics_set_color(graphics_make_color(255, 255, 255, 255), 0);
-        graphics_draw_text(s, l->safe_left + 3, y, "START   play");
-        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
-        graphics_draw_text(s, l->safe_left + 3, y + 11, "B       back");
+        graphics_set_color(sm_colour(SM_C_TEXT_BRIGHT), 0);
+        sm_hints_draw(s, l->safe_left + 3, y, l->safe_right - 3, "{S} play");
+        graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
+        sm_hints_draw(s, l->safe_left + 3, y + 11, l->safe_right - 3, "{B} back");
     }
 
-    graphics_draw_box(s, l->safe_left, l->footer_top, width, SM_FOOTER_HEIGHT,
-        graphics_make_color(16, 22, 32, 255));
-    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
-    snprintf(line, sizeof(line), "%s LOAD  A BOX  C^ SWITCH  Z DETAILS%s",
+    snprintf(line, sizeof(line), "%s LOAD {A}BOX {^}SWITCH {Z}DETAILS%s",
         launch_boot_mode() == SM_BOOT_VERIFY ? "VERIFIED" : "FAST",
-        launch_cheats_available() ? "  Cv CHEATS" : "");
-    draw_truncated(s, l->safe_left + 3, l->footer_top + 2, line, chars);
+        launch_cheats_available() ? " {v}CHEATS" : "");
+    draw_help(s, l, line);
 }
 
 /* The box view: the game's cover as large as the screen allows, centred
@@ -2709,8 +2730,8 @@ static void draw_box_view(surface_t *s, const sm_layout_t *l, const sm_catalog_t
     int box_w, box_h, x, y;
 
     graphics_draw_box(s, l->safe_left, l->safe_top, width, SM_HEADER_HEIGHT,
-        graphics_make_color(24, 45, 72, 255));
-    graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
+        sm_colour(SM_C_BAND));
+    graphics_set_color(sm_colour(SM_C_ACCENT), 0);
     draw_truncated(s, l->safe_left + 3, l->safe_top + 3, have ? game.title : "BOX", chars);
 
     if (ui->box_sprite) {
@@ -2730,27 +2751,24 @@ static void draw_box_view(surface_t *s, const sm_layout_t *l, const sm_catalog_t
         box_h = SM_COVER_HEIGHT * 2;
         x = l->safe_left + (width - box_w) / 2;
         y = top + (bottom - top - box_h) / 2;
-        graphics_draw_box(s, x, y, box_w, box_h, graphics_make_color(35, 42, 52, 255));
-        graphics_set_color(graphics_make_color(130, 145, 160, 255), 0);
+        graphics_draw_box(s, x, y, box_w, box_h, sm_colour(SM_C_WELL));
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, x + (box_w - 6 * SM_FONT_WIDTH) / 2, y + box_h / 2 - 4, "NO ART");
     }
     if (!ui->box_sprite && ui->cover_sprite) {
-        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         draw_truncated(s, l->safe_left + 3, l->footer_top - SM_FONT_HEIGHT - 2,
             sm_cover_pack_ready(&ui->covers_large)
                 ? "No large cover for this game"
                 : "No large covers on this card: run sleekmenu-prep again",
             chars);
     } else if (!ui->box_sprite && have && item_uncatalogued(c, ui->items[ui->selected])) {
-        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         draw_truncated(s, l->safe_left + 3, l->footer_top - SM_FONT_HEIGHT - 2,
             "Not in the catalog yet: sleekmenu-prep adds its box", chars);
     }
 
-    graphics_draw_box(s, l->safe_left, l->footer_top, width, SM_FOOTER_HEIGHT,
-        graphics_make_color(16, 22, 32, 255));
-    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
-    draw_truncated(s, l->safe_left + 3, l->footer_top + 2, "START PLAY   B BACK", chars);
+    draw_help(s, l, "{S}PLAY {B}BACK");
 }
 
 /* The cheats page: every entry the game's file holds, on or off, one per
@@ -2766,26 +2784,26 @@ static void draw_cheats(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui) {
     char line[96];
 
     graphics_draw_box(s, l->safe_left, l->safe_top, width, SM_HEADER_HEIGHT,
-        graphics_make_color(24, 45, 72, 255));
-    graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
+        sm_colour(SM_C_BAND));
+    graphics_set_color(sm_colour(SM_C_ACCENT), 0);
     graphics_draw_text(s, l->safe_left + 3, l->safe_top + 3, "CHEATS");
     snprintf(line, sizeof(line), "%lu of %lu on", (unsigned long)sm_cheats_enabled_count(set),
         (unsigned long)set->count);
-    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+    graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
     graphics_draw_text(s, l->safe_right - 3 - (int)strlen(line) * SM_FONT_WIDTH, l->safe_top + 3, line);
 
     /* The file the entries came from, then the notes: how it was found,
        and why nothing would happen. */
-    graphics_set_color(graphics_make_color(110, 128, 150, 255), 0);
+    graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
     draw_truncated(s, l->safe_left + 3, y, launch_cheats_source()->path, chars - 1);
     y += 11;
     if (cheat_region_note()) {
-        graphics_set_color(graphics_make_color(255, 170, 80, 255), 0);
+        graphics_set_color(sm_colour(SM_C_WARN), 0);
         draw_truncated(s, l->safe_left + 3, y, cheat_region_note(), chars - 1);
         y += 11;
     }
     if (cheat_warning()) {
-        graphics_set_color(graphics_make_color(255, 96, 80, 255), 0);
+        graphics_set_color(sm_colour(SM_C_ERROR), 0);
         draw_truncated(s, l->safe_left + 3, y, cheat_warning(), chars - 1);
         y += 11;
     }
@@ -2794,31 +2812,28 @@ static void draw_cheats(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui) {
         const sm_cheat_t *cheat = &set->cheats[i];
         bool current = i == ui->cheat_row;
         if (current)
-            graphics_draw_box(s, l->safe_left, y - 2, width, 11, graphics_make_color(45, 75, 110, 255));
-        graphics_set_color(cheat->incomplete ? graphics_make_color(110, 120, 135, 255)
-            : cheat->enabled ? graphics_make_color(245, 230, 160, 255)
-            : current ? graphics_make_color(255, 255, 255, 255)
-            : graphics_make_color(210, 218, 230, 255), 0);
+            graphics_draw_box(s, l->safe_left, y - 2, width, 11, sm_colour(SM_C_SELECT));
+        graphics_set_color(cheat->incomplete ? sm_colour(SM_C_TEXT_DIM)
+            : cheat->enabled ? sm_colour(SM_C_ACCENT)
+            : current ? sm_colour(SM_C_TEXT_BRIGHT)
+            : sm_colour(SM_C_TEXT_BODY), 0);
         snprintf(line, sizeof(line), "%s %s", cheat->incomplete ? "[?]" : cheat->enabled ? "[x]" : "[ ]",
             cheat->desc[0] ? cheat->desc : "(no description)");
         draw_truncated(s, l->safe_left + 3, y, line, chars - 1);
         y += 11;
     }
     if (set->count == 0) {
-        graphics_set_color(graphics_make_color(150, 165, 185, 255), 0);
+        graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         graphics_draw_text(s, l->safe_left + 3, y, "The file holds no usable entries");
     }
 
-    graphics_draw_box(s, l->safe_left, l->footer_top, width, SM_FOOTER_HEIGHT,
-        graphics_make_color(16, 22, 32, 255));
-    graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
-    draw_truncated(s, l->safe_left + 3, l->footer_top + 2, "A TOGGLE   L/R PAGE   B BACK", chars);
+    draw_help(s, l, "{A}TOGGLE {L}{R}PAGE {B}BACK");
 }
 
 void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm_ui_t *ui) {
-    graphics_fill_screen(s,graphics_make_color(8,12,20,255));
-    graphics_draw_box(s,l->safe_left,l->safe_top,l->safe_right-l->safe_left,20,graphics_make_color(24,45,72,255));
-    graphics_set_color(graphics_make_color(245,230,160,255),0);
+    graphics_fill_screen(s,sm_colour(SM_C_BG));
+    graphics_draw_box(s,l->safe_left,l->safe_top,l->safe_right-l->safe_left,20,sm_colour(SM_C_BAND));
+    graphics_set_color(sm_colour(SM_C_ACCENT),0);
     if (ui->screen == SM_SCREEN_LAUNCH_DETAILS) {
         draw_launch_card(s, l, c, ui);
         return;
@@ -2833,9 +2848,9 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
     }
     if (ui->screen==SM_SCREEN_FILTERS) { graphics_draw_text(s,l->safe_left+4,l->safe_top+6,"FILTERS"); draw_filters(s,l,c,ui); return; }
     if (!sm_cart_image_intact()) {
-        graphics_set_color(graphics_make_color(255,190,90,255),0);
+        graphics_set_color(sm_colour(SM_C_WARN),0);
         graphics_draw_text(s,l->safe_left+4,l->safe_top+6,"CART IMAGE OVERWRITTEN - RESET FOR ART");
-        graphics_set_color(graphics_make_color(245,230,160,255),0);
+        graphics_set_color(sm_colour(SM_C_ACCENT),0);
     }
     /* --- the library, dense --------------------------------------------- */
     {
@@ -2846,7 +2861,7 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
         /* Title bar: where you are on the left, where you are in the list on
            the right. The count is what a folder of 400 ROMs needs most. */
         graphics_draw_box(s, l->safe_left, l->safe_top, l->safe_right - l->safe_left,
-            SM_HEADER_HEIGHT, graphics_make_color(24, 45, 72, 255));
+            SM_HEADER_HEIGHT, sm_colour(SM_C_BAND));
         /* The folder can be longer than the bar; draw_truncated trims it, and
            the precision keeps the compiler from worrying about the copy. */
         /* The grid has no room for the strip, so the bar carries the active
@@ -2863,12 +2878,12 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
                 (int)sizeof(header) - 8, folder_for_display(ui));
         } else
             snprintf(header, sizeof(header), "/%.*s", (int)sizeof(header) - 2, folder_for_display(ui));
-        graphics_set_color(graphics_make_color(245, 230, 160, 255), 0);
+        graphics_set_color(sm_colour(SM_C_ACCENT), 0);
         draw_truncated(s, l->safe_left + 3, l->safe_top + 3, header, counter_chars - 10);
         if (ui->item_count) {
             snprintf(counter, sizeof(counter), "%u/%u",
                 (unsigned)(ui->selected + 1u), (unsigned)ui->item_count);
-            graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
+            graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
             graphics_draw_text(s, l->safe_right - 3 - (int)strlen(counter) * SM_FONT_WIDTH,
                 l->safe_top + 3, counter);
         }
@@ -2888,12 +2903,14 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
 
         /* Help bar. The list and the grid answer to different buttons, so it
            says what the screen in front of you actually does. */
-        graphics_draw_box(s, l->safe_left, l->footer_top, l->safe_right - l->safe_left,
-            SM_FOOTER_HEIGHT, graphics_make_color(16, 22, 32, 255));
-        graphics_set_color(graphics_make_color(180, 200, 220, 255), 0);
-        draw_truncated(s, l->safe_left + 3, l->footer_top + 2,
-            ui->status ? ui->status : footer_hint(c, ui),
-            (l->safe_right - l->safe_left - 6) / SM_FONT_WIDTH);
+        if (ui->status) {
+            draw_help_sentence(s, l, ui->status);
+        } else {
+            bool sentence = false;
+            const char *line = footer_hint(c, ui, &sentence);
+            if (sentence) draw_help_sentence(s, l, line);
+            else draw_help(s, l, line);
+        }
     }
 }
 

@@ -212,6 +212,8 @@ On the console the work is split into small modules:
 | `folder_scan` | the folder being browsed read off the card for what the catalog does not know; the name rules the whole-card scan shares |
 | `cover_pack` | binary-searched cover lookup in `covers.pak` |
 | `ui` | list, grid and coverflow views, filters, the launch card, the box view, the cheats page |
+| `theme` | the colours, by what each is for; the built-in themes and the card's choice of one |
+| `buttons` | the controller's buttons as pictures, and the help bar's lines of them |
 | `launch_policy` | suffix, magic, size and boot-code checks before anything boots |
 | `flashcart` / `launch` | one interface over the two cartridges; the X7 backend streams the ROM through libcart, the Pro backend (`src/pro/`) has the cartridge's MCU copy it |
 | `x7_rtc` / `x7_save_reg` | the X7's clock and save configuration for the game about to run |
@@ -319,6 +321,35 @@ and a row copy is one. Left alone the window waits two seconds, creeps a
 pixel every four frames to the end, holds, and starts over; up and down
 move it a line and end the automatic scroll for that visit. A bar at the
 right edge says how much there is.
+
+**Colours are named for what they are for.** Nothing in `ui` spells a
+colour as numbers: it asks `theme` for the background, the selection, text
+on the selection -- twenty-five roles -- and the theme in use answers. The
+themes are a table built into the ROM, written from `tools/themes.py` into
+`src/theme_table.h`, which is checked in so the ROM builds without Python
+and held to the tool by a test. Midnight is spelled out; each other theme
+is Midnight with its blues turned to another hue and an accent of its own,
+so a theme cannot forget a role or put dark text on a dark bar, and a test
+measures the contrast of every pair the browser draws together. A warning,
+an error and the favourite star keep their colours in every theme: they
+mean something. The card names its theme in `sleekmenu/theme.txt`, read
+once after the cartridge is found; there is no chooser on the console, so
+no screen and no button is spent on it. The folder picture on the coverflow
+shelf, painted once into a surface, is painted again when the theme is
+another.
+
+**The help bar draws the buttons.** A line of help is written with a
+button's code in braces -- `{S}PLAY {A}INFO {<}{>}TABS` -- and `buttons`
+draws each as a nine-pixel picture: a disc for A, B, Start and the C
+buttons, a key for Z, L and R, a cross for the D-pad, each from a
+nine-by-nine mask and one more for the letter or arrow on it, a box per run
+of pixels. Their colours are the controller's and belong to no theme. A
+picture takes less room than "C^" and "START" did, which is what lets the
+bar keep every word. Measuring a line is the drawing walk without a
+surface, and a test takes every line of help out of `ui.c` and checks it
+fits the bar. The bar is eleven pixels, one more than the text it used to
+hold; the list's panel gives that pixel back between the title and the
+facts.
 
 **Font.** Spleen 5x8, vendored as its BDF and rasterised at build time. The
 video interface's resampling filter stays on: turning it off at 16 bits per

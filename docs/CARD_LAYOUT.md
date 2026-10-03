@@ -25,6 +25,7 @@ this is the reference.
 /sleekmenu/cheats.txt       which cheats are on, per game      written by the browser
 /sleekmenu/cheats/          your own .cht files (optional)     yours
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump     fetched by the tool (--cheats)
+/sleekmenu/theme.txt        the browser's theme, one word      written by the tool (--theme)
 /sleekmenu/art/             your own box art and text (optional)  yours
 
 /ED64/autoexec.v64          a copy of the browser (X7, optional)  written by the tool (--direct-boot)
@@ -61,6 +62,16 @@ writes `catalog.ebc` and `covers.pak` into it, and fetches
 `release-metadata.zip` to the card root when the card has no collection;
 everything else it reads in place. One file of the tool's lives outside
 `sleekmenu/`, and only when asked for: `ED64/autoexec.v64`, below.
+
+## The theme
+
+`sleekmenu/theme.txt` holds the id of one of the themes built into the
+browser, as its first word: `midnight`, `charcoal`, `jungle`, `grape`,
+`fire` or `ice`. The browser reads the file once as it starts, without
+regard to case, and uses Midnight when the file is missing, empty, or names
+a theme that ROM does not have, so a card prepared by a newer tool still
+starts on an older browser. The tool writes the file when a theme is
+chosen; a card that never chose has none.
 
 ## Starting in the browser
 

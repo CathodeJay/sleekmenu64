@@ -74,6 +74,9 @@ static inline void surface_free(surface_t *s) {
 extern char sm_test_text[SM_TEST_TEXT_MAX][96];
 extern int sm_test_text_count;
 extern int sm_test_box_count;
+/* How many boxes were drawn in this colour since the last reset: how a test
+   sees a button's picture, or the colour a theme gave the selection. */
+int sm_test_boxes_of(uint32_t colour);
 extern int sm_test_sprite_loads;
 extern int sm_test_sprite_frees;
 /* Paths sprite_load will answer for; anything else returns NULL. */
