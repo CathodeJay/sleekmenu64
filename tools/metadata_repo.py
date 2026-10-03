@@ -38,7 +38,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from tools import card_layout
+from tools import build_catalog, card_layout
 
 ART_NAME = "boxart_front.png"
 INI_NAME = "metadata.ini"
@@ -65,7 +65,6 @@ CARD_CANDIDATES = (
 # after its own. Every PAL market shares the PAL box.
 _EUROPE = frozenset("PDFISHXYUWL")
 _CODE = re.compile(r"^[A-Za-z0-9]{4}$")
-_MAX_DESCRIPTION = 2000
 
 
 class RepoError(ValueError):
@@ -302,11 +301,7 @@ class MetadataRepo:
             text = self.read(found).decode("utf-8-sig", errors="replace")
         if not text.strip() and info is not None:
             text = info.short_description
-        text = re.sub(r"\s+", " ", text).strip()
-        if len(text) > _MAX_DESCRIPTION:
-            cut = text.rfind(" ", 0, _MAX_DESCRIPTION)
-            text = text[:cut if cut > 0 else _MAX_DESCRIPTION].rstrip() + "..."
-        return text
+        return build_catalog.fit_description(text)
 
     def art_count(self) -> int:
         return sum(1 for name in self._actual if name.endswith("/" + ART_NAME))

@@ -42,7 +42,7 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import (card_catalog, card_layout, coverdb, custom_art, fetch, hires, library, make_sprite,
+from tools import (card_catalog, card_layout, coverdb, custom_art, fetch, genre_map, hires, library, make_sprite,
                    metadata_repo, progress, provenance, sleekmenu_prep, version)
 from tools.metadata_repo import MetadataRepo
 
@@ -904,13 +904,14 @@ class GamesTab:
 
     DETAIL_WIDTH = 400
 
-    def __init__(self, parent, card_of, apply=None, colors=None, database=None, offline=None):
+    def __init__(self, parent, card_of, apply=None, colors=None, database=None, offline=None, genres=None):
         """`apply(path)`, when given, puts the owner's files on the card's
         catalog -- a run of the tool -- after a Save or an Undo, and answers
         "started", "queued", or why not ("no card", "no collection"); the
         window calls applied() when that run ends. `database()` gives the
-        shipped database for the box picker, and `offline()` says whether
-        the owner has turned downloads off."""
+        shipped database for the box picker, `genres()` the genre map the
+        catalog was consolidated with, and `offline()` says whether the
+        owner has turned downloads off."""
         import tkinter as tk
         from tkinter import font as tkfont
         from tkinter import ttk
@@ -918,6 +919,7 @@ class GamesTab:
         self.card_of = card_of
         self.apply = apply
         self.database = database
+        self.genres = genres
         self.offline = offline
         self.colors = colors or {"muted": "#555555", "good": "#2e7d32", "warn": "#8a4b00", "info": "#1f5fa8"}
         # The line under the panel for one game, kept across redraws until
@@ -1110,7 +1112,8 @@ class GamesTab:
         update, read again: after a load, a Save and an Undo. The Show
         choices are counted from it."""
         card = self.card_of()
-        self.pending = (custom_art.pending_edits(card, card, self.document)
+        self.pending = (custom_art.pending_edits(card, card, self.document,
+                                                  self.genres() if self.genres is not None else None)
                         if card is not None and self.document is not None else {})
         games = (self.document or {}).get("games", [])
         self.genre_box.configure(values=sorted({str(g.get("genre") or "") for g in games} - {""}, key=str.casefold))
@@ -1721,8 +1724,15 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             state["database"] = coverdb.load(sleekmenu_prep.data_file("coverdb.csv", Path(state["data"].name)))
         return state["database"]
 
+    def genres() -> dict:
+        """The genre map the run consolidates with, read the same way."""
+        if "genres" not in state:
+            database()
+            state["genres"] = genre_map.load(sleekmenu_prep.data_file("genres.csv", Path(state["data"].name)))
+        return state["genres"]
+
     catalog = GamesTab(catalog_page, current_card, apply=lambda path: apply_edits(path), colors=colors,
-                       database=database, offline=offline_var.get)
+                       database=database, offline=offline_var.get, genres=genres)
     state["catalog"] = catalog
 
     def refresh(*_args, fresh: bool = False) -> None:

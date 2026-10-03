@@ -45,7 +45,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from tools import card_layout
+from tools import build_catalog, card_layout
 
 ART_SUFFIXES = (".png", ".jpg", ".jpeg")
 TEXT_SUFFIX = ".txt"
@@ -155,7 +155,9 @@ def parse_facts(name: str, value: str) -> tuple[str, object] | None:
 
 
 def parse_text(raw: str) -> tuple[str, str, dict]:
-    """Title, description and facts out of a sidecar's text."""
+    """Title, description and facts out of a sidecar's text. The
+    description is the one the catalog will hold: collapsed, and cut if it
+    is longer than the catalog takes."""
     lines = raw.splitlines()
     title, facts = "", {}
     while lines:
@@ -170,7 +172,7 @@ def parse_text(raw: str) -> tuple[str, str, dict]:
             if parsed is not None:
                 facts[parsed[0]] = parsed[1]
         lines = lines[1:]
-    description = " ".join(" ".join(lines).split())
+    description = build_catalog.fit_description(" ".join(lines))
     return title, description, facts
 
 
@@ -357,26 +359,37 @@ def _built_epoch(document: dict) -> float:
         return 0.0
 
 
-def pending_edits(card: Path, roms_root: Path, document: dict) -> dict[str, Pending]:
+def pending_edits(card: Path, roms_root: Path, document: dict,
+                  genres: dict[str, str] | None = None) -> dict[str, Pending]:
     """Every game whose owner's files disagree with the catalog, keyed by
     ROM path. Text is compared field by field, so a file the last Prepare
     already read is not pending; a picture is pending when it is not the
     file the catalog's sprite was made from -- by the size and time the
     catalog recorded, so a picture copied in with an old date still
     counts -- or, for a catalog that recorded nothing, when it is newer
-    than the catalog or the catalog's box is not the owner's."""
-    from tools import metadata_repo, provenance
+    than the catalog or the catalog's box is not the owner's.
+
+    The files are looked up the way the run looked them up: from the games
+    folder the catalog was built for, which is what a per-ROM sprite is
+    named after. `genres` is the genre map, when the caller has it: a
+    genre the owner wrote as libretro spells it is the catalog's
+    consolidated one, not a change."""
+    from tools import genre_map, metadata_repo, provenance
     folder = art_dir(card)
     index = Index()
     built = _built_epoch(document)
     sprites = document.get("sprites") if isinstance(document.get("sprites"), dict) else None
+    chosen = str(document.get("roms", "") or "").strip("/")
     out: dict[str, Pending] = {}
     for game in document.get("games", []):
         rom_path = str(game.get("path", ""))
         code = str(game.get("code") or "")
         sources = game.get("sources") or {}
-        text = find_text(index, roms_root, rom_path, folder, code)
-        art = find_art(index, roms_root, rom_path, folder, code)
+        inside = bool(chosen) and rom_path.startswith(chosen + "/")
+        root = roms_root / chosen if inside else roms_root
+        relative = rom_path[len(chosen) + 1:] if inside else rom_path
+        text = find_text(index, root, relative, folder, code)
+        art = find_art(index, root, relative, folder, code)
         fields: dict = {}
         removed: list[str] = []
         given = {}
@@ -386,13 +399,15 @@ def pending_edits(card: Path, roms_root: Path, document: dict) -> dict[str, Pend
                 given["title"] = text.title
             if text.description:
                 given["description"] = text.description
+            if genres and given.get("genre"):
+                given["genre"] = genre_map.apply(genres, given["genre"])
         for name, value in given.items():
             blank = [] if name == "regions" else ("" if name in ("genre", "publisher", "title", "description") else 0)
             if value != game.get(name, blank):
                 fields[name] = value
         # What the catalog has as the owner's that no file gives any more:
         # the next Prepare takes it back to the collection's or nothing.
-        for name in ("title", "description", "genre", "publisher", "year", "players"):
+        for name in ("title", "description", "genre", "publisher", "year", "players", "regions"):
             if sources.get(name) == provenance.YOURS and name not in given:
                 removed.append(name)
         picture = None

@@ -56,4 +56,4 @@ def is_yours(label: str) -> bool:
 
 def edited(sources: dict) -> bool:
     """Whether any field of a game is the card owner's own."""
-    return any(is_yours(str(sources.get(field, ""))) for field in FIELDS)
+    return any(is_yours(str(source)) for source in sources.values())

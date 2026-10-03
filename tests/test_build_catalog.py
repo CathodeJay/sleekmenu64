@@ -73,6 +73,21 @@ class CatalogBuilderTests(unittest.TestCase):
         with self.assertRaisesRegex(build_catalog.CatalogError, "longer than"):
             build_catalog.normalize({"schema_version": 1, "games": [game(description="x" * 2001)]})
 
+    def test_a_description_is_fitted_before_it_reaches_the_catalog(self):
+        """Whatever hands the catalog a description cuts it first, at a
+        word, so the refusal above is never what a card owner meets."""
+        fit = build_catalog.fit_description
+        self.assertEqual(fit("  Two   words.\n"), "Two words.")
+        self.assertEqual(fit("x" * 2000), "x" * 2000)
+        long = fit("word " * 900)
+        self.assertTrue(long.endswith("word..."))
+        self.assertLessEqual(len(long), build_catalog.MAX_DESCRIPTION)
+        # measured as the console draws it: an ellipsis is three characters there
+        wide = fit("\u2026" * 1500)
+        self.assertLessEqual(len(build_catalog.console_text(wide)), build_catalog.MAX_DESCRIPTION)
+        for fitted in (long, wide):
+            build_catalog.normalize({"schema_version": 1, "games": [game(description=fitted)]})
+
     def test_titles_and_publishers_are_console_text_too(self):
         games = build_catalog.normalize({"schema_version": 1, "games": [
             game(title="Pok\u00e9mon Stadium", publisher="Nintendo\u2122")]})

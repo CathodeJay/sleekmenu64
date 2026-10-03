@@ -78,6 +78,22 @@ def console_text(value: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def fit_description(text: str) -> str:
+    """A description as the catalog will take it: whitespace collapsed, and
+    one that is too long cut at a word with "..." after it. The limit is on
+    what the console draws, so that is what is measured. Everything that
+    hands the catalog a description -- the collection's, the owner's --
+    passes it through here, so no text of any length can stop a run."""
+    text = re.sub(r"\s+", " ", text).strip()
+    limit = MAX_DESCRIPTION - 3
+    fitted = text
+    while len(console_text(fitted)) > MAX_DESCRIPTION and limit > 0:
+        cut = text.rfind(" ", 0, limit)
+        fitted = text[:cut if cut > 0 else limit].rstrip() + "..."
+        limit -= 50
+    return fitted
+
+
 def _description(value: object, field: str) -> str:
     text = _text(value, field, required=False)
     text = console_text(text)

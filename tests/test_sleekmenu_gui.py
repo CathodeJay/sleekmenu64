@@ -738,6 +738,18 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(str(games.labels["description"].cget("text")), "Description · yours")
             self.assertEqual(str(games.show_buttons["changed"].cget("text")), "Changed by me 2")
             self.assertEqual(games.tree.set("ROMS/Hacks/Kaizo.z64", "status"), "Changed by me")
+            # a new box, on this card whose games folder is ROMS: on the
+            # card after Save, and not left waiting
+            games.tree.selection_set("ROMS/Wave Race 64 (USA).z64")
+            root.update()
+            games.set_picture(str(picture(Path(scratch) / "box.png")))
+            games.save_edit()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(games.pending, {})
+            self.assertEqual(games.tree.set("ROMS/Wave Race 64 (USA).z64", "status"), "Changed by me")
+            self.assertEqual(str(games.labels["description"].cget("text")), "Description · yours")
+            self.assertEqual(games.box.cget("text"), "")
             # and an Undo goes back the same way
             games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()

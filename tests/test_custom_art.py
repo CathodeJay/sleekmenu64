@@ -339,6 +339,41 @@ class EditTests(unittest.TestCase):
         self.assertIsNone(pending["ROMS/Mario.z64"].picture)
         time.sleep(0)
 
+    def test_nothing_is_pending_after_a_run_on_a_card_with_a_games_folder_chosen(self):
+        """A per-ROM picture's sprite is named after the ROM's path from the
+        games folder, which is what the run walks. Looked up from the card
+        root instead, the sprite the catalog recorded is never found, and
+        every picture of the owner's looks changed for ever."""
+        import contextlib
+        import io
+        from unittest import mock
+        from tools import card_catalog, sleekmenu_prep
+        picture(self.roms / "Hacks" / "Star Road.png")              # beside the ROM
+        custom_art.save(self.card, self.mario, self.source, "", "")   # and one in sleekmenu/art/
+        (self.art / "Star Road.txt").write_text("Genre: Platform\nRegions: EUROPE\n\n" + "word " * 900)
+        with contextlib.redirect_stdout(io.StringIO()), mock.patch.dict("os.environ", {"SLEEKMENU_NO_DOWNLOAD": "1"}):
+            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, roms=Path("ROMS")))
+        self.assertEqual(code, 0, "a description of any length does not stop a run")
+        document = card_catalog.load(self.card)
+        self.assertEqual(document["roms"], "ROMS")
+        games = {game["path"]: game for game in document["games"]}
+        hack = games["ROMS/Hacks/Star Road.z64"]
+        self.assertTrue(all(provenance.is_yours(games[path]["sources"]["cover"]) for path in games))
+        self.assertEqual(hack["genre"], "Platforms", "consolidated, as every genre is")
+        self.assertEqual(hack["sources"]["regions"], provenance.YOURS)
+        self.assertLessEqual(len(hack["description"]), 2000)
+        self.assertTrue(hack["description"].endswith("word..."))
+        from tools import genre_map
+        self.assertEqual(custom_art.pending_edits(self.card, self.card, document, genre_map.load()), {})
+        # without the genre map, a genre written as libretro spells it is the one thing that differs
+        self.assertEqual(custom_art.pending_edits(self.card, self.card, document)["ROMS/Hacks/Star Road.z64"].fields,
+                         {"genre": "Platform"})
+        # and a picture replaced since is still seen as one
+        picture(self.roms / "Hacks" / "Star Road.png", color=(1, 2, 3, 255), size=(310, 200))
+        pending = custom_art.pending_edits(self.card, self.card, document, genre_map.load())
+        self.assertEqual(set(pending), {"ROMS/Hacks/Star Road.z64"})
+        self.assertEqual(pending["ROMS/Hacks/Star Road.z64"].picture, self.roms / "Hacks" / "Star Road.png")
+
     def test_empty_text_removes_the_text_file_and_remove_deletes_only_the_art_folders_files(self):
         custom_art.save(self.card, self.hack, self.source, "T", "D")
         custom_art.save(self.card, self.hack, None, "", "")

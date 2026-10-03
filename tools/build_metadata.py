@@ -248,7 +248,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
             if "players" in own.facts:
                 players, facts["players"] = own.facts["players"], provenance.YOURS
             if "regions" in own.facts:
-                regions = list(own.facts["regions"])
+                regions, facts["regions"] = list(own.facts["regions"]), provenance.YOURS
 
         record = {
             # The header CRC pair and game code, so a correction to
