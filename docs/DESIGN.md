@@ -124,7 +124,7 @@ nothing else, so an owner's file that no run has read changes nothing
 there -- and a Save that stopped at the file would look done in the window
 and not be. Save and Undo start the same run as the Card tab's button,
 with the choices the card remembers (its games folder, its boxes) rather
-than whatever is half-set under Options, and with nothing downloaded; the
+than whatever is half-set on the Options tab, and with nothing downloaded; the
 run is incremental, so it costs seconds. One run at a time: an edit saved while
 one goes is applied after it. There is no second writer of the catalog,
 which is why this is a whole run and not a patch of one record.

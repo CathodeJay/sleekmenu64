@@ -312,7 +312,7 @@ class CollectionLineTests(unittest.TestCase):
             self.assertFalse(present.downloadable)
             self.assertIn("2 boxes", present.line)
             self.assertEqual(present.path, card / "release-metadata.zip")
-            # a file chosen under Options is checked, not trusted
+            # a file chosen on the Options tab is checked, not trusted
             junk = Path(scratch) / "junk.zip"
             junk.write_bytes(b"not a zip")
             chosen = sleekmenu_gui.collection_status(card, str(junk))
@@ -636,7 +636,7 @@ class WindowTests(unittest.TestCase):
             self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
             root.destroy()
 
-    def test_the_options_are_closed_until_asked_for_and_downloads_can_be_turned_off(self):
+    def test_the_options_have_a_tab_of_their_own_and_downloads_can_be_turned_off(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
@@ -647,7 +647,11 @@ class WindowTests(unittest.TestCase):
                 state = root.sleekmenu_state
                 self.assertFalse(state["options"]["offline"].get())
                 self.assertIn("Fetches a box", state["words"]["explain"].get())
-                state["show"]["options"]()
+                notebook = state["notebook"]
+                self.assertEqual([notebook.tab(tab, "text") for tab in notebook.tabs()],
+                                 ["Card", "Games", "Options", "Details"])
+                notebook.select(state["pages"]["options"])
+                root.update()
                 state["options"]["offline"].set(True)
                 root.update()
                 self.assertIn("Downloads are off", state["words"]["explain"].get())
@@ -698,7 +702,7 @@ class WindowTests(unittest.TestCase):
             root.update()
             state = root.sleekmenu_state
             games = state["catalog"]
-            # a half-set games folder under the Card tab's Options is not
+            # a half-set games folder on the Options tab is not
             # what an edit is applied with: the card's own choice is
             state["fields"]["roms"].set("")
             games.tree.selection_set("ROMS/Hacks/Kaizo.z64")

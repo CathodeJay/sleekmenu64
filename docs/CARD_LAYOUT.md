@@ -101,8 +101,8 @@ browsed, read for the games the catalog does not have yet. Those are listed
 by file name and play; the next run of the tool gives them their box and
 facts. The window's Card tab counts them as "added since the last update".
 
-Or one folder, chosen: `--roms ROMS`, or Where the games are under the
-window's Options. Then
+Or one folder, chosen: `--roms ROMS`, or Where the games are on the
+window's Options tab. Then
 only it is walked, the catalog records paths from the card root as always
 (`ROMS/...`), so the browser opens inside it, and the report counts and
 names the ROM-shaped files elsewhere on the card that were left out. The

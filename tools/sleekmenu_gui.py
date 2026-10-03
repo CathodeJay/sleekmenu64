@@ -7,7 +7,7 @@ Pick the card (found on its own when it is the only removable disk), read
 what is on it, press the one button -- Set up card the first time, Update
 card after -- and watch the run go through its four steps, with a Stop if
 it is taking too long. What the card lacks is fetched by the run itself;
-the choices most people never change are under Options. Nothing here
+the choices most people never change are on the Options tab. Nothing here
 decides anything about the card: the window collects a handful of answers
 and hands them to tools/sleekmenu_prep.run(), which is what the command
 line runs. The downloadable builds are this file frozen with its Python;
@@ -383,8 +383,8 @@ class Runner:
 
 @dataclass(frozen=True)
 class CollectionStatus:
-    """The collection a run would read, and the line that says so under
-    Options."""
+    """The collection a run would read, and the line that says so on the
+    Options tab."""
     ready: bool
     line: str
     path: Path | None = None
@@ -410,7 +410,7 @@ def count_boxes(path: Path) -> int:
 
 
 def collection_status(card: Path | None, chosen: str = "", offline: bool = False) -> CollectionStatus:
-    """The collection a run would use -- the file chosen under Options, else
+    """The collection a run would use -- the file chosen on the Options tab, else
     the one on the card -- opened and counted. One that is not there is
     fetched by the run, unless downloads are off."""
     offline = offline or fetch.offline_by_request()
@@ -1580,20 +1580,22 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     ttk.Separator(body, orient="horizontal").grid(row=6, column=0, sticky="ew", pady=(18, 8))
     ttk.Label(body, textvariable=last_var, foreground=colors["muted"]).grid(row=7, column=0, sticky="w")
 
-    # -- the options, closed until asked for ----------------------------------
-    # Two ordinary buttons side by side, each opening what is under them.
-    ttk.Style(root).configure("Disclose.TButton", padding=(14, 6))
-    toggles = ttk.Frame(body)
-    toggles.grid(row=8, column=0, sticky="w", pady=(12, 0))
-    options_toggle = ttk.Button(toggles, text="▸ Options", style="Disclose.TButton")
-    options_toggle.pack(side="left")
-    details_toggle = ttk.Button(toggles, text="▸ Details", style="Disclose.TButton")
-    details_toggle.pack(side="left", padx=(8, 0))
-    options = ttk.Frame(body, padding=(18, 4, 0, 0))
+    # -- the options, on a tab of their own -----------------------------------
+    # Made here and added to the window after the Games tab, so the tabs
+    # read Card, Games, Options, Details.
+    options_page = ttk.Frame(notebook, padding=12)
+    options_page.columnconfigure(0, weight=1)
+    options_page.columnconfigure(2, weight=1)
+    options = ttk.Frame(options_page)
+    options.grid(row=0, column=1, sticky="n", pady=(28, 0))
     options.columnconfigure(0, weight=1)
-    ttk.Label(options, text="Where the games are").grid(row=0, column=0, sticky="w")
+    ttk.Frame(options, width=width, height=1).grid(row=99, column=0)
+    ttk.Label(options, text="Options", font=big).grid(row=0, column=0, sticky="w")
+    ttk.Label(options, text="They apply the next time you press the button on the Card tab.",
+              foreground=colors["muted"]).grid(row=1, column=0, sticky="w", pady=(6, 18))
+    ttk.Label(options, text="Where the games are", font=strong).grid(row=2, column=0, sticky="w")
     where = ttk.Frame(options)
-    where.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+    where.grid(row=3, column=0, sticky="ew", pady=(4, 0))
     where.columnconfigure(0, weight=1)
     roms_box = ttk.Combobox(where, textvariable=roms_shown, values=[WHOLE_CARD_LABEL])
     roms_box.grid(row=0, column=0, sticky="ew")
@@ -1601,7 +1603,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     choose_roms.grid(row=0, column=1, padx=(6, 0))
     roms_note = tk.StringVar()
     ttk.Label(options, textvariable=roms_note, foreground=colors["muted"], wraplength=width - 40,
-              justify="left").grid(row=2, column=0, sticky="w")
+              justify="left").grid(row=4, column=0, sticky="w", pady=(2, 0))
     for row, (variable, text, hint) in enumerate((
             (fix_var, "Repair hacks that show a black screen on a console",
              "Rewrites the checksum inside those files."),
@@ -1609,63 +1611,41 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
              "Slower. For a card whose boxes or names look wrong."),
             (offline_var, "Do not download anything",
              "Uses only what is already on the card.")), start=0):
-        ttk.Checkbutton(options, text=text, variable=variable).grid(row=3 + row * 2, column=0, sticky="w",
-                                                                    pady=(8, 0))
-        ttk.Label(options, text=hint, foreground=colors["muted"]).grid(row=4 + row * 2, column=0, sticky="w",
+        ttk.Checkbutton(options, text=text, variable=variable).grid(row=5 + row * 2, column=0, sticky="w",
+                                                                    pady=(14, 0))
+        ttk.Label(options, text=hint, foreground=colors["muted"]).grid(row=6 + row * 2, column=0, sticky="w",
                                                                        padx=(24, 0))
+    ttk.Label(options, text="Boxes and descriptions", font=strong).grid(row=11, column=0, sticky="w",
+                                                                         pady=(20, 0))
     pack_row = ttk.Frame(options)
-    pack_row.grid(row=9, column=0, sticky="ew", pady=(10, 0))
+    pack_row.grid(row=12, column=0, sticky="ew", pady=(4, 0))
     pack_row.columnconfigure(0, weight=1)
-    ttk.Label(pack_row, text="Boxes and descriptions from a release-metadata.zip you already have").grid(
-        row=0, column=0, sticky="w")
+    ttk.Label(pack_row, text="Use a release-metadata.zip you already have").grid(row=0, column=0, sticky="w")
     choose_pack = ttk.Button(pack_row, text="Choose the file…")
     choose_pack.grid(row=0, column=1, padx=(6, 0))
     forget_pack = ttk.Button(pack_row, text="Use the card's")
     note = ttk.Label(options, textvariable=metadata_note, foreground=colors["muted"], wraplength=width - 40,
                      justify="left", cursor="hand2")
-    note.grid(row=10, column=0, sticky="w")
+    note.grid(row=13, column=0, sticky="w", pady=(2, 0))
 
-    # -- the report, closed until asked for -------------------------------------
-    log = tk.Text(body, height=8, width=20, wrap="word", state="disabled",
+    # -- the report, on a tab of its own ----------------------------------------
+    details_page = ttk.Frame(notebook, padding=12)
+    details_page.columnconfigure(0, weight=1)
+    details_page.rowconfigure(0, weight=1)
+    log = tk.Text(details_page, height=8, width=20, wrap="word", state="disabled",
                   font=("Menlo", 11) if sys.platform == "darwin"
                   else ("Consolas", 10) if sys.platform == "win32" else ("monospace", 10))
-
-    def disclose(toggle, widget, label: str, row: int, grow: bool = False):
-        """A line that opens and closes what is under it."""
-        def show(shown: bool) -> None:
-            if shown:
-                widget.grid(row=row, column=0, sticky="nsew" if grow else "ew", pady=(10, 0))
-            else:
-                widget.grid_remove()
-            body.rowconfigure(row, weight=1 if grow and shown else 0)
-            toggle.configure(text=("▾ " if shown else "▸ ") + label)
-        return show
-    open_options = disclose(options_toggle, options, "Options", 9)
-    open_details = disclose(details_toggle, log, "Details", 11, grow=True)
-
-    # One at a time, so the tab never grows past the window: the options
-    # take the place of the last run's steps, and the report closes them.
-    def show_options(shown: bool | None = None) -> None:
-        shown = not options.winfo_manager() if shown is None else shown
-        if shown:
-            open_details(False)
-        open_options(shown)
-        draw_steps()
-
-    def show_details(shown: bool | None = None) -> None:
-        shown = not log.winfo_manager() if shown is None else shown
-        if shown:
-            open_options(False)
-        open_details(shown)
-        draw_steps()
-    options_toggle.configure(command=show_options)
-    details_toggle.configure(command=show_details)
+    log.grid(row=0, column=0, sticky="nsew")
+    log_scroll = ttk.Scrollbar(details_page, orient="vertical", command=log.yview)
+    log_scroll.grid(row=0, column=1, sticky="ns")
+    log.configure(yscrollcommand=log_scroll.set)
 
     def say(line: str) -> None:
         log.configure(state="normal")
         log.insert("end", line + "\n")
         log.see("end")
         log.configure(state="disabled")
+    say("Nothing has run yet. The report of each run shows here, as the command line prints it.")
 
     def current_card() -> Path | None:
         chosen = card_var.get().strip()
@@ -1688,7 +1668,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     def draw_steps() -> None:
         steps = state["steps"]
-        if steps.current < 0 or (options.winfo_manager() and state["runner"] is None):
+        if steps.current < 0:
             steps_frame.grid_remove()
             return
         steps_frame.grid(row=4, column=0, sticky="ew", pady=(14, 0))
@@ -1708,11 +1688,13 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     catalog_page = ttk.Frame(notebook)
     notebook.add(catalog_page, text="Games")
+    notebook.add(options_page, text="Options")
+    notebook.add(details_page, text="Details")
 
     def apply_edits(path: str) -> str:
         """A Save or a Remove on the Games tab, put on the card: the same
         run as the button, with the choices the card remembers (its games
-        folder, its boxes) rather than the options on the Card tab, which
+        folder, its boxes) rather than what the Options tab says, which
         may be half-set, and with nothing downloaded. Incremental, so
         seconds. One at a time; a second edit while one runs is applied
         after it."""
@@ -1852,7 +1834,6 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         log.delete("1.0", "end")
         log.configure(state="disabled")
         state["runner"] = runner
-        open_options(False)
         state["steps"].start()
         result.configure(foreground="")
         result_var.set("")
@@ -1896,7 +1877,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             draw_steps()
             result.configure(foreground=colors["good"] if code == 0 else colors["warn"])
             result_var.set("Your edit is on the card." if code == 0
-                           else "Your edit was saved but the card was not updated; see the details.")
+                           else "Your edit was saved but the card was not updated; the Details tab says why.")
             catalog.applied(state.pop("apply_path", None), code)
             waiting = state.pop("apply_pending", None)
             if waiting is not None:
@@ -1912,9 +1893,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         line = finished_line(code, runner.outcome, state["status"], bool(walk()))
         plain = code == 0 and line.startswith("Done.")
         result.configure(foreground=colors["good"] if plain else colors["warn"])
-        result_var.set(line or error.removeprefix("sleekmenu-prep: ") or "Something went wrong; see the details.")
-        if code not in (0, 3):
-            show_details(True)
+        error = error.removeprefix("sleekmenu-prep: ")
+        result_var.set(line or (error + " The Details tab has the whole report." if error
+                                else "Something went wrong; the Details tab says what."))
         if smoke:
             root.after(200, root.destroy)
 
@@ -1977,7 +1958,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state["start"] = start
     state["stop"] = ask_stop
     state["buttons"] = {"action": action, "stop": stop}
-    state["show"] = {"options": show_options, "details": show_details}
+    state["notebook"] = notebook
+    state["pages"] = {"card": page, "games": catalog_page, "options": options_page, "details": details_page}
     root.sleekmenu_state = state  # type: ignore[attr-defined]
 
     if smoke and card:

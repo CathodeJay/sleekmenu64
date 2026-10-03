@@ -31,20 +31,7 @@ click the first time. With Python and Tk installed,
   (about 400 KB each). The four steps show where it is. Stop ends it; what
   was fetched is kept, and the next run carries on from there. A download
   that fails does not stop the run: the card gets its catalog, and the tab
-  says what is missing and to press the button again. Details has the
-  report the command line prints.
-- **Options**, closed until you open them:
-  - *Where the games are*: the whole card, or one folder (`ROMS`) to
-    catalog only that. The card remembers the choice.
-  - *Repair hacks that show a black screen on a console* rewrites a stale
-    header checksum in the file itself. Hacks and homebrew are always
-    checked (see [Hacks and homebrew](CONSOLE.md#hacks-and-homebrew)).
-  - *Rebuild everything from scratch* reads every ROM and converts every
-    box again, and asks libretro again for the boxes it did not have, for
-    a card that looks wrong.
-  - *Do not download anything* uses only what is already on the card.
-  - A `release-metadata.zip` you already have can be chosen in place of
-    the download; the line under it says which collection a run will read.
+  says what is missing and to press the button again.
 
 ### Games
 
@@ -100,6 +87,28 @@ catalog, so this run is what makes the edit appear there, the next time
 SleekMenu starts. While it runs, or while the card has no collection yet,
 the row says Edit waiting and the box shows your picture fitted as the
 console will draw it.
+
+### Options
+
+What most people never change. They apply the next time you press the
+button on the Card tab.
+
+- **Where the games are**: the whole card, or one folder (`ROMS`) to
+  catalog only that. The card remembers the choice.
+- **Repair hacks that show a black screen on a console** rewrites a stale
+  header checksum in the file itself. Hacks and homebrew are always
+  checked (see [Hacks and homebrew](CONSOLE.md#hacks-and-homebrew)).
+- **Rebuild everything from scratch** reads every ROM and converts every
+  box again, and asks libretro again for the boxes it did not have, for a
+  card that looks wrong.
+- **Do not download anything** uses only what is already on the card.
+- **Boxes and descriptions**: a `release-metadata.zip` you already have can
+  be chosen in place of the download; the line under it says which
+  collection a run will read.
+
+### Details
+
+The report of the last run, as the command line prints it.
 
 ## Your own art and text
 
