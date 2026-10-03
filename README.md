@@ -48,7 +48,7 @@ card**. Only what changed is read and only the new games' boxes are
 fetched. Until then a new game still shows up and plays, just without its
 box.
 
-**Starting the console in SleekMenu (X7):** on the prep GUI's Options tab,
+**Starting the console in SleekMenu (X7):** on the prep GUI's Card tab,
 tick **Start the console in SleekMenu** and press Update card. From then on
 the console powers on in SleekMenu; a reset inside a game returns to the
 EverDrive menu. Untick it and update to go back. The EverDrive-64 Pro has
@@ -98,7 +98,7 @@ initials under the shelf.
   checksum are fixed as they launch.
 - **Cheats** come from the EverDrive-64 Pro's cheat pack in `ED64/CHEATS/`,
   or from libretro when you tick **Fetch cheat codes** on the prep GUI's
-  Options tab, and need an Expansion Pak.
+  Card tab, and need an Expansion Pak.
 - **`.z64` and `.v64`** dumps load; `.n64` ones do not — convert them first.
 
 Everything else about the console — the screens, saves, the clock, 64DD,

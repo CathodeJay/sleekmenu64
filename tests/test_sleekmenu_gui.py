@@ -338,7 +338,7 @@ class CollectionLineTests(unittest.TestCase):
             self.assertFalse(present.downloadable)
             self.assertIn("2 boxes", present.line)
             self.assertEqual(present.path, card / "release-metadata.zip")
-            # a file chosen on the Options tab is checked, not trusted
+            # a file chosen under Downloads is checked, not trusted
             junk = Path(scratch) / "junk.zip"
             junk.write_bytes(b"not a zip")
             chosen = sleekmenu_gui.collection_status(card, str(junk))
@@ -662,7 +662,7 @@ class WindowTests(unittest.TestCase):
             self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
             root.destroy()
 
-    def test_the_options_have_a_tab_of_their_own_and_downloads_can_be_turned_off(self):
+    def test_the_options_sit_beside_the_button_and_downloads_can_be_turned_off(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
@@ -675,9 +675,27 @@ class WindowTests(unittest.TestCase):
                 self.assertIn("Fetches a box", state["words"]["explain"].get())
                 notebook = state["notebook"]
                 self.assertEqual([notebook.tab(tab, "text") for tab in notebook.tabs()],
-                                 ["Card", "Games", "Options", "Details"])
-                notebook.select(state["pages"]["options"])
+                                 ["Card", "Games", "Log"])
+                status, options = state["columns"]["card"], state["columns"]["options"]
+                self.assertTrue(status.winfo_ismapped() and options.winfo_ismapped(), "both on the Card tab")
+                self.assertGreater(options.winfo_rootx(), status.winfo_rootx() + status.winfo_width() - 1,
+                                   "the options are a column to the right of the button's")
+                self.assertLess(abs(options.winfo_width() - status.winfo_width()), 4, "two halves")
+                # cheat codes are a download: turning downloads off greys the
+                # box and says why, and keeps its tick for when they are back
+                cheats = state["buttons"]["cheats"]
+                state["options"]["cheats"].set(True)
+                self.assertEqual(str(cheats.cget("state")), "normal")
+                state["options"]["offline"].set(True)
                 root.update()
+                self.assertEqual(str(cheats.cget("state")), "disabled")
+                self.assertIn("downloads are off", state["words"]["cheats"].get())
+                self.assertTrue(state["options"]["cheats"].get())
+                state["options"]["offline"].set(False)
+                root.update()
+                self.assertEqual(str(cheats.cget("state")), "normal")
+                self.assertIn("libretro", state["words"]["cheats"].get())
+                state["options"]["cheats"].set(False)
                 state["options"]["offline"].set(True)
                 root.update()
                 self.assertIn("Downloads are off", state["words"]["explain"].get())
@@ -691,27 +709,33 @@ class WindowTests(unittest.TestCase):
             self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
             root.destroy()
 
-    def test_the_banner_sits_in_the_top_right_corner_and_opens_the_page(self):
+    def test_the_banner_ends_the_row_above_the_tabs_and_opens_the_page(self):
         root = sleekmenu_gui.build(card="")
         root.update()
         banner = root.sleekmenu_state["buttons"]["coffee"]
         self.assertEqual(banner.cget("text"), "Buy me a coffee")
         self.assertEqual(sleekmenu_gui.COFFEE_URL, "https://buymeacoffee.com/CathodeJay")
         self.assertTrue(banner.winfo_ismapped())
-        right = banner.winfo_x() + banner.winfo_width()
-        self.assertGreater(right, root.winfo_width() - 24, "against the right edge")
-        self.assertLess(banner.winfo_y(), 12, "at the top")
         notebook = root.sleekmenu_state["notebook"]
-        last_tab = notebook.bbox(len(notebook.tabs()) - 1)
-        self.assertLess(last_tab[0] + last_tab[2], banner.winfo_x(), "clear of the tabs")
+        header = root.sleekmenu_state["header"]
+        right = banner.winfo_rootx() + banner.winfo_width() - root.winfo_rootx()
+        self.assertGreater(right, root.winfo_width() - 24, "against the right edge")
+        self.assertLessEqual(banner.winfo_rooty() + banner.winfo_height(), notebook.winfo_rooty(),
+                             "above the tabs, not over them")
+        self.assertLessEqual(header.winfo_rooty() + header.winfo_height(), notebook.winfo_rooty())
+        # the card is chosen in the same row, to the banner's left
+        picker = root.sleekmenu_state["picker"]
+        self.assertIs(picker.master, header)
+        self.assertLess(picker.winfo_rootx() + picker.winfo_width(), banner.winfo_rootx())
         with mock.patch("webbrowser.open") as opened:
             banner.event_generate("<Button-1>", x=4, y=4)
             root.update()
         opened.assert_called_once_with(sleekmenu_gui.COFFEE_URL)
-        for page in ("games", "options", "details"):
+        for page in ("games", "log"):
             notebook.select(root.sleekmenu_state["pages"][page])
             root.update()
             self.assertTrue(banner.winfo_ismapped(), f"still there on the {page} tab")
+            self.assertTrue(picker.winfo_ismapped(), f"and so is the card, on the {page} tab")
         root.destroy()
 
     def test_the_cheats_box_is_off_until_ticked_and_then_the_card_remembers(self):
@@ -772,7 +796,6 @@ class WindowTests(unittest.TestCase):
             (card / "SleekMenu64.z64").write_bytes(browser())
             root = sleekmenu_gui.build(card=str(card))
             state = root.sleekmenu_state
-            state["notebook"].select(state["pages"]["options"])
             root.update()
             self.assertFalse(state["boot_row"].winfo_ismapped(), "a Pro card has no such switch")
             self.assertFalse(state["boot"].available)
@@ -783,7 +806,6 @@ class WindowTests(unittest.TestCase):
             direct_boot._facts.clear()
             root = sleekmenu_gui.build(card=str(card))
             state = root.sleekmenu_state
-            state["notebook"].select(state["pages"]["options"])
             root.update()
             self.assertTrue(state["boot_row"].winfo_ismapped())
             self.assertEqual(str(state["buttons"]["boot"].cget("state")), "normal")
@@ -817,7 +839,6 @@ class WindowTests(unittest.TestCase):
             direct_boot._facts.clear()
             root = sleekmenu_gui.build(card=str(card))
             state = root.sleekmenu_state
-            state["notebook"].select(state["pages"]["options"])
             root.update()
             self.assertEqual(str(state["buttons"]["boot"].cget("state")), "disabled")
             self.assertIn("another program", state["boot_note"].get())
@@ -865,7 +886,7 @@ class WindowTests(unittest.TestCase):
             root.update()
             state = root.sleekmenu_state
             games = state["catalog"]
-            # a half-set games folder on the Options tab is not
+            # a half-set games folder on the Card tab is not
             # what an edit is applied with: the card's own choice is
             state["fields"]["roms"].set("")
             games.tree.selection_set("ROMS/Hacks/Kaizo.z64")

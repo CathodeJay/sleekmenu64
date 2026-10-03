@@ -16,23 +16,61 @@ picture, text or facts.
 click the first time. With Python and Tk installed,
 `python3 sleekmenu-prep.pyz --gui` opens the same window.
 
+The card is chosen in the row above the tabs, and is the same one on every
+tab: it is picked for you when it is the only removable disk; Choose and
+Refresh otherwise.
+
 ### Card
 
-- **Card** is picked for you when it is the only removable disk; Choose and
-  Refresh otherwise.
-- **The headline** says what is on it: how many games, how many were copied
-  on since the last update, how many have no box. The catalog is built
-  here, not on the console, so a game copied on plays from the browser
-  straight away but has no box or facts until the next update.
+The card and the one button on the left, the choices that go with it on the
+right.
+
+- **The headline** says what is on the card: how many games, how many were
+  copied on since the last update, how many have no box. The catalog is
+  built here, not on the console, so a game copied on plays from the
+  browser straight away but has no box or facts until the next update.
 - **Set up card**, the first time, and **Update card** after, do
   everything: read the games, fetch what the card lacks, build the catalog
   and the covers, write them. What it fetches is the collection, once
   (about 52 MB), a 512-pixel box for each game the database knows
-  (about 400 KB each) and, if you ticked them on the Options tab, cheat
-  codes. The four steps show where it is. Stop ends it; what
-  was fetched is kept, and the next run carries on from there. A download
-  that fails does not stop the run: the card gets its catalog, and the tab
-  says what is missing and to press the button again.
+  (about 400 KB each) and, if you ticked them, cheat codes. The four steps
+  show where it is. Stop ends it; what was fetched is kept, and the next
+  run carries on from there. A download that fails does not stop the run:
+  the card gets its catalog, and the tab says what is missing and to press
+  the button again.
+
+The right side is what most people never change. It applies the next time
+you press the button.
+
+**Where the games are**: the whole card, or one folder (`ROMS`) to catalog
+only that. The card remembers the choice.
+
+**Downloads**
+
+- **Fetch cheat codes** fetches a file of GameShark codes for every game
+  the database knows, for the games the EverDrive's cheat pack does not
+  cover; see [Cheat codes](#cheat-codes). Off until you tick it; the card
+  remembers that too.
+- **Do not download anything** uses only what is already on the card. No
+  cheat codes are fetched either, so that box is greyed while this one is
+  ticked.
+- **Boxes and descriptions**: **Use a zip you have…** takes a
+  `release-metadata.zip` you already have in place of the download; the
+  line under it says which collection a run will read.
+
+**Repairs**
+
+- **Repair hacks that show a black screen on a console** rewrites a stale
+  header checksum in the file itself. Hacks and homebrew are always
+  checked (see [Hacks and homebrew](CONSOLE.md#hacks-and-homebrew)).
+- **Rebuild everything from scratch** reads every ROM and converts every
+  box again, and asks libretro again for the boxes it did not have, for a
+  card that looks wrong.
+
+**Console**, on a card for an EverDrive-64 X7: **Start the console in
+SleekMenu** makes the console power on in SleekMenu instead of the
+EverDrive menu. See
+[Starting the console in SleekMenu](#starting-the-console-in-sleekmenu).
 
 ### Games
 
@@ -90,32 +128,7 @@ SleekMenu starts. While it runs, or while the card has no collection yet,
 the row says Edit waiting and the box shows your picture fitted as the
 console will draw it.
 
-### Options
-
-What most people never change. They apply the next time you press the
-button on the Card tab.
-
-- **Where the games are**: the whole card, or one folder (`ROMS`) to
-  catalog only that. The card remembers the choice.
-- **Fetch cheat codes** fetches a file of GameShark codes for every game
-  the database knows, for the games the EverDrive's cheat pack does not
-  cover; see [Cheat codes](#cheat-codes). Off until you tick it; the card
-  remembers that too.
-- **Repair hacks that show a black screen on a console** rewrites a stale
-  header checksum in the file itself. Hacks and homebrew are always
-  checked (see [Hacks and homebrew](CONSOLE.md#hacks-and-homebrew)).
-- **Rebuild everything from scratch** reads every ROM and converts every
-  box again, and asks libretro again for the boxes it did not have, for a
-  card that looks wrong.
-- **Do not download anything** uses only what is already on the card.
-- **Start the console in SleekMenu**, on a card for an EverDrive-64 X7:
-  the console powers on in SleekMenu instead of the EverDrive menu. See
-  [Starting the console in SleekMenu](#starting-the-console-in-sleekmenu).
-- **Boxes and descriptions**: a `release-metadata.zip` you already have can
-  be chosen in place of the download; the line under it says which
-  collection a run will read.
-
-### Details
+### Log
 
 The report of the last run, as the command line prints it.
 
@@ -175,7 +188,7 @@ one game code and puts them on the card as you save: see
 
 ## Cheat codes
 
-Tick **Fetch cheat codes** on the Options tab (`--cheats` on the command
+Tick **Fetch cheat codes** on the Card tab (`--cheats` on the command
 line) and the next run fetches a `.cht` file from
 [libretro-database](https://github.com/libretro/libretro-database) for
 every game on the card that the database knows by its checksum, most of
@@ -204,7 +217,7 @@ ROM, always comes first. See [Cheats](CONSOLE.md#cheats).
 ## Starting the console in SleekMenu
 
 On an EverDrive-64 X7 the stock OS starts the file `ED64/autoexec.v64` by
-itself at power-on, when there is one. The switch on the Options tab
+itself at power-on, when there is one. The switch on the Card tab
 (`--direct-boot on`) copies the card's `SleekMenu64.z64` there, and the
 console starts in SleekMenu; unticking it (`--direct-boot off`) removes the
 copy, and the console starts in the EverDrive menu again. An update keeps

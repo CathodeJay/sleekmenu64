@@ -66,7 +66,7 @@ everything else it reads in place. One file of the tool's lives outside
 
 An EverDrive-64 X7's stock OS starts `ED64/autoexec.v64` by itself at
 power-on when the file is there. `--direct-boot on`, or the switch on the
-window's Options tab, copies the card's `SleekMenu64.z64` to that name, byte
+window's Card tab, copies the card's `SleekMenu64.z64` to that name, byte
 for byte; `off` removes it. The tool offers this only where it can work and
 do no harm (`tools/direct_boot.py`): `ED64/OS64.v64` must be on the card and
 carry that file name inside it, which is how an OS with the feature is told
@@ -119,7 +119,7 @@ by file name and play; the next run of the tool gives them their box and
 facts. The window's Card tab counts them as "added since the last update".
 
 Or one folder, chosen: `--roms ROMS`, or Where the games are on the
-window's Options tab. Then
+window's Card tab. Then
 only it is walked, the catalog records paths from the card root as always
 (`ROMS/...`), so the browser opens inside it, and the report counts and
 names the ROM-shaped files elsewhere on the card that were left out. The

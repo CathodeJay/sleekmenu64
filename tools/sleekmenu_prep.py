@@ -372,8 +372,8 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         log(f"          {len(found.outside)} ROM-shaped file{'s' if len(found.outside) != 1 else ''} elsewhere "
             f"on the card left out: {shown}")
     if found.how == "remembered":
-        log(f"          the folder was chosen last time; --roms . (or The whole card on the window's "
-            "Options tab) scans the whole card again")
+        log(f"          the folder was chosen last time; --roms . (or The whole card under Where the "
+            "games are, in the window) scans the whole card again")
     if not options.dry_run:
         for folder in lay_out(card):
             log(f"created   {folder.relative_to(card)}/")

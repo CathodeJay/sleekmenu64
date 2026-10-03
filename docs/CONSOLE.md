@@ -45,7 +45,7 @@ applies it. The header shows how many games match.
 
 **EverDrive-64 X7.** The stock OS starts a file by itself at power-on when
 the card has one, and the prep tool can make SleekMenu that file: tick
-**Start the console in SleekMenu** on the prep GUI's Options tab and press
+**Start the console in SleekMenu** on the prep GUI's Card tab and press
 Update card ([PREP.md](PREP.md#starting-the-console-in-sleekmenu)). From
 then on:
 

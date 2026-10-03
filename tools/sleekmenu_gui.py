@@ -7,7 +7,7 @@ Pick the card (found on its own when it is the only removable disk), read
 what is on it, press the one button -- Set up card the first time, Update
 card after -- and watch the run go through its four steps, with a Stop if
 it is taking too long. What the card lacks is fetched by the run itself;
-the choices most people never change are on the Options tab. Nothing here
+the choices most people never change sit beside the button. Nothing here
 decides anything about the card: the window collects a handful of answers
 and hands them to tools/sleekmenu_prep.run(), which is what the command
 line runs. The downloadable builds are this file frozen with its Python;
@@ -48,9 +48,13 @@ from tools.metadata_repo import MetadataRepo
 
 TITLE = f"SleekMenu 64 {version.VERSION} — prepare a card"
 DOWNLOAD_URL = metadata_repo.RELEASES_URL
-#: The banner in the window's top right corner, and where it leads.
+#: The banner at the end of the row above the tabs, and where it leads.
 COFFEE_TEXT = "Buy me a coffee"
 COFFEE_URL = "https://buymeacoffee.com/CathodeJay"
+#: Under Fetch cheat codes: what it does, and why it cannot be ticked while
+#: nothing is downloaded.
+CHEATS_HINT = "From libretro, for the games the EverDrive's cheat pack does not cover. Needs an Expansion Pak."
+CHEATS_OFFLINE = "Not while downloads are off."
 #: The box is 96x72 on the console; twice that on a desktop screen is
 #: legible without pretending to be the source picture.
 BOX_ZOOM = 2
@@ -397,8 +401,8 @@ class Runner:
 
 @dataclass(frozen=True)
 class CollectionStatus:
-    """The collection a run would read, and the line that says so on the
-    Options tab."""
+    """The collection a run would read, and the line that says so under
+    Downloads."""
     ready: bool
     line: str
     path: Path | None = None
@@ -424,7 +428,7 @@ def count_boxes(path: Path) -> int:
 
 
 def collection_status(card: Path | None, chosen: str = "", offline: bool = False) -> CollectionStatus:
-    """The collection a run would use -- the file chosen on the Options tab, else
+    """The collection a run would use -- the file chosen under Downloads, else
     the one on the card -- opened and counted. One that is not there is
     fetched by the run, unless downloads are off."""
     offline = offline or fetch.offline_by_request()
@@ -1554,30 +1558,20 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     root.title(TITLE)
     root.minsize(960, 680)
     root.geometry("1080x720")
-    notebook = ttk.Notebook(root)
-    notebook.pack(fill="both", expand=True)
-    # The banner, over the empty end of the tab row: the top right corner
-    # of the window on every tab.
-    coffee = tk.Label(root, text=COFFEE_TEXT, background="#FFDD00", foreground="#0D0C22", cursor="hand2",
-                      padx=10, pady=2)
-    coffee.place(relx=1.0, x=-8, y=3, anchor="ne")
-    coffee.bind("<Button-1>", lambda _event: webbrowser.open(COFFEE_URL))
-    page = ttk.Frame(notebook, padding=12)
-    notebook.add(page, text="Card")
-    page.columnconfigure(0, weight=1)
-    page.rowconfigure(1, weight=1)
     colors = palette(root, tk, ttk)
 
     state: dict = {"runner": None, "steps": Steps(), "status": card_status(None), "walk": None}
     card_var = tk.StringVar()
     roms_var = tk.StringVar()               # "" is the whole card
     roms_shown = tk.StringVar(value=WHOLE_CARD_LABEL)
+    roms_note = tk.StringVar()
     metadata_var = tk.StringVar()
     metadata_note = tk.StringVar()
     fix_var = tk.BooleanVar(value=False)
     rebuild_var = tk.BooleanVar(value=False)
     offline_var = tk.BooleanVar(value=smoke or fetch.offline_by_request())
     cheats_var = tk.BooleanVar(value=False)
+    cheats_note = tk.StringVar(value=CHEATS_HINT)
     boot_var = tk.BooleanVar(value=False)
     boot_note = tk.StringVar()
     headline_var = tk.StringVar()
@@ -1586,47 +1580,65 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     result_var = tk.StringVar()
     last_var = tk.StringVar()
 
-    # -- which card ----------------------------------------------------------
-    top = ttk.Frame(page)
-    top.grid(row=0, column=0, sticky="ew")
-    top.columnconfigure(1, weight=1)
-    ttk.Label(top, text="Card").grid(row=0, column=0, sticky="w")
-    card_box = ttk.Combobox(top, textvariable=card_var)
+    # -- above the tabs: which card, and the banner ----------------------------
+    # The card is the same one on every tab, so it is chosen above them; the
+    # banner takes the end of that row.
+    header = ttk.Frame(root, padding=(12, 10, 12, 6))
+    header.pack(fill="x")
+    header.columnconfigure(1, weight=1)
+    ttk.Label(header, text="Card").grid(row=0, column=0, sticky="w")
+    card_box = ttk.Combobox(header, textvariable=card_var)
     card_box.grid(row=0, column=1, sticky="ew", padx=6)
-    card_buttons = ttk.Frame(top)
+    card_buttons = ttk.Frame(header)
     card_buttons.grid(row=0, column=2, sticky="e")
+    coffee = tk.Label(header, text=COFFEE_TEXT, background="#FFDD00", foreground="#0D0C22", cursor="hand2",
+                      padx=10, pady=3)
+    coffee.grid(row=0, column=3, sticky="e", padx=(18, 0))
+    coffee.bind("<Button-1>", lambda _event: webbrowser.open(COFFEE_URL))
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill="both", expand=True)
 
-    # -- what is on it, and the one button -------------------------------------
-    # A column of a readable width in the middle of the tab, whatever the
-    # window's.
-    width = 640
-    middle = ttk.Frame(page)
-    middle.grid(row=1, column=0, sticky="nsew", pady=(28, 0))
-    middle.columnconfigure(0, weight=1)
-    middle.columnconfigure(2, weight=1)
-    middle.rowconfigure(0, weight=1)
-    body = ttk.Frame(middle)
-    body.grid(row=0, column=1, sticky="nsew")
+    # -- the Card tab: the card and the one button, and the choices beside ------
+    page = ttk.Frame(notebook, padding=(16, 20, 16, 12))
+    notebook.add(page, text="Card")
+    page.columnconfigure(0, weight=1, uniform="half")
+    page.columnconfigure(2, weight=1, uniform="half")
+    page.rowconfigure(0, weight=1)
+    body = ttk.Frame(page)
+    body.grid(row=0, column=0, sticky="nsew", padx=(0, 20))
     body.columnconfigure(0, weight=1)
-    ttk.Frame(body, width=width, height=1).grid(row=99, column=0)
+    ttk.Separator(page, orient="vertical").grid(row=0, column=1, sticky="ns")
+    options = ttk.Frame(page)
+    options.grid(row=0, column=2, sticky="nsew", padx=(20, 0))
+    options.columnconfigure(0, weight=1)
 
+    def fit(frame, labels) -> None:
+        """Text that wraps at its column's width, whatever the window's."""
+        def on_size(event) -> None:
+            for label, inset in labels:
+                label.configure(wraplength=max(160, event.width - inset))
+        frame.bind("<Configure>", on_size)
+
+    width = 420                              # until the window has a size
     big = tkfont.nametofont("TkDefaultFont").copy()
     big.configure(size=int(abs(big.cget("size")) * 2.2) or 24, weight="bold")
     strong = tkfont.nametofont("TkDefaultFont").copy()
     strong.configure(weight="bold")
     state["fonts"] = (big, strong)          # a font nothing holds is collected, and the label falls back
-    ttk.Label(body, textvariable=headline_var, font=big, wraplength=width, justify="left").grid(
-        row=0, column=0, sticky="w")
-    ttk.Label(body, textvariable=detail_var, foreground=colors["muted"], wraplength=width,
-              justify="left").grid(row=1, column=0, sticky="w", pady=(6, 0))
+    headline = ttk.Label(body, textvariable=headline_var, font=big, wraplength=width, justify="left")
+    headline.grid(row=0, column=0, sticky="w")
+    detail = ttk.Label(body, textvariable=detail_var, foreground=colors["muted"], wraplength=width,
+                       justify="left")
+    detail.grid(row=1, column=0, sticky="w", pady=(6, 0))
     actions = ttk.Frame(body)
     actions.grid(row=2, column=0, sticky="w", pady=(22, 0))
     ttk.Style(root).configure("Action.TButton", font=strong, padding=(18, 8))
     action = ttk.Button(actions, text=SET_UP, style="Action.TButton", default="active")
     action.pack(side="left")
     stop = ttk.Button(actions, text="Stop", state="disabled")
-    ttk.Label(body, textvariable=explain_var, foreground=colors["muted"], wraplength=width - 80,
-              justify="left").grid(row=3, column=0, sticky="w", pady=(10, 0))
+    explain = ttk.Label(body, textvariable=explain_var, foreground=colors["muted"], wraplength=width,
+                        justify="left")
+    explain.grid(row=3, column=0, sticky="w", pady=(10, 0))
 
     # The run's four steps, drawn once one starts.
     steps_frame = ttk.Frame(body)
@@ -1646,72 +1658,78 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     ttk.Separator(body, orient="horizontal").grid(row=6, column=0, sticky="ew", pady=(18, 8))
     ttk.Label(body, textvariable=last_var, foreground=colors["muted"]).grid(row=7, column=0, sticky="w")
+    fit(body, [(headline, 0), (detail, 0), (explain, 0), (result, 0)])
 
-    # -- the options, on a tab of their own -----------------------------------
-    # Made here and added to the window after the Games tab, so the tabs
-    # read Card, Games, Options, Details.
-    options_page = ttk.Frame(notebook, padding=12)
-    options_page.columnconfigure(0, weight=1)
-    options_page.columnconfigure(2, weight=1)
-    options = ttk.Frame(options_page)
-    options.grid(row=0, column=1, sticky="n", pady=(28, 0))
-    options.columnconfigure(0, weight=1)
-    ttk.Frame(options, width=width, height=1).grid(row=99, column=0)
-    ttk.Label(options, text="Options", font=big).grid(row=0, column=0, sticky="w")
-    ttk.Label(options, text="They apply the next time you press the button on the Card tab.",
-              foreground=colors["muted"]).grid(row=1, column=0, sticky="w", pady=(6, 18))
-    ttk.Label(options, text="Where the games are", font=strong).grid(row=2, column=0, sticky="w")
+    # The choices, in groups: what each is about, not the order they came in.
+    hints: list[tuple] = []
+
+    def group(row: int, title: str, parent=None) -> None:
+        ttk.Label(parent or options, text=title, font=strong).grid(row=row, column=0, sticky="w",
+                                                                    pady=(0 if not row else 18, 0))
+
+    def hint(row: int, words, parent=None, **more):
+        said = {"textvariable": words} if isinstance(words, tk.StringVar) else {"text": words}
+        label = ttk.Label(parent or options, foreground=colors["muted"], wraplength=width - 24, justify="left",
+                          **said, **more)
+        label.grid(row=row, column=0, sticky="w", padx=(24, 0))
+        hints.append((label, 24))
+        return label
+
+    def option(row: int, variable, text: str, words, parent=None):
+        check = ttk.Checkbutton(parent or options, text=text, variable=variable)
+        check.grid(row=row, column=0, sticky="w", pady=(8, 0))
+        hint(row + 1, words, parent)
+        return check
+
+    group(0, "Where the games are")
     where = ttk.Frame(options)
-    where.grid(row=3, column=0, sticky="ew", pady=(4, 0))
+    where.grid(row=1, column=0, sticky="ew", pady=(6, 0))
     where.columnconfigure(0, weight=1)
     roms_box = ttk.Combobox(where, textvariable=roms_shown, values=[WHOLE_CARD_LABEL])
     roms_box.grid(row=0, column=0, sticky="ew")
     choose_roms = ttk.Button(where, text="Choose a folder…")
     choose_roms.grid(row=0, column=1, padx=(6, 0))
-    roms_note = tk.StringVar()
-    ttk.Label(options, textvariable=roms_note, foreground=colors["muted"], wraplength=width - 40,
-              justify="left").grid(row=4, column=0, sticky="w", pady=(2, 0))
-    for row, (variable, text, hint) in enumerate((
-            (cheats_var, "Fetch cheat codes",
-             "From libretro, for the games the EverDrive's cheat pack does not cover. Needs an Expansion Pak."),
-            (fix_var, "Repair hacks that show a black screen on a console",
-             "Rewrites the checksum inside those files."),
-            (rebuild_var, "Rebuild everything from scratch",
-             "Slower. For a card whose boxes or names look wrong."),
-            (offline_var, "Do not download anything",
-             "Uses only what is already on the card.")), start=0):
-        ttk.Checkbutton(options, text=text, variable=variable).grid(row=5 + row * 2, column=0, sticky="w",
-                                                                    pady=(12, 0))
-        ttk.Label(options, text=hint, foreground=colors["muted"]).grid(row=6 + row * 2, column=0, sticky="w",
-                                                                       padx=(24, 0))
-    # The X7's start-up switch: a row that is there only for an X7 card.
-    boot_row = ttk.Frame(options)
-    boot_check = ttk.Checkbutton(boot_row, text="Start the console in SleekMenu", variable=boot_var)
-    boot_check.grid(row=0, column=0, sticky="w", pady=(12, 0))
-    ttk.Label(boot_row, textvariable=boot_note, foreground=colors["muted"], wraplength=width - 40,
-              justify="left").grid(row=1, column=0, sticky="w", padx=(24, 0))
-    ttk.Label(options, text="Boxes and descriptions", font=strong).grid(row=14, column=0, sticky="w",
-                                                                         pady=(18, 0))
+    hint(2, roms_note).grid_configure(padx=0, pady=(2, 0))
+
+    # Everything a run may fetch, and the switch that stops all of it, in
+    # one place: with downloads off there are no cheat codes to fetch, and
+    # a collection already at hand is the way to do without the network.
+    group(3, "Downloads")
+    cheats_check = option(4, cheats_var, "Fetch cheat codes", cheats_note)
+    option(6, offline_var, "Do not download anything", "Uses only what is already on the card.")
     pack_row = ttk.Frame(options)
-    pack_row.grid(row=15, column=0, sticky="ew", pady=(4, 0))
+    pack_row.grid(row=8, column=0, sticky="ew", pady=(10, 0))
     pack_row.columnconfigure(0, weight=1)
-    ttk.Label(pack_row, text="Use a release-metadata.zip you already have").grid(row=0, column=0, sticky="w")
-    choose_pack = ttk.Button(pack_row, text="Choose the file…")
+    ttk.Label(pack_row, text="Boxes and descriptions").grid(row=0, column=0, sticky="w")
+    choose_pack = ttk.Button(pack_row, text="Use a zip you have…")
     choose_pack.grid(row=0, column=1, padx=(6, 0))
     forget_pack = ttk.Button(pack_row, text="Use the card's")
-    note = ttk.Label(options, textvariable=metadata_note, foreground=colors["muted"], wraplength=width - 40,
-                     justify="left", cursor="hand2")
-    note.grid(row=16, column=0, sticky="w", pady=(2, 0))
+    note = hint(9, metadata_note, cursor="hand2")
 
-    # -- the report, on a tab of its own ----------------------------------------
-    details_page = ttk.Frame(notebook, padding=12)
-    details_page.columnconfigure(0, weight=1)
-    details_page.rowconfigure(0, weight=1)
-    log = tk.Text(details_page, height=8, width=20, wrap="word", state="disabled",
+    group(10, "Repairs")
+    option(11, fix_var, "Repair hacks that show a black screen on a console",
+           "Rewrites the checksum inside those files.")
+    option(13, rebuild_var, "Rebuild everything from scratch",
+           "Slower. For a card whose boxes or names look wrong.")
+
+    # The X7's start-up switch: a group that is there only for an X7 card.
+    boot_row = ttk.Frame(options)
+    boot_row.columnconfigure(0, weight=1)
+    group(15, "Console", boot_row)
+    boot_check = option(16, boot_var, "Start the console in SleekMenu", boot_note, boot_row)
+    fit(options, hints)
+
+    # -- the run's report, on a tab of its own ----------------------------------
+    # Made here and added to the window after the Games tab, so the tabs
+    # read Card, Games, Log.
+    log_page = ttk.Frame(notebook, padding=12)
+    log_page.columnconfigure(0, weight=1)
+    log_page.rowconfigure(0, weight=1)
+    log = tk.Text(log_page, height=8, width=20, wrap="word", state="disabled",
                   font=("Menlo", 11) if sys.platform == "darwin"
                   else ("Consolas", 10) if sys.platform == "win32" else ("monospace", 10))
     log.grid(row=0, column=0, sticky="nsew")
-    log_scroll = ttk.Scrollbar(details_page, orient="vertical", command=log.yview)
+    log_scroll = ttk.Scrollbar(log_page, orient="vertical", command=log.yview)
     log_scroll.grid(row=0, column=1, sticky="ns")
     log.configure(yscrollcommand=log_scroll.set)
 
@@ -1763,13 +1781,12 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     catalog_page = ttk.Frame(notebook)
     notebook.add(catalog_page, text="Games")
-    notebook.add(options_page, text="Options")
-    notebook.add(details_page, text="Details")
+    notebook.add(log_page, text="Log")
 
     def apply_edits(path: str) -> str:
         """A Save or a Remove on the Games tab, put on the card: the same
         run as the button, with the choices the card remembers (its games
-        folder, its boxes) rather than what the Options tab says, which
+        folder, its boxes) rather than what the Card tab says, which
         may be half-set, and with nothing downloaded. Incremental, so
         seconds. One at a time; a second edit while one runs is applied
         after it."""
@@ -1834,12 +1851,18 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         boot = direct_boot.state(chosen) if chosen is not None else direct_boot.State()
         state["boot"] = boot
         if boot.cart == direct_boot.X7:
-            boot_row.grid(row=13, column=0, sticky="ew")
+            boot_row.grid(row=15, column=0, sticky="ew")
             boot_check.configure(state="normal" if boot.available else "disabled")
             boot_note.set("EverDrive-64 X7. A reset inside a game returns to the EverDrive menu; "
                           "untick to start in the EverDrive menu again." if boot.available else boot.why)
         else:
             boot_row.grid_remove()
+        # Nothing is fetched while downloads are off, cheat codes included:
+        # the box says so rather than promise what the run will not do. Its
+        # tick is kept, for when downloads are back on.
+        offline = offline_var.get()
+        cheats_check.configure(state="disabled" if offline else "normal")
+        cheats_note.set(CHEATS_OFFLINE if offline else CHEATS_HINT)
         update_buttons()
 
     def read_choices() -> None:
@@ -1976,7 +1999,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             draw_steps()
             result.configure(foreground=colors["good"] if code == 0 else colors["warn"])
             result_var.set("Your edit is on the card." if code == 0
-                           else "Your edit was saved but the card was not updated; the Details tab says why.")
+                           else "Your edit was saved but the card was not updated; the Log tab says why.")
             catalog.applied(state.pop("apply_path", None), code)
             waiting = state.pop("apply_pending", None)
             if waiting is not None:
@@ -1994,8 +2017,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         plain = code == 0 and line.startswith("Done.")
         result.configure(foreground=colors["good"] if plain else colors["warn"])
         error = error.removeprefix("sleekmenu-prep: ")
-        result_var.set(line or (error + " The Details tab has the whole report." if error
-                                else "Something went wrong; the Details tab says what."))
+        result_var.set(line or (error + " The Log tab has the whole report." if error
+                                else "Something went wrong; the Log tab says what."))
         if smoke:
             root.after(200, root.destroy)
 
@@ -2059,12 +2082,16 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state["boot_row"] = boot_row
     state["boot_note"] = boot_note
     state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var,
-                      "result": result_var, "last": last_var, "pack": metadata_note}
+                      "result": result_var, "last": last_var, "pack": metadata_note, "cheats": cheats_note}
     state["start"] = start
     state["stop"] = ask_stop
-    state["buttons"] = {"action": action, "stop": stop, "coffee": coffee, "boot": boot_check}
+    state["buttons"] = {"action": action, "stop": stop, "coffee": coffee, "boot": boot_check,
+                        "cheats": cheats_check}
     state["notebook"] = notebook
-    state["pages"] = {"card": page, "games": catalog_page, "options": options_page, "details": details_page}
+    state["header"] = header
+    state["picker"] = card_box
+    state["pages"] = {"card": page, "games": catalog_page, "log": log_page}
+    state["columns"] = {"card": body, "options": options}
     root.sleekmenu_state = state  # type: ignore[attr-defined]
 
     if smoke and card:

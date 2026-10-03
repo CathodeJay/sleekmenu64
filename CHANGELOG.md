@@ -24,17 +24,18 @@ once. Your catalog, boxes and edits are kept.
   region, or a picture of your own; a PNG or JPEG can also be dropped
   straight onto the box. One tick applies an edit to every version of the
   game on the card.
-- **Fetch cheat codes**, on the Options tab: libretro's cheat file for the
+- **Fetch cheat codes**, on the Card tab: libretro's cheat file for the
   exact dump of each game, for the many games the EverDrive's cheat pack
   does not cover. Off until you tick it; the card remembers.
-- **Start the console in SleekMenu**, on the Options tab for an
+- **Start the console in SleekMenu**, on the Card tab for an
   EverDrive-64 X7 card: the console powers on in SleekMenu. A reset inside
   a game returns to the EverDrive menu; untick to go back. The
   EverDrive-64 Pro has no such start-up file, so the switch is not shown
   for its cards.
-- The options and the run's report are on tabs of their own, and the
-  window reads the card again when you come back to it.
-- A **Buy me a coffee** link in the top right corner.
+- The card is chosen in a row above the tabs. The options sit beside the
+  button on the Card tab, in groups, and the run's report is on the Log
+  tab. The window reads the card again when you come back to it.
+- A **Buy me a coffee** link at the end of the row above the tabs.
 
 ### On the console
 
