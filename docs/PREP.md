@@ -69,10 +69,11 @@ everything of yours for that game; the original was never touched.
 
 **Change box…** shows the boxes libretro has for the game, one per region
 it was released in, beside the one on the card; pick one, or **My own
-picture…** for a PNG or JPEG of yours (a picture can also be dropped on the
-box when your Python has `tkinterdnd2`). The choice shows in the panel and
-goes on the card with Save, as a picture of your own: no later download
-replaces it.
+picture…** for a PNG or JPEG of yours. A picture can also be dropped
+straight onto the box, the panel around it or the picker: the downloads
+carry what that needs, and from a checkout it is `pip install
+tkinterdnd2`. The choice shows in the panel and goes on the card with Save,
+as a picture of your own: no later download replaces it.
 
 When the card holds other versions of the game — its revisions, and hacks
 built on it, which carry the same game code — **Also change the other

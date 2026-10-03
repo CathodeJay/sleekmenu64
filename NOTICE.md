@@ -20,13 +20,14 @@ ships here at all.**
 ## The downloadable window
 
 `SleekMenu-Prep-*` on the releases page is `tools/sleekmenu_gui.py` frozen
-with its interpreter by PyInstaller (`.github/workflows/prep-app.yml`). A
+with its interpreter by PyInstaller (`.github/workflows/release.yml`). A
 build carries, besides this project's own AGPL code and `data/`:
 
 | Component | Licence |
 |---|---|
 | Python, with Tcl/Tk | PSF-2.0; Tcl/Tk's BSD-style licence |
 | Pillow | MIT-CMU |
+| tkinterdnd2, with the tkdnd library it loads | MIT; tkdnd's BSD-style licence |
 | PyInstaller's bootloader | GPL-2.0 with the bootloader exception, which places no terms on the frozen program |
 
 Nothing else is bundled; the box art still comes from the card.

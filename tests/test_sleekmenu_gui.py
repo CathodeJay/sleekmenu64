@@ -845,6 +845,20 @@ class WindowTests(unittest.TestCase):
             games.set_picture(str(card / "ROMS" / "Hacks" / "Kaizo.z64"))
             games.save_edit()
             self.assertTrue(games.edit_note.get().startswith("Not saved"), "a ROM is not a picture")
+            # a picture dropped on the panel is the same as choosing it; anything else is said
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games.on_select()
+            self.assertFalse(games.dropped([str(card / "ROMS" / "Hacks" / "Kaizo.z64")]))
+            self.assertEqual(games.edit_note.get(), "Kaizo.z64 is not a PNG or JPEG.")
+            self.assertTrue(games.dropped([str(card / "box.png"), str(card / "other.png")]), "the first one dropped")
+            self.assertEqual(games.picture.get(), str(card / "box.png"))
+            self.assertEqual(games.box.cget("text"), "NOT SAVED YET")
+            games.save_edit()
+            self.assertTrue((card / "sleekmenu" / "art" / "Kaizo.png").is_file())
+            self.assertFalse(games.dropped([]))
+            games.reload()
+            self.assertFalse(games.dropped([str(card / "box.png")]), "no game selected to give it to")
+            self.assertIn("Select a game", games.edit_note.get())
             root.destroy()
 
     def test_narrowing_the_list_keeps_what_was_typed_and_a_fixed_game_leaves_needs_a_look(self):
@@ -930,6 +944,10 @@ class WindowTests(unittest.TestCase):
                 self.assertEqual(str(picker.tiles["Europe"].cget("text")), "Europe")
                 self.assertEqual(str(picker.tiles["Japan"].cget("text")), "Japan: none")
                 self.assertEqual(str(picker.tiles["Japan"].cget("state")), "disabled")
+                # a file dropped on the picker that is no picture is said there, and the picker stays
+                picker.dropped([str(card / "ROMS" / "Super Mario 64 (USA).z64")])
+                self.assertIn("is not a PNG or JPEG", picker.note.get())
+                self.assertIsNotNone(games.picker)
                 picker.choice.set("Europe")
                 self.assertEqual(str(picker.use.cget("state")), "normal")
                 picker.confirm()
@@ -944,7 +962,11 @@ class WindowTests(unittest.TestCase):
                 games.choose_box()
                 self.assertEqual(list(games.picker.tiles), ["current"])
                 self.assertIn("Downloads are off", games.picker.note.get())
-                games.picker.close()
+                # a picture dropped on the picker is taken and closes it
+                dropped = picture(Path(scratch) / "dropped.png")
+                games.picker.dropped([str(dropped)])
+                self.assertIsNone(games.picker)
+                self.assertEqual(games.picture.get(), str(dropped))
             root.destroy()
 
 

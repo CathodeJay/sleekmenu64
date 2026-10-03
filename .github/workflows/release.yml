@@ -97,6 +97,7 @@ jobs:
             --add-data "data/coverdb.csv:data" \
             --add-data "data/genres.csv:data" \
             --add-data "data/LICENSE:data" \
+            --collect-all tkinterdnd2 \
             tools/sleekmenu_gui.py
 
       - name: Prove the build starts and prepares a card
@@ -120,9 +121,16 @@ jobs:
             Linux)   sudo apt-get install -y xvfb; run="xvfb-run -a" ;;
             Windows) card="$(pwd -W)/smoke/CARD" ;;
           esac
-          $run "$app" --smoke --card "$card"
+          $run "$app" --smoke --card "$card" | tee smoke/report.txt
           test -f smoke/CARD/sleekmenu/catalog.ebc
           test -f smoke/CARD/sleekmenu/covers.pak
+          # The window works without drag and drop, so a build where its
+          # library will not load is flagged here rather than failed. A
+          # windowed program on Windows prints nothing to read.
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            grep -q "drag and drop: yes" smoke/report.txt \
+              || echo "::warning::drag and drop did not load in the ${{ matrix.name }} build"
+          fi
 
       - name: Package
         shell: bash

@@ -682,11 +682,11 @@ def game_notes(game: dict) -> list[str]:
 
 
 def enable_drop(widget, on_files) -> bool:
-    """Let files be dropped onto a widget, when tkinterdnd2 is installed
-    in this Python and its native library loads; False otherwise, and the
-    button beside the widget is the same thing without the drop. The
-    frozen builds do not carry it: a native extension that fails to load
-    on some systems is not worth the feature depending on it."""
+    """Let files be dropped onto a widget, when tkinterdnd2 is in this
+    Python and its native library loads; False otherwise, and the button
+    beside the widget is the same thing without the drop. The frozen builds
+    carry it. Nothing depends on it: a system where the library will not
+    load has the button and no hint about dropping."""
     try:
         from tkinterdnd2 import DND_FILES, TkinterDnD
         TkinterDnD._require(widget.winfo_toplevel())
@@ -781,11 +781,17 @@ class BoxPicker:
         buttons = ttk.Frame(frame)
         buttons.grid(row=3, column=0, sticky="ew", pady=(14, 0))
         ttk.Button(buttons, text="My own picture…", command=self.own_picture).pack(side="left")
+        if tab.drop_works:
+            ttk.Label(buttons, text="or drop one here", foreground=tab.colors["muted"]).pack(side="left",
+                                                                                           padx=(8, 0))
         self.use = ttk.Button(buttons, text="Use this box", command=self.confirm, state="disabled")
         self.use.pack(side="right")
         ttk.Button(buttons, text="Cancel", command=self.close).pack(side="right", padx=(0, 8))
         self.choice.trace_add("write", lambda *_args: self.use.configure(
             state="normal" if self.choice.get() in self.boxes else "disabled"))
+        if tab.drop_works:
+            for target in (window, frame, self.row):
+                enable_drop(target, self.dropped)
         try:
             window.grab_set()
         except tk.TclError:
@@ -818,6 +824,8 @@ class BoxPicker:
                                         variable=self.choice, value=key)
         tile.pack(side="left", padx=(0, 12))
         self.tiles[key] = tile
+        if self.tab.drop_works:
+            enable_drop(tile, self.dropped)
 
     def work(self, choices) -> None:
         """Off the window's thread: one box per region, each posted as it
@@ -858,6 +866,14 @@ class BoxPicker:
             self.photos[label] = photo
             self.tiles[label].configure(text=label, image=photo)
         self.window.after(100, self.poll)
+
+    def dropped(self, files: list[str]) -> None:
+        """A picture dropped on the picker is the owner's own, as if chosen
+        with the button."""
+        if self.tab.dropped(files):
+            self.close()
+        elif files:
+            self.note.set(f"{Path(files[0]).name} is not a PNG or JPEG.")
 
     def own_picture(self) -> None:
         from tkinter import filedialog
@@ -1024,7 +1040,13 @@ class GamesTab:
                   justify="left").grid(row=0, column=0, sticky="w")
         self.box_button = ttk.Button(under, text="Change box…", command=self.choose_box)
         self.box_button.grid(row=0, column=1, sticky="e")
+        # A picture dropped on the box, or anywhere on the panel around it,
+        # is the same as choosing it; said only where it works.
         self.drop_works = enable_drop(self.box, self.dropped)
+        if self.drop_works:
+            enable_drop(right, self.dropped)
+            ttk.Label(under, text="Or drop a PNG or JPEG on the box.", foreground=muted).grid(
+                row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
         self.labels: dict[str, object] = {}
 
@@ -1364,9 +1386,21 @@ class GamesTab:
         self.draw_box(game)
         self.edit_note.set("Press Save to put this box on the card.")
 
-    def dropped(self, files: list[str]) -> None:
-        if files:
-            self.set_picture(files[0])
+    def dropped(self, files: list[str]) -> bool:
+        """A file dropped on the panel: the selected game's new box, when
+        it is a picture. Whether it was taken."""
+        game = self.selected()
+        if not files:
+            return False
+        if game is None or game.get("state"):
+            self.edit_note.set("Select a game in the list first, then drop its picture.")
+            return False
+        chosen = Path(files[0])
+        if chosen.suffix.casefold() not in custom_art.ART_SUFFIXES:
+            self.edit_note.set(f"{chosen.name} is not a PNG or JPEG.")
+            return False
+        self.set_picture(str(chosen))
+        return True
 
     def save_edit(self) -> None:
         game, card = self.selected(), self.card_of()
@@ -1994,7 +2028,8 @@ def main(argv: list[str] | None = None) -> int:
     root.mainloop()
     if args.smoke:
         code = root.sleekmenu_state.get("last_code")
-        print("window opened and closed" + (f"; the run returned {code}" if code is not None else ""))
+        print("window opened and closed" + (f"; the run returned {code}" if code is not None else "")
+              + "; drag and drop: " + ("yes" if root.sleekmenu_state["catalog"].drop_works else "no"))
         return int(code or 0)
     return 0
 
