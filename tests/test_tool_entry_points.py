@@ -91,3 +91,46 @@ class EntryPointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ImportTests(unittest.TestCase):
+    def test_no_tool_needs_a_newer_python_just_to_be_imported(self):
+        """`Colour = tuple[int, int, int]` at the top of a module runs when
+        the module is imported, and a Python older than 3.9 stops there:
+        the prep tool then does not start at all, window or command line,
+        for a line that only named a type. Annotations are not run (every
+        tool defers them), so the built-ins may be subscripted there; in
+        code that runs at import, typing's names are used instead."""
+        import ast
+        builtins = {"tuple", "list", "dict", "set", "frozenset", "type"}
+
+        def run_at_import(node):
+            """The expressions under `node` that run when the module does:
+            not a function's body, and not an annotation."""
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+                    for default in child.args.defaults + [d for d in child.args.kw_defaults if d is not None]:
+                        yield default
+                        yield from run_at_import(default)
+                    for decorator in getattr(child, "decorator_list", []):
+                        yield decorator
+                        yield from run_at_import(decorator)
+                    continue
+                if isinstance(child, ast.AnnAssign):
+                    if child.value is not None:
+                        yield child.value
+                        yield from run_at_import(child.value)
+                    continue
+                yield child
+                yield from run_at_import(child)
+
+        for path in TOOLS:
+            source = path.read_text(encoding="utf-8")
+            if "->" in source:
+                self.assertIn("from __future__ import annotations", source,
+                              f"{path.name} must defer its annotations")
+            for node in run_at_import(ast.parse(source)):
+                if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) \
+                        and node.value.id in builtins:
+                    self.fail(f"{path.name}:{node.lineno} subscripts {node.value.id}[...] at import; "
+                              "use typing's name there")

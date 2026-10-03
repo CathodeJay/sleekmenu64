@@ -31,6 +31,7 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Tuple
 
 # Runnable as a script as well as importable -- see tools/__init__.py.
 if __package__ in (None, ""):
@@ -38,7 +39,9 @@ if __package__ in (None, ""):
 
 from tools import card_layout
 
-Colour = tuple[int, int, int]
+# typing.Tuple, not tuple[...]: this line runs when the module is imported,
+# and a Python older than 3.9 cannot subscript the built-in.
+Colour = Tuple[int, int, int]
 
 #: Every role, in the order the ROM's table holds them.
 ROLES = (
