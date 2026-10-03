@@ -138,7 +138,7 @@ only it is walked, the catalog records paths from the card root as always
 (`ROMS/...`), so the browser opens inside it, and the report counts and
 names the ROM-shaped files elsewhere on the card that were left out. The
 choice is kept in `catalog.json` and holds on the next run; `--roms .` or
-an empty field is the whole card again. A chosen folder that does not
+`/` there is the whole card again. A chosen folder that does not
 exist is an error; a remembered one that has gone is a note and the whole
 card.
 

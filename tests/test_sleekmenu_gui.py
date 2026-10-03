@@ -83,6 +83,15 @@ class FieldTests(unittest.TestCase):
         self.assertTrue(rebuilt.rebuild and rebuilt.hires, "from scratch asks for every box again")
         self.assertFalse(options.no_large_covers, "the window always builds the box view's pack")
 
+    def test_the_games_folder_is_shown_as_a_path_from_the_cards_root(self):
+        self.assertEqual(sleekmenu_gui.shown_folder(""), "/")
+        self.assertEqual(sleekmenu_gui.shown_folder("ROMS"), "/ROMS")
+        self.assertEqual(sleekmenu_gui.shown_folder(" /ROMS/N64/ "), "/ROMS/N64")
+        for typed, raw in (("/", ""), ("", ""), ("  ", ""), ("/ROMS", "ROMS"), ("ROMS", "ROMS"), ("ROMS/", "ROMS"),
+                           (" /ROMS/N64/ ", "ROMS/N64"), ("\\ROMS\\N64", "ROMS/N64")):
+            self.assertEqual(sleekmenu_gui.raw_folder(typed), raw, repr(typed))
+            self.assertEqual(sleekmenu_gui.raw_folder(sleekmenu_gui.shown_folder(raw)), raw)
+
     def test_the_two_switches_the_card_remembers_become_the_runs_options(self):
         from_window = sleekmenu_gui.options_from
         self.assertIs(from_window("/c", cheats=True).cheats, True, "ticked on a card that never asked: asked for")
@@ -748,6 +757,44 @@ class WindowTests(unittest.TestCase):
                 root.update()
                 self.assertFalse(button.winfo_ismapped(), "and gone again with the card")
                 root.destroy()
+
+    def test_where_the_games_are_is_a_path_from_the_cards_root(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_rom(card / "Hacks" / "Star Road.z64", 0x33, 0x44, game_code="SM")
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            where, roms = state["fields"]["where"], state["fields"]["roms"]
+            self.assertEqual((where.get(), roms.get()), ("/", ""), "the whole card is its root")
+            self.assertEqual(list(state["where_box"].cget("values")), ["/", "/Hacks", "/ROMS"])
+            # picked from the list, or set by the folder chooser
+            where.set("/ROMS")
+            self.assertEqual(roms.get(), "ROMS")
+            roms.set("Hacks")
+            self.assertEqual(where.get(), "/Hacks")
+            # typed without its slash it is the same folder, and the box is
+            # not rewritten under the cursor
+            where.set("ROMS")
+            self.assertEqual((roms.get(), where.get()), ("ROMS", "ROMS"))
+            # the root again
+            where.set("/")
+            self.assertEqual(roms.get(), "")
+            # the run takes the folder
+            where.set("/ROMS")
+            state["options"]["offline"].set(True)
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(state["last_code"], 0)
+            self.assertEqual(sorted(state["catalog"].games), ["ROMS/Wave Race 64 (USA).z64"])
+            root.destroy()
+            # and a card that remembers a folder opens showing its path
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            self.assertEqual(root.sleekmenu_state["fields"]["where"].get(), "/ROMS")
+            root.destroy()
 
     def test_the_window_settles_at_every_width(self):
         """The Card tab's text wraps at its column's width. When the column's

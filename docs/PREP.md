@@ -42,7 +42,8 @@ right.
 The right side is what most people never change. It applies the next time
 you press the button.
 
-**Where the games are**: the whole card, or one folder (`ROMS`) to catalog
+**Where the games are**: a path from the card's root, as the console's
+title bar writes one. `/` is the whole card; a folder (`/ROMS`) catalogs
 only that. The card remembers the choice.
 
 **Downloads**

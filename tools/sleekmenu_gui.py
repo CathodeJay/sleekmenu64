@@ -1526,8 +1526,17 @@ class GamesTab:
 
 # -- the window -------------------------------------------------------------
 
-#: The games-folder choice that means every game on the card.
-WHOLE_CARD_LABEL = "The whole card"
+def shown_folder(raw: str) -> str:
+    """A games folder as the window shows it: a path from the card's root,
+    the way the console's title bar writes one. "/" is the whole card."""
+    return "/" + raw.strip().strip("/")
+
+
+def raw_folder(shown: str) -> str:
+    """What the box holds, as the run takes it: the folder relative to the
+    card, "" for the whole card. Typed with or without its slashes, and
+    with a Windows one, it is the same folder."""
+    return shown.strip().replace("\\", "/").strip("/")
 STEP_MARKS = {"done": "✓", "now": "●", "next": "○"}
 
 
@@ -1574,7 +1583,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state: dict = {"runner": None, "steps": Steps(), "status": card_status(None), "walk": None}
     card_var = tk.StringVar()
     roms_var = tk.StringVar()               # "" is the whole card
-    roms_shown = tk.StringVar(value=WHOLE_CARD_LABEL)
+    roms_shown = tk.StringVar(value=shown_folder(""))
     roms_note = tk.StringVar()
     metadata_var = tk.StringVar()
     metadata_note = tk.StringVar()
@@ -1713,7 +1722,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     where = ttk.Frame(options)
     where.grid(row=1, column=0, sticky="ew", pady=(6, 0))
     where.columnconfigure(0, weight=1)
-    roms_box = ttk.Combobox(where, textvariable=roms_shown, values=[WHOLE_CARD_LABEL])
+    roms_box = ttk.Combobox(where, textvariable=roms_shown, values=[shown_folder("")])
     roms_box.grid(row=0, column=0, sticky="ew")
     choose_roms = ttk.Button(where, text="Choose a folder…")
     choose_roms.grid(row=0, column=1, padx=(6, 0))
@@ -1898,7 +1907,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         else:
             forget_pack.grid_remove()
         folders = sorted({path.split("/", 1)[0] for path in roms or [] if "/" in path}, key=str.casefold)
-        roms_box.configure(values=[WHOLE_CARD_LABEL] + folders)
+        roms_box.configure(values=[shown_folder("")] + [shown_folder(folder) for folder in folders])
         boot = direct_boot.state(chosen) if chosen is not None else direct_boot.State()
         state["boot"] = boot
         if boot.cart == direct_boot.X7:
@@ -1946,19 +1955,19 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         refresh()
 
     def on_roms_change(*_args) -> None:
-        """The raw folder ("" for the whole card) and the words in the box,
-        kept the same whichever one changed."""
-        raw = roms_var.get().strip().strip("/")
-        shown = raw or WHOLE_CARD_LABEL
-        if roms_shown.get() != shown:
-            roms_shown.set(shown)
-        roms_note.set(f"Only {raw}/ is read, and the menu opens there." if raw else
+        """The raw folder ("" for the whole card) and the path in the box,
+        kept the same whichever one changed. The box is rewritten only when
+        it holds another folder: a path being typed is the same folder with
+        or without its leading slash, and is left as it is being typed."""
+        raw = raw_folder(roms_var.get())
+        if raw_folder(roms_shown.get()) != raw or not roms_shown.get().strip():
+            roms_shown.set(shown_folder(raw))
+        roms_note.set(f"Only {shown_folder(raw)} is read, and the menu opens there." if raw else
                       "Every game on the card, wherever it is.")
 
     def on_roms_shown(*_args) -> None:
-        shown = roms_shown.get().strip()
-        raw = "" if shown == WHOLE_CARD_LABEL else shown.strip("/")
-        if roms_var.get().strip().strip("/") != raw:
+        raw = raw_folder(roms_shown.get())
+        if raw_folder(roms_var.get()) != raw:
             roms_var.set(raw)
 
     def update_buttons() -> None:
@@ -2156,7 +2165,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         metadata_var.set(metadata)
     state["last_code"] = None
     # For the tests: the fields and the buttons, without walking widgets.
-    state["fields"] = {"card": card_var, "roms": roms_var, "metadata": metadata_var}
+    state["fields"] = {"card": card_var, "roms": roms_var, "where": roms_shown, "metadata": metadata_var}
+    state["where_box"] = roms_box
     state["options"] = {"fix": fix_var, "rebuild": rebuild_var, "offline": offline_var,
                         "cheats": cheats_var, "boot": boot_var, "theme": theme_var}
     state["swatch"] = swatch
