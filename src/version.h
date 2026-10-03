@@ -5,6 +5,6 @@
 /* The release's number, shown on the start screen. tools/version.py has the
    same one for the prep tool and tests/test_portability.py holds the two
    together; the release workflow refuses a tag that says otherwise. */
-#define SM_VERSION "1.2.0"
+#define SM_VERSION "2.0.0"
 
 #endif

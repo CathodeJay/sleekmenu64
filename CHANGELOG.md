@@ -1,5 +1,64 @@
 # Changelog
 
+## 2.0.0
+
+**Upgrading from 1.2:** copy the new `SleekMenu64.z64` over the old one at
+the root of the card, download the new prep GUI, and press **Update card**
+once. Your catalog, boxes and edits are kept.
+
+### The prep GUI
+
+- One button. **Set up card** the first time and **Update card** after do
+  the whole job in one run: read the games, fetch what the card lacks,
+  build the catalog and the covers, write them. Four steps show where it
+  is; Stop ends it and the next run carries on from there. There is no
+  separate download to press first.
+- Sharp boxes by default: a 512-pixel box is fetched for every game the
+  database knows, and a card keeps them complete as games are added.
+- The **Games** tab shows the card as the console will and is where a game
+  is changed: its box as the console draws it, and its title, genre,
+  publisher, year, players, region and description in fields you type in.
+  Only what you change is written; Save puts it on the card at once, and
+  Undo my changes brings the original back.
+- **Change box…** offers the boxes libretro has for the game, one per
+  region, or a picture of your own; a PNG or JPEG can also be dropped
+  straight onto the box. One tick applies an edit to every version of the
+  game on the card.
+- **Fetch cheat codes**, on the Options tab: libretro's cheat file for the
+  exact dump of each game, for the many games the EverDrive's cheat pack
+  does not cover. Off until you tick it; the card remembers.
+- **Start the console in SleekMenu**, on the Options tab for an
+  EverDrive-64 X7 card: the console powers on in SleekMenu. A reset inside
+  a game returns to the EverDrive menu; untick to go back. The
+  EverDrive-64 Pro has no such start-up file, so the switch is not shown
+  for its cards.
+- The options and the run's report are on tabs of their own, and the
+  window reads the card again when you come back to it.
+- A **Buy me a coffee** link in the top right corner.
+
+### On the console
+
+- Cheats: a game the EverDrive's cheat pack has no file for, or none for
+  the cartridge's region, uses the file the prep GUI fetched for it.
+
+### Fixes
+
+- Boxes were missing for the revisions libretro files as a link to their
+  game's box (Castlevania Rev 1 is one of about 130). The link is followed;
+  a card that recorded those as missing asks again by itself.
+- With one games folder chosen, an edited game went on saying "Edit
+  waiting" after it was on the card.
+- A description of your own longer than the catalog allows stopped the
+  update. It is cut at a word.
+- An edit that changed only a game's regions was not shown as yours.
+- A collection zip cut short on the card stopped every run; it is fetched
+  again.
+- The database had eight publishers spelled with a no-break space, and the
+  wrong genre for one Super Mario 64 dump.
+
+The command line takes the same choices: `--cheats`, `--no-cheats` and
+`--direct-boot on|off`.
+
 ## 1.2.0
 
 **Upgrading from 1.1:** copy the new `SleekMenu64.z64` over the old one at
