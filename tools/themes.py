@@ -9,7 +9,8 @@ themes are built into the ROM; the card says which one to use in
 
 whose first word is a theme's id. The browser reads it when it starts and
 falls back to the first theme for a missing file or a name it does not
-know, so a card prepared by a newer tool still starts on an older ROM.
+know, so a card prepared by a newer tool still starts on an older ROM. The
+browser writes the same file when the theme is changed on its filter page.
 
 This file is where the themes are defined. `src/theme_table.h` is written
 from it (`python3 -m tools.themes --header src/theme_table.h`) and checked

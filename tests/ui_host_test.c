@@ -1856,6 +1856,97 @@ int main(void) {
         frame(PRESS(toggle_view));
     }
 
+    /* ---- the theme is chosen on the filter page, and kept on the card ----- */
+    {
+        static const row_t rows[] = {
+            {"a.z64", "Alpha", "Racing", 0, "Nintendo", 1996, NULL},
+            {"b.z64", "Beta", "Sports", 0, "Acclaim", 1998, NULL},
+        };
+        char text[32];
+        FILE *file;
+        size_t read;
+        int last = (int)SM_THEME_COUNT - 1;
+        remove(SM_THEME_PATH);
+        sm_theme_use(0);
+        start(rows, 2u);
+        frame(PRESS(filter));
+        assert(ui.screen == SM_SCREEN_FILTERS);
+
+        /* The row under the filters. Up from the first row wraps onto it. */
+        frame(PRESS(up));
+        draw();
+        assert(sm_test_drew("THEME") && sm_test_drew("< Midnight >"));
+
+        /* Right is the next theme, used at once: the page is drawn in it. */
+        frame(PRESS(right));
+        assert(sm_theme_current() == 1 && ui.theme_changed);
+        draw();
+        assert(sm_test_drew("< Charcoal >"));
+        assert(boxes_in(1, SM_C_SELECT) > 0 && boxes_in(0, SM_C_SELECT) == 0);
+        /* Left goes back, and round to the last from the first. */
+        frame(PRESS(left)); assert(sm_theme_current() == 0);
+        frame(PRESS(left)); assert(sm_theme_current() == last);
+        frame(PRESS(right)); assert(sm_theme_current() == 0);
+        frame(PRESS(right)); frame(PRESS(right));
+        assert(sm_theme_current() == 2);
+        /* It filters nothing, and clearing the filters leaves it alone. */
+        assert(ui.item_count == 2u);
+        frame(PRESS(filter));
+        assert(sm_theme_current() == 2 && ui.screen == SM_SCREEN_FILTERS);
+        /* Nothing is written while choosing... */
+        assert(fopen(SM_THEME_PATH, "rb") == NULL);
+
+        /* ...and leaving the page writes the choice, once: the theme's id. */
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LIBRARY && !ui.theme_changed);
+        file = fopen(SM_THEME_PATH, "rb");
+        assert(file != NULL);
+        read = fread(text, 1, sizeof(text) - 1, file);
+        fclose(file);
+        text[read] = '\0';
+        assert(!strncmp(text, sm_theme_id(2), strlen(sm_theme_id(2))) && text[read - 1] == '\n');
+        /* Which is what the next start reads. */
+        sm_theme_use(0);
+        assert(sm_theme_load(SM_THEME_PATH) && sm_theme_current() == 2);
+
+        /* A visit that changes nothing writes nothing. */
+        remove(SM_THEME_PATH);
+        frame(PRESS(filter)); frame(PRESS(down)); frame(PRESS(right)); frame(PRESS(back));
+        assert(fopen(SM_THEME_PATH, "rb") == NULL);
+        sm_theme_use(0);
+        memset(&ui.filter, 0, sizeof(ui.filter));
+    }
+
+    /* ---- grid and coverflow spell the genre out; the strip keeps its codes -- */
+    {
+        static const row_t rows[] = {
+            {"a.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"b.z64", "Beta", "Action-Adventure", 0, "", 0, NULL},
+        };
+        uint32_t racing = 0;
+        start(rows, 2u);
+        settle();
+        for (uint32_t i = 0; i < ui.genres.count; i++)
+            if (!strcmp(ui.genres.tabs[i].name, "Racing")) racing = i;
+        assert(racing > 0);
+        while (!(ui.filter.genre && !strcmp(ui.filter.genre, "Racing"))) frame(PRESS(genre_next));
+        draw();
+        assert(sm_test_drew("RAC") && !sm_test_drew("RACING"));   /* the list: the strip */
+        frame(PRESS(toggle_view));                                /* the grid */
+        draw();
+        assert(sm_test_drew("RACING  /") && !sm_test_drew("RAC  /"));
+        frame(PRESS(toggle_view));                                /* coverflow */
+        settle();
+        draw();
+        assert(sm_test_drew("RACING  /"));
+        frame(PRESS(genre_next));
+        while (!(ui.filter.genre && !strcmp(ui.filter.genre, "Action-Adventure"))) frame(PRESS(genre_next));
+        draw();
+        assert(sm_test_drew("ACTION-ADVENTURE  /"));
+        frame(PRESS(toggle_view));
+        while (ui.filter.genre || ui.flat) frame(PRESS(genre_next));
+    }
+
     /* ---- the start screen names the release ------------------------------ */
     {
         sm_test_reset();

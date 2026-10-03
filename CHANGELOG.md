@@ -41,10 +41,13 @@ once. Your catalog, boxes and edits are kept.
 ### On the console
 
 - Themes: Midnight, Charcoal, Jungle, Grape, Fire and Ice. Midnight is the
-  look it always had; the card's theme is chosen in the prep GUI.
+  look it always had. Z, then the THEME row under the filters, changes it;
+  so does the prep GUI.
 - The help bar shows each button as a picture in the button's own colour:
   a blue A, a green B, a red Start, yellow C buttons with their arrow,
   grey Z, L and R, a cross for the D-pad.
+- In the grid and coverflow the title bar spells the genre out (ACTION,
+  not ACT).
 - Cheats: a game the EverDrive's cheat pack has no file for, or none for
   the cartridge's region, uses the file the prep GUI fetched for it.
 

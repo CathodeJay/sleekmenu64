@@ -25,7 +25,7 @@ this is the reference.
 /sleekmenu/cheats.txt       which cheats are on, per game      written by the browser
 /sleekmenu/cheats/          your own .cht files (optional)     yours
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump     fetched by the tool (--cheats)
-/sleekmenu/theme.txt        the browser's theme, one word      written by the tool (--theme)
+/sleekmenu/theme.txt        the browser's theme, one word      written by the browser or the tool
 /sleekmenu/art/             your own box art and text (optional)  yours
 
 /ED64/autoexec.v64          a copy of the browser (X7, optional)  written by the tool (--direct-boot)
@@ -52,6 +52,8 @@ These, and nothing else:
 - `sleekmenu/favorites.txt` when you press C-down on a game
 - `sleekmenu/history.txt` when you launch a game
 - `sleekmenu/cheats.txt` when you leave the cheats page
+- `sleekmenu/theme.txt` when you leave the filter page having changed the
+  theme
 - `ED64/gamedata/<game>.<eep|srm|fla>` and `ED64/sysdata/registry.dat` — the
   save and the record the EverDrive menu reads, in its own names and format,
   so a game started from either menu finishes its save in the other
@@ -70,8 +72,9 @@ browser, as its first word: `midnight`, `charcoal`, `jungle`, `grape`,
 `fire` or `ice`. The browser reads the file once as it starts, without
 regard to case, and uses Midnight when the file is missing, empty, or names
 a theme that ROM does not have, so a card prepared by a newer tool still
-starts on an older browser. The tool writes the file when a theme is
-chosen; a card that never chose has none.
+starts on an older browser. The browser writes the file when the theme is
+changed on its filter page, the tool when one is chosen there; a card that
+never chose has none.
 
 ## Starting in the browser
 

@@ -79,3 +79,11 @@ bool sm_theme_load(const char *path) {
     sm_theme_use(index);
     return true;
 }
+
+bool sm_theme_save(const char *path) {
+    bool written;
+    FILE *file = fopen(path, "wb");
+    if (!file) return false;
+    written = fprintf(file, "%s\n", sm_theme_id(current)) > 0;
+    return fclose(file) == 0 && written;
+}

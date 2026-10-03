@@ -14,7 +14,9 @@
 #include <string.h>
 #include <strings.h>
 
-enum { FILTER_ROWS = 6 };
+/* The filter page's rows: the genre grid, five more filters, and under them
+   the one row that is not a filter -- the theme. */
+enum { FILTER_ROWS = 7, FILTER_ROW_THEME = 6 };
 
 /* Where the card keeps its art. Named rather than spelled out at the one call
    site so the host test can point the browser at a directory it can create;
@@ -1114,6 +1116,15 @@ static void change_filter(sm_ui_t *ui, sm_catalog_t *catalog, int direction) {
                 ui->filter.favorites_only = true;
             }
             break;
+        /* Not a filter: the next theme, used at once so the page itself
+           shows it. Nothing to rebuild; the paragraph coverflow keeps
+           rendered is in the old colours, so it is rendered again. */
+        case FILTER_ROW_THEME:
+            sm_theme_use((sm_theme_current() + (direction > 0 ? 1 : (int)SM_THEME_COUNT - 1))
+                % (int)SM_THEME_COUNT);
+            ui->theme_changed = true;
+            ui->flow_desc_item = UINT32_MAX;
+            return;
     }
     /* The header counts what the filter would show. Leaving it until the
        screen closes meant composing a filter blind, which is when the count
@@ -1552,7 +1563,16 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
     if (ui->screen == SM_SCREEN_FILTERS) {
         if (actions.up) ui->filter_row = (ui->filter_row + FILTER_ROWS - 1) % FILTER_ROWS;
         if (actions.down) ui->filter_row = (ui->filter_row + 1) % FILTER_ROWS;
-        if (actions.back) { ui->screen = SM_SCREEN_LIBRARY; rebuild(ui, catalog); return; }
+        if (actions.back) {
+            ui->screen = SM_SCREEN_LIBRARY;
+            rebuild(ui, catalog);
+            if (ui->theme_changed) {
+                ui->theme_changed = false;
+                if (!sm_theme_save(SM_THEME_PATH))
+                    ui->status = "Theme not saved: the card could not be written";
+            }
+            return;
+        }
         if (actions.filter) { memset(&ui->filter, 0, sizeof(ui->filter)); ui->status = "Filters cleared"; }
         if (actions.right || actions.left) change_filter(ui, catalog, actions.right ? 1 : -1);
         return;
@@ -2399,7 +2419,7 @@ static void draw_panel(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c
 static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
     const sm_ui_t *ui) {
     static const char *LABELS[] = {"GENRE", "REGION", "PLAYERS", "PUBLISHER",
-                                   "YEAR", "FAVORITES"};
+                                   "YEAR", "FAVORITES", "THEME"};
     int y = l->safe_top + SM_HEADER_HEIGHT + 6;
     int width = l->safe_right - l->safe_left;
     char value[48];
@@ -2468,6 +2488,12 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
             shown = value;
         }
         if (row == 5) shown = ui->filter.favorites_only ? "Only" : "Any";
+        if (row == FILTER_ROW_THEME) {
+            /* Set apart from the filters, where there is room to. */
+            if (y + 6 + SM_FONT_HEIGHT + 2 <= l->footer_top - 2) y += 6;
+            snprintf(value, sizeof(value), "< %s >", sm_theme_name(sm_theme_current()));
+            shown = value;
+        }
         if (row == ui->filter_row)
             graphics_draw_box(s, l->safe_left, y - 2, width, 11,
                 sm_colour(SM_C_SELECT));
@@ -2873,9 +2899,16 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
         else if (ui->flat)
             snprintf(header, sizeof(header), "FAVOURITES");
         else if (ui->view != SM_VIEW_LIST && ui->genre_tab) {
+            /* Spelled out: the strip needs three letters to fit eight tabs,
+               the bar has the room for the word. */
             const sm_genre_tab_t *tab = strip_genre(ui, ui->genre_tab);
-            snprintf(header, sizeof(header), "%s  /%.*s", tab ? tab->code : "FAV",
-                (int)sizeof(header) - 8, folder_for_display(ui));
+            char genre[sizeof(tab->name)];
+            size_t i;
+            snprintf(genre, sizeof(genre), "%s", tab ? tab->name : "FAVOURITES");
+            for (i = 0; genre[i]; i++)
+                if (genre[i] >= 'a' && genre[i] <= 'z') genre[i] = (char)(genre[i] - 'a' + 'A');
+            snprintf(header, sizeof(header), "%s  /%.*s", genre,
+                (int)(sizeof(header) - sizeof(genre) - 4), folder_for_display(ui));
         } else
             snprintf(header, sizeof(header), "/%.*s", (int)sizeof(header) - 2, folder_for_display(ui));
         graphics_set_color(sm_colour(SM_C_ACCENT), 0);

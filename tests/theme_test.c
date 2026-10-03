@@ -67,6 +67,19 @@ int main(int argc, char **argv) {
         assert(sm_theme_load(path) && sm_theme_current() == sm_theme_find("grape"));
         file = fopen(path, "wb"); fputs("no-such-theme\n", file); fclose(file);
         assert(!sm_theme_load(path) && sm_theme_current() == sm_theme_find("grape"));
+        /* And written: the id of the theme in use, on a line of its own. */
+        sm_theme_use(sm_theme_find("ice"));
+        assert(sm_theme_save(path));
+        {
+            char text[16] = {0};
+            file = fopen(path, "rb");
+            assert(fread(text, 1, sizeof(text) - 1, file) == 4u && !strcmp(text, "ice\n"));
+            fclose(file);
+        }
+        sm_theme_use(0);
+        assert(sm_theme_load(path) && sm_theme_current() == sm_theme_find("ice"));
+        snprintf(path, sizeof(path), "%s/no-such-folder/theme.txt", argv[1]);
+        assert(!sm_theme_save(path));
     }
     puts("theme checks passed");
     return 0;

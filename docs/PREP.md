@@ -233,7 +233,10 @@ The browser has six sets of colours, built into `SleekMenu64.z64`:
 
 Choose one under **Console** on the Card tab (`--theme jungle` on the
 command line) and press Update card: the choice is written to
-`sleekmenu/theme.txt`, and the browser reads it the next time it starts. A
+`sleekmenu/theme.txt`, and the browser reads it the next time it starts.
+The same file is written by the console itself when you change the theme
+there ([CONSOLE.md](CONSOLE.md#themes)), and the window shows whichever was
+chosen last. A
 theme changes colours only: every screen is laid out the same, a warning is
 still amber and an error red, and the buttons on the help bar keep the
 colours they have on the controller.

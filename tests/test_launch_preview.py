@@ -124,6 +124,7 @@ class HostModuleTests(unittest.TestCase):
                     "ui-test", sources,
                     ["-Itests/stubs"] + CHEATS_FLAGS +
                     [f'-DSM_FAVORITES_PATH="{scratch}/favorites.txt"',
+                     f'-DSM_THEME_PATH="{scratch}/theme.txt"',
                      f'-DSM_COVERS_DIR="{scratch}/covers"',
                      f'-DSM_COVER_PACK_PATH="{pack}"',
                      f'-DSM_COVER_PACK_LARGE_PATH="{large}"'],
@@ -693,7 +694,9 @@ class SafetyGateTests(unittest.TestCase):
     # somebody makes on purpose, which is the point of the list.
     # cheats_io.c writes the record of which cheats are on -- one small text
     # file under the browser's folder, in the same spirit as favourites.
-    SD_WRITERS = {"save_io.c", "ed64_registry.c", "favorites.c", "history.c", "cheats_io.c"}
+    # theme.c writes the theme chosen on the filter page: one word, in a file
+    # of its own under the browser's folder, when the page is left.
+    SD_WRITERS = {"save_io.c", "ed64_registry.c", "favorites.c", "history.c", "cheats_io.c", "theme.c"}
 
     def test_only_the_save_modules_write_to_the_card(self):
         for path in sorted((ROOT / "src").rglob("*.c")):

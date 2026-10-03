@@ -333,9 +333,12 @@ so a theme cannot forget a role or put dark text on a dark bar, and a test
 measures the contrast of every pair the browser draws together. A warning,
 an error and the favourite star keep their colours in every theme: they
 mean something. The card names its theme in `sleekmenu/theme.txt`, read
-once after the cartridge is found; there is no chooser on the console, so
-no screen and no button is spent on it. The folder picture on the coverflow
-shelf, painted once into a surface, is painted again when the theme is
+once after the cartridge is found. It is chosen on the filter page, as a
+row under the filters: no screen and no button is spent on it, each step
+is used at once so the page shows what is being chosen, and the file is
+written once, when the page is left. The prep tool writes the same file.
+What is painted once into a surface -- the folder picture on the coverflow
+shelf, the paragraph under it -- is painted again when the theme is
 another.
 
 **The help bar draws the buttons.** A line of help is written with a

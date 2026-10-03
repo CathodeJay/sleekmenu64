@@ -8,13 +8,15 @@
    colour is for -- the background, the selection, text on the selection --
    and the theme in use says which colour that is. The themes are built in
    (theme_table.h, written from tools/themes.py) and the card picks one by
-   name in sleekmenu/theme.txt, which the prep tool writes. A card that says
-   nothing, or names a theme this ROM does not have, gets the first.
+   name in sleekmenu/theme.txt, written by the THEME row of the filter page
+   and by the prep tool alike. A card that says nothing, or names a theme
+   this ROM does not have, gets the first.
 
    The controller buttons' colours are not here: a blue A is blue in every
    theme, because that is the colour of the button under the thumb.
 
-   Everything but sm_theme_load is pure, and tested on the host. */
+   Everything but sm_theme_load and sm_theme_save is pure, and tested on
+   the host. */
 
 #include "theme_table.h"
 #include <stdbool.h>
@@ -42,5 +44,7 @@ uint32_t sm_colour(sm_colour_role_t role);
 /* Read the card's choice and use it. A missing or unreadable file changes
    nothing. Returns whether a theme was chosen by the file. */
 bool sm_theme_load(const char *path);
+/* Write the theme in use as the card's choice: its id and a newline. */
+bool sm_theme_save(const char *path);
 
 #endif

@@ -106,6 +106,9 @@ typedef struct {
     /* The launch screen shows a game card; the numbers that were on it are a
        keypress away, where someone diagnosing a card can still reach them. */
     bool diagnostics;
+    /* The theme was changed on the filter page and is not on the card yet:
+       it is written when the page is left, once, not at every step. */
+    bool theme_changed;
     /* The cheats page, reached from the launch card: which entry the cursor
        is on and which is at the top of the window. */
     uint32_t cheat_row;

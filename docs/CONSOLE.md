@@ -37,7 +37,8 @@ collection's scan uncropped at its own size, or, after `--hires`, the
 
 Z opens the **filter** from any view: genre (with a count for each), region,
 players, publisher, year and favourites, combined. Z again clears it, B
-applies it. The header shows how many games match.
+applies it. The header shows how many games match. The last row of the
+page is not a filter: it is the [theme](#themes).
 
 ![The filter screen: genres with counts, then region, players, publisher, year and favourites](screenshots/filters.png)
 
@@ -49,10 +50,16 @@ buttons with their arrow, grey Z, L and R, and a cross for the D-pad.
 ## Themes
 
 The colours are a theme: Midnight, Charcoal, Jungle, Grape, Fire and Ice.
-Midnight is the default. The card says which one in `sleekmenu/theme.txt`,
-written by the prep tool ([PREP.md](PREP.md#themes)); the browser reads it
-as it starts. The buttons' colours, the favourite star, a warning and an
-error are the same in every theme.
+Midnight is the default. To change it, press Z and go to the **THEME** row
+under the filters (up from the top row gets there at once): left and right
+step through the themes, and the screen takes each one as you do. B keeps
+the choice, on the card in `sleekmenu/theme.txt`, and the browser starts in
+it from then on. The prep tool sets the same file
+([PREP.md](PREP.md#themes)). The buttons' colours, the favourite star, a
+warning and an error are the same in every theme.
+
+In the grid and in coverflow, where the genre tabs are not shown, the
+title bar names the genre you are in, spelled out.
 
 ## Starting the console in SleekMenu
 
