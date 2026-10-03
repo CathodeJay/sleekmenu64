@@ -79,26 +79,35 @@ names the converter's format too, so a change to how sprites are made
 converts everything again; `--rebuild` ("Start from nothing" in the
 window) is the way out when a card looks wrong.
 
-**Where a field came from is where its file is.** The window's catalog
-tab says for every game which source answered for its box, title, text and
-facts, and it derives that from nothing hidden: a picture is the owner's
-because it sits in `sleekmenu/art/` (or beside the ROM), the collection's
-because it came out of the zip, and the facts are the database's or the
-collection's by which lookup found them (`tools/provenance.py`). Originals
-are never edited in place — the zip is read where it is — so an edit is
-always a file somewhere else, reverting one is deleting that file, and no
-manifest of the owner's changes exists to go stale when a file is dropped
-in by hand. The result lands in `sleekmenu/catalog.json` beside the packed
-catalog (`tools/card_catalog.py`); the console reads only the packed one.
-The tab is three regions: the tree of the card, with a word or two per
-cell for where the box and the text came from; beside it the selected game
-as the console shows it -- the box at the box view's size, or a placeholder
-of that size so nothing moves as the selection does, the facts, the whole
-provenance, then the text; and under the tree the owner's own art, facts
-and text for that game. The right column is a fixed width, so the box is
-never clipped and the tree takes whatever is left. Search narrows the tree
-as typed, and Show narrows it to what the owner changed or to what the
-card holds beyond the catalog.
+**Where a field came from is where its file is.** The tool records for
+every game which source answered for its box, title, text and facts, and it
+derives that from nothing hidden: a picture is the owner's because it sits
+in `sleekmenu/art/` (or beside the ROM), the collection's because it came
+out of the zip, and the facts are the database's or the collection's by
+which lookup found them (`tools/provenance.py`). Originals are never edited
+in place — the zip is read where it is — so an edit is always a file
+somewhere else, reverting one is deleting that file, and no manifest of the
+owner's changes exists to go stale when a file is dropped in by hand. The
+result lands in `sleekmenu/catalog.json` beside the packed catalog
+(`tools/card_catalog.py`); the console reads only the packed one.
+
+**The Games tab shows a game once, and that is where it is changed.** Two
+regions: the list of the card, with one word per row for what is worth
+knowing about it, and beside it the selected game as the console shows it
+-- the box at the box view's size, or a placeholder of that size so nothing
+moves as the selection does, and every field the console shows, typed into
+where it stands. The fields say what the card has, whoever it came from,
+and the sources are used to mark the ones that are the owner's rather than
+shown as words. Saving writes only what differs from the catalog, plus what
+was the owner's already; an emptied field is written nowhere, which is how
+an original comes back without the tool keeping a copy of it. The right
+column is a fixed width, so the box is never clipped and the list takes
+whatever is left. Search narrows the list as typed, and the Show choice
+narrows it to what needs a look, what the owner changed, or what the card
+holds beyond the catalog. A box is chosen by eye: the picker fetches what
+libretro has for the game in each region and shows them side by side, and
+the one picked is saved as a picture of the owner's own, so no later
+download replaces it.
 
 **An edit shows before it is prepared, from the file alone.** Save writes
 the owner's file; the tab then reads every owner's file on the card back
@@ -113,7 +122,7 @@ same way, and nothing goes stale.
 **Save is applied, not only saved.** The console reads `catalog.ebc` and
 nothing else, so an owner's file that no run has read changes nothing
 there -- and a Save that stopped at the file would look done in the window
-and not be. Save and Remove start the same run as the Card tab's button,
+and not be. Save and Undo start the same run as the Card tab's button,
 with the choices the card remembers (its games folder, its boxes) rather
 than whatever is half-set under Options, and with nothing downloaded; the
 run is incremental, so it costs seconds. One run at a time: an edit saved while

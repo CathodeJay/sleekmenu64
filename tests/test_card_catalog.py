@@ -69,13 +69,6 @@ class CardTests(unittest.TestCase):
         pal = self.games["ROMS/Zelda (Europe).z64"]
         self.assertEqual(pal["sources"]["cover"], provenance.COVER_COLLECTION_REGION)
 
-    def test_the_notes_say_what_a_person_should_know(self):
-        self.assertIn("another region's scan",
-                      " ".join(provenance.notes(self.games["ROMS/Zelda (Europe).z64"])))
-        self.assertIn("placeholder", " ".join(provenance.notes(self.games["ROMS/Homebrew/Flappy.z64"])))
-        self.assertIn("The title is yours",
-                      " ".join(provenance.notes(self.games["ROMS/Hacks/Wave Race Kaizo.z64"])))
-
     def test_the_tree_is_the_card_as_the_browser_shows_it(self):
         tree = card_catalog.tree(self.document["games"])
         self.assertEqual(list(tree["folders"]), ["ROMS"])

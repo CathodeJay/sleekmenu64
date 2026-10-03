@@ -121,7 +121,6 @@ class CardStatusTests(unittest.TestCase):
             self.assertEqual(status.detail, "1 added since the last update. 1 has no box.")
             self.assertEqual(status.explain,
                              "Adds the 1 new game with its box and description, then rewrites the catalog.")
-            self.assertEqual(sleekmenu_gui.added_since(card, ["ROMS/A.z64", "ROMS/B.z64", "Other/C.z64"]), 1)
             self.assertTrue(sleekmenu_gui.card_status(card, offline=True).explain.endswith(
                 "Downloads are off: only what is already on the card is used."))
 
@@ -188,42 +187,104 @@ class StepTests(unittest.TestCase):
         self.assertEqual(line(1, sleekmenu_prep.Outcome(), status), "", "the run's own error line says it")
 
 
-class CatalogLineTests(unittest.TestCase):
-    def test_the_facts_line_says_what_is_known_and_nothing_else(self):
-        game = {"genre": "Racing", "publisher": "Nintendo", "year": 1996, "players": 4, "regions": ["USA"]}
-        self.assertEqual(sleekmenu_gui.facts_line(game), "Racing · Nintendo · 1996 · 4 players · USA")
-        self.assertEqual(sleekmenu_gui.facts_line({"players": 1}), "1 player")
-        self.assertEqual(sleekmenu_gui.facts_line({"year": 0, "players": 0}),
-                         "no genre, publisher, year or players known")
+class GamesLineTests(unittest.TestCase):
+    """What the Games tab says and writes, without its widgets."""
 
-    def test_the_edit_panel_says_what_a_save_reaches(self):
-        games = [{"code": "NSME"}, {"code": "NSME"}, {"code": "NWRE"}]
-        self.assertEqual(sleekmenu_gui.edit_summary(games, games[0], "rom"), "For this ROM only.")
-        self.assertEqual(sleekmenu_gui.edit_summary(games, games[0], "code"),
-                         "For every game with code NSME: 2 on this card.")
-        self.assertIn("only this one", sleekmenu_gui.edit_summary(games, games[2], "code"))
+    def test_a_row_says_the_one_thing_worth_knowing_about_it(self):
+        status = sleekmenu_gui.status_of
+        whole = {"cover": "NSME.sprite", "genre": "Platform", "sources": {"cover": "libretro"}}
+        self.assertEqual(status(whole), "")
+        self.assertEqual(status({"genre": "Racing"}), "No box")
+        self.assertEqual(status({"cover": "x.sprite"}), "No facts")
+        self.assertEqual(status({}), "No box, no facts")
+        self.assertEqual(status(dict(whole, sources={"cover": "yours (this ROM)"})), "Changed by me")
+        self.assertEqual(status(dict(whole, sources={"genre": "yours"})), "Changed by me")
+        self.assertEqual(status(whole, pending=object()), "Edit waiting")
+        self.assertEqual(status({"state": sleekmenu_gui.STATE_WAITING}), "New")
+        self.assertEqual(status({"state": sleekmenu_gui.STATE_ASIDE}), "Not a ROM")
+        self.assertEqual(sleekmenu_gui.lacks({"cover": "x.sprite", "year": 1999}), [],
+                         "no description is not something to look at: half the library has none")
 
-    def test_the_summary_counts_the_games_the_boxes_and_what_was_changed(self):
-        document = {"built": "2026-09-19T16:33:58+00:00", "games": [
-            {"sources": {"cover": "collection"}}, {"sources": {"cover": "yours (this ROM)"}},
-            {"sources": {"cover": "libretro"}}, {"sources": {"cover": "none"}}]}
-        self.assertEqual(sleekmenu_gui.summarize(document),
-                         "4 games, built 2026-09-19 16:33; 3 with a box, 1 of them high-resolution; "
-                         "1 with your own art or text")
-        self.assertEqual(sleekmenu_gui.summarize({"games": []}), "0 games")
+    def test_the_show_choices_are_counted_and_listed(self):
+        document = {"games": [
+            {"path": "A.z64", "cover": "a.sprite", "genre": "Racing", "sources": {"cover": "libretro"}},
+            {"path": "B.z64", "genre": "Racing", "sources": {"cover": "none"}},
+            {"path": "C.z64", "cover": "c.sprite", "genre": "Racing", "sources": {"cover": "yours (this ROM)"}},
+            {"path": "D.z64", "cover": "d.sprite", "genre": "Racing", "sources": {}}]}
+        rows = [{"path": "New.z64", "state": sleekmenu_gui.STATE_WAITING},
+                {"path": "IPL.z64", "state": sleekmenu_gui.STATE_ASIDE}]
+        pending = {"D.z64": object()}
+        self.assertEqual(sleekmenu_gui.show_counts(document, rows, pending),
+                         {"all": 6, "look": 1, "changed": 2, "new": 1})
+        paths = lambda mode: [r["path"] for r in sleekmenu_gui.shown_records(document, rows, pending, mode)]
+        self.assertEqual(paths("look"), ["B.z64"])
+        self.assertEqual(paths("changed"), ["C.z64", "D.z64"])
+        self.assertEqual(paths("new"), ["New.z64"], "a file set aside is not a new game")
+        self.assertEqual(sleekmenu_gui.show_counts(None, [], {}), {"all": 0, "look": 0, "changed": 0, "new": 0})
 
-    def test_the_tree_cells_are_the_short_forms_of_where_a_field_came_from(self):
-        short = sleekmenu_gui.short_cover_source
-        self.assertEqual(short("libretro"), "high-res")
-        self.assertEqual(short("libretro, modified"), "high-res, edited")
-        self.assertEqual(short("yours (this ROM)"), "yours")
-        self.assertEqual(short("yours (code NSME)"), "yours")
-        self.assertEqual(short("collection (another region's box)"), "other region")
-        self.assertEqual(short("collection"), "collection")
-        self.assertEqual(short("none"), "none")
-        self.assertEqual(sleekmenu_gui.short_text_source("collection (by game code)"), "by code")
-        self.assertEqual(sleekmenu_gui.short_text_source("yours"), "yours")
+    def test_only_what_the_owner_changed_goes_in_their_file(self):
+        """The fields show what the card has. Saving them untouched writes
+        nothing; a changed one is written; one that was the owner's stays
+        the owner's; an emptied one is left out, and the original returns."""
+        from tools import custom_art
+        game = {"title": "Kaizo", "genre": "Racing", "publisher": "Nintendo", "year": 1996, "players": 4,
+                "regions": ["USA"], "description": "A  race.\n"}
+        as_shown = {"title": "Kaizo", "genre": "Racing", "publisher": "Nintendo", "year": 1996, "players": 4,
+                    "regions": ["USA"], "description": "A race."}
+        values = sleekmenu_gui.edit_values
+        self.assertEqual(values(game, None, as_shown), ("", "", {}))
+        changed = dict(as_shown, title="Kaizo Race", players=2, regions=["EUROPE", "USA"], description="Hard.")
+        self.assertEqual(values(game, None, changed),
+                         ("Kaizo Race", "Hard.", {"players": 2, "regions": ["USA", "EUROPE"]}))
+        own = custom_art.Text("Kaizo Race", "", {"genre": "Racing"})
+        owned_game = dict(game, title="Kaizo Race")
+        self.assertEqual(values(owned_game, own, dict(as_shown, title="Kaizo Race")),
+                         ("Kaizo Race", "", {"genre": "Racing"}), "theirs already: kept, though nothing changed")
+        self.assertEqual(values(owned_game, own, dict(as_shown, title="", genre="")), ("", "", {}),
+                         "emptied: left out, so the original comes back")
 
+    def test_the_owners_fields_are_marked(self):
+        from tools import custom_art
+        game = {"sources": {"title": "yours", "genre": "database", "cover": "yours (code NWRE)"}}
+        self.assertEqual(sleekmenu_gui.owned_fields(game, None), {"title", "cover"})
+        own = custom_art.Text("", "Hard.", {"regions": ["USA"]})
+        self.assertEqual(sleekmenu_gui.owned_fields({"sources": {}}, own), {"description", "regions"})
+        pending = custom_art.Pending({"year": 1996}, Path("box.png"), ())
+        self.assertEqual(sleekmenu_gui.owned_fields({"sources": {}}, None, pending), {"year", "cover"})
+        self.assertEqual(sleekmenu_gui.pending_line(pending), "Changed here, not on the card yet: year, box.")
+        self.assertIn("Your title was removed",
+                      sleekmenu_gui.pending_line(custom_art.Pending({}, None, ("title",))))
+
+    def test_the_boxes_a_game_could_have_are_one_per_region_its_own_first(self):
+        from tools import coverdb
+        database = coverdb.load(Path(__file__).resolve().parent.parent / "data" / "coverdb.csv")
+        choices = sleekmenu_gui.box_choices(database, {"code": "NSMJ"})
+        self.assertEqual([label for label, _names in choices], ["Japan", "USA", "Europe"])
+        names = dict(choices)
+        self.assertEqual(names["USA"][0], "Super Mario 64 (USA)")
+        self.assertEqual(names["Japan"][0], "Super Mario 64 (Japan)", "the release before its revisions")
+        self.assertEqual(sleekmenu_gui.box_choices(database, {"code": "NSME"})[0][0], "USA")
+        self.assertEqual(sleekmenu_gui.box_choices(database, {"code": ""}), [])
+        self.assertEqual(sleekmenu_gui.box_choices(database, {"code": "XXXX"}), [], "homebrew: nothing to offer")
+        self.assertEqual(sleekmenu_gui.region_label("D"), "Europe")
+
+    def test_the_notes_under_a_game_say_how_sure_the_tool_is(self):
+        notes = sleekmenu_gui.game_notes
+        self.assertEqual(notes({"identified": "crc", "sources": {"cover": "libretro"}}), [])
+        self.assertIn("Recognised by its game code", notes({"identified": "serial"})[0])
+        self.assertIn("Not recognised", notes({"identified": ""})[0])
+        self.assertEqual(notes({"identified": "crc", "sources": {"cover": "collection (another region's box)"}}),
+                         ["The box is another region's."])
+
+    def test_the_search_looks_at_more_than_the_title(self):
+        game = {"title": "Kaizo", "path": "ROMS/Hacks/Kaizo.z64", "publisher": "Nintendo", "year": 1996,
+                "code": "NWRE"}
+        self.assertTrue(sleekmenu_gui.matches(game, "nintendo 1996"))
+        self.assertTrue(sleekmenu_gui.matches(game, "hacks nwre"))
+        self.assertFalse(sleekmenu_gui.matches(game, "kaizo 1997"))
+
+
+class CollectionLineTests(unittest.TestCase):
     def test_sizes_are_whole_megabytes_and_one_decimal_under_ten(self):
         self.assertEqual(sleekmenu_gui.megabytes(54_252_321), "52 MB")
         self.assertEqual(sleekmenu_gui.megabytes(1_572_864), "1.5 MB")
@@ -268,13 +329,6 @@ class CatalogLineTests(unittest.TestCase):
             self.assertFalse(broken.ready)
             self.assertTrue(broken.downloadable)
             self.assertIn("fetched again at the next update", broken.line)
-
-    def test_the_box_view_line_says_what_the_console_will_draw(self):
-        self.assertIn("high-resolution", sleekmenu_gui.box_view_line({"sources": {"cover": "libretro"}}))
-        self.assertIn("high-resolution", sleekmenu_gui.box_view_line({"sources": {"cover": "libretro, modified"}}))
-        self.assertIn("your picture", sleekmenu_gui.box_view_line({"sources": {"cover": "yours (code NSME)"}}))
-        self.assertIn("small scan", sleekmenu_gui.box_view_line({"sources": {"cover": "collection"}}))
-        self.assertIn("no box", sleekmenu_gui.box_view_line({"sources": {"cover": "none"}}))
 
 
 class RunnerTests(unittest.TestCase):
@@ -381,11 +435,12 @@ class WindowTests(unittest.TestCase):
             catalog = root.sleekmenu_state["catalog"]
             self.assertIn("ROMS/Wave Race 64 (USA).z64", catalog.games)
 
-    def test_the_catalog_tab_shows_the_card_and_the_box_the_console_draws(self):
+    def test_the_games_tab_shows_the_card_and_the_box_the_console_draws(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
             write_rom(card / "ROMS" / "Hacks" / "Kaizo.z64", 0x33, 0x44, game_code="WR")
+            write_rom(card / "ROMS" / "Homebrew" / "Flappy.z64", 3, 4, game_code="\0\0", country="\0")
             write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
@@ -393,78 +448,99 @@ class WindowTests(unittest.TestCase):
             (card / "sleekmenu" / "catalog.json").unlink()
             root = sleekmenu_gui.build(card=str(card))
             root.update()
-            catalog = root.sleekmenu_state["catalog"]
-            self.assertIn("earlier version", catalog.summary.get())
+            games = root.sleekmenu_state["catalog"]
+            self.assertIn("earlier version", games.note.get())
             root.destroy()
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
             root = sleekmenu_gui.build(card=str(card))
             root.update()
-            catalog = root.sleekmenu_state["catalog"]
-            self.assertTrue(catalog.summary.get().startswith("2 games"))
-            self.assertEqual(len(catalog.games), 2)
-            rows = catalog.tree.get_children("")
+            games = root.sleekmenu_state["catalog"]
+            self.assertEqual(games.note.get(), "")
+            self.assertEqual(len(games.games), 3)
+            self.assertEqual(str(games.show_buttons["all"].cget("text")), "All 3")
+            self.assertEqual(str(games.show_buttons["look"].cget("text")), "Needs a look 1")
+            self.assertEqual(str(games.show_buttons["changed"].cget("text")), "Changed by me 0")
+            rows = games.tree.get_children("")
             self.assertEqual(len(rows), 1, "one folder at the root: ROMS/")
-            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            self.assertEqual(games.tree.set("ROMS/Homebrew/Flappy.z64", "status"), "No box, no facts")
+            self.assertEqual(games.tree.set("ROMS/Hacks/Kaizo.z64", "status"), "")
+            # nothing selected: nothing to type in
+            self.assertEqual(str(games.title_entry.cget("state")), "disabled")
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()
-            self.assertEqual(catalog.title.get(), "Kaizo")
-            self.assertIsNotNone(catalog.photo, "the box, decoded from covers-large.pak")
-            self.assertEqual(catalog.photo.width(), 256)
+            # the panel is the game as the console shows it, in fields
+            self.assertEqual(games.title.get(), "Kaizo")
+            self.assertEqual((games.genre.get(), games.publisher.get(), games.year.get(), games.players.get()),
+                             ("Racing", "Nintendo", "1996", "4"))
+            self.assertTrue(games.regions["USA"].get())
+            self.assertEqual(games.file_name.get(), "Kaizo.z64")
+            self.assertEqual(str(games.title_entry.cget("state")), "normal")
+            self.assertEqual(str(games.labels["title"].cget("text")), "Title", "nothing here is the owner's")
+            self.assertIsNotNone(games.photo, "the box, decoded from covers-large.pak")
+            self.assertEqual(games.photo.width(), 256)
+            self.assertIn("Recognised by its game code", games.notes.get())
+            self.assertEqual(str(games.undo_button.cget("state")), "disabled")
+            # two games carry this code: an edit can reach the other one too
+            self.assertTrue(games.others_check.winfo_manager())
+            self.assertIn("the 1 other version of this game", str(games.others_check.cget("text")))
+            self.assertFalse(games.others.get())
             # without the large pack, the thumbnail doubled
             (card / "sleekmenu" / "covers-large.pak").unlink()
-            catalog.reload()
-            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games.reload()
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()
-            self.assertEqual(catalog.photo.width(), 96 * sleekmenu_gui.BOX_ZOOM)
-            self.assertIn("parent game", catalog.notes.get())
-            # the tree's cells are the short forms; the pane has the whole phrase
-            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "cover"), "collection")
-            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "text"), "by code")
-            self.assertIn("Text: collection (by game code)", catalog.sources.get())
-            self.assertIn("Kaizo", catalog.edit.cget("text"))
-            catalog.show.set(sleekmenu_gui.SHOW_CHANGED)
-            catalog.fill()
-            self.assertEqual(catalog.tree.get_children(""), (), "nothing on this card is the owner's")
-            catalog.show.set(sleekmenu_gui.SHOW_ALL)
-            # the search narrows as typed, over more than the title
-            catalog.query.set("kaizo")
-            catalog.fill()
-            self.assertEqual(catalog.shown.get(), "1 of 2")
-            self.assertTrue(catalog.tree.exists("ROMS/Hacks/Kaizo.z64"))
-            self.assertFalse(catalog.tree.exists("ROMS/Wave Race 64 (USA).z64"))
-            catalog.query.set("nintendo 1996")
-            catalog.fill()
-            self.assertEqual(catalog.shown.get(), "2 of 2")
-            catalog.query.set("")
-            catalog.fill()
-            self.assertEqual(catalog.shown.get(), "")
+            self.assertEqual(games.photo.width(), 96 * sleekmenu_gui.BOX_ZOOM)
+            # a game with a code of its own has no other version to change
+            games.tree.selection_set("ROMS/Homebrew/Flappy.z64")
+            root.update()
+            self.assertFalse(games.others_check.winfo_manager())
+            self.assertEqual(games.box.cget("text"), "NO BOX")
+            # the Show choices narrow the list, and so does the search, over more than the title
+            games.show.set(sleekmenu_gui.SHOW_LOOK)
+            games.fill()
+            self.assertTrue(games.tree.exists("ROMS/Homebrew/Flappy.z64"))
+            self.assertFalse(games.tree.exists("ROMS/Hacks/Kaizo.z64"))
+            games.show.set(sleekmenu_gui.SHOW_CHANGED)
+            games.fill()
+            self.assertEqual(games.tree.get_children(""), (), "nothing on this card is the owner's")
+            games.show.set(sleekmenu_gui.SHOW_ALL)
+            games.query.set("kaizo")
+            games.fill()
+            self.assertEqual(games.shown.get(), "1 of 3")
+            self.assertTrue(games.tree.exists("ROMS/Hacks/Kaizo.z64"))
+            self.assertFalse(games.tree.exists("ROMS/Wave Race 64 (USA).z64"))
+            games.query.set("nintendo 1996")
+            games.fill()
+            self.assertEqual(games.shown.get(), "2 of 3")
+            games.query.set("")
+            games.fill()
+            self.assertEqual(games.shown.get(), "")
             # a game copied on since, and a file the tool set aside: both
-            # rows in their folders, both counted in the header, neither
-            # editable; the set-aside is what Prepare will never add
-            self.assertEqual(catalog.waiting.get(), "")
+            # rows in their folders, neither editable
             write_rom(card / "ROMS" / "New.z64", 0x55, 0x66, game_code="NW")
             (card / "ROMS" / "Tools" / "IPL.z64").parent.mkdir()
             (card / "ROMS" / "Tools" / "IPL.z64").write_bytes(bytes(64))
-            catalog.reload()
-            self.assertIn("2 ROMs on the card are not in it yet", catalog.waiting.get())
-            self.assertNotIn("set aside", catalog.waiting.get())
-            self.assertTrue(catalog.tree.exists("ROMS/New.z64"))
-            self.assertEqual(catalog.tree.set("ROMS/New.z64", "cover"), "not yet")
-            self.assertTrue(catalog.tree.exists("ROMS/Tools/IPL.z64"), "not prepared yet: a newcomer too")
+            games.reload()
+            self.assertEqual(str(games.show_buttons["new"].cget("text")), "New 2")
+            self.assertEqual(games.tree.set("ROMS/New.z64", "status"), "New")
+            self.assertTrue(games.tree.exists("ROMS/Tools/IPL.z64"), "not updated yet: a newcomer too")
+            games.tree.selection_set("ROMS/New.z64")
+            root.update()
+            self.assertIn("Press Update card", games.notes.get())
+            self.assertEqual(str(games.save_button.cget("state")), "disabled")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
-            catalog.reload()
-            self.assertIn("1 file set aside as not a ROM", catalog.waiting.get())
-            self.assertNotIn("not in it yet", catalog.waiting.get())
-            self.assertEqual(catalog.tree.set("ROMS/Tools/IPL.z64", "cover"), "not a ROM")
-            catalog.tree.selection_set("ROMS/Tools/IPL.z64")
+            games.reload()
+            self.assertEqual(str(games.show_buttons["new"].cget("text")), "New 0")
+            self.assertIn("1 file set aside as not a ROM", games.note.get())
+            self.assertEqual(games.tree.set("ROMS/Tools/IPL.z64", "status"), "Not a ROM")
+            games.tree.selection_set("ROMS/Tools/IPL.z64")
             root.update()
-            self.assertIn("Set aside by the tool", catalog.notes.get())
-            self.assertEqual(str(catalog.save_button.cget("state")), "disabled")
-            catalog.show.set(sleekmenu_gui.SHOW_WAITING)
-            catalog.fill()
-            self.assertTrue(catalog.tree.exists("ROMS/Tools/IPL.z64"))
-            self.assertFalse(catalog.tree.exists("ROMS/New.z64"), "catalogued by the run")
+            self.assertIn("Set aside by the tool", games.notes.get())
+            self.assertEqual(str(games.save_button.cget("state")), "disabled")
+            self.assertEqual(games.tree.set("ROMS/New.z64", "status"), "No box, no facts",
+                             "catalogued by the run: a game like any other, and one to look at")
             root.destroy()
 
     def test_the_games_folder_field_shows_what_the_card_remembers_and_an_empty_one_is_the_whole_card(self):
@@ -604,11 +680,11 @@ class WindowTests(unittest.TestCase):
 
     def test_a_save_is_put_on_the_card_at_once_and_a_second_one_waits_its_turn(self):
         """The console reads only the catalog, so a Save that stopped at the
-        owner's file changed nothing there. Now Save runs the same Prepare
-        the button does -- incremental, so seconds -- with the choices the
-        card remembers, and the catalog the console reads has the edit.
-        A Save while that runs is applied after it; a Remove is applied
-        the same way."""
+        owner's file would change nothing there. Save runs the same run the
+        Card tab's button does -- incremental, so seconds -- with the
+        choices the card remembers, and the catalog the console reads has
+        the edit. A Save while that runs is applied after it; an Undo is
+        applied the same way."""
         from tools import card_catalog
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
@@ -621,118 +697,238 @@ class WindowTests(unittest.TestCase):
             root = sleekmenu_gui.build(card=str(card))
             root.update()
             state = root.sleekmenu_state
-            catalog = state["catalog"]
-            # a half-set games folder under the Card tab's Options is not what an
-            # edit is applied with: the card's own choice is
+            games = state["catalog"]
+            # a half-set games folder under the Card tab's Options is not
+            # what an edit is applied with: the card's own choice is
             state["fields"]["roms"].set("")
-            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()
-            catalog.own_title.set("Kaizo Race")
-            catalog.own_genre.set("Racing")
-            catalog.save_edit()
+            games.title.set("Kaizo Race")
+            games.genre.set("Platforms")
+            games.save_edit()
             self.assertEqual(state["runner"].kind, "apply")
-            self.assertIn("Putting it on the card", catalog.edit_note.get())
+            self.assertIn("Putting it on the card", games.edit_note.get())
+            self.assertEqual((card / "sleekmenu" / "art" / "Kaizo.txt").read_text(),
+                             "Title: Kaizo Race\nGenre: Platforms\n", "only what was changed")
             # a second game saved while the first is going in (no event
             # loop turn in between: the run is only over once the window
             # has seen it end)
-            catalog.tree.selection_set("ROMS/Wave Race 64 (USA).z64")
-            catalog.on_select()
-            catalog.own_text.insert("1.0", "Waves.")
-            catalog.save_edit()
+            games.tree.selection_set("ROMS/Wave Race 64 (USA).z64")
+            games.on_select()
+            games.text.delete("1.0", "end")
+            games.text.insert("1.0", "Waves.")
+            games.save_edit()
             self.assertEqual(state["apply_pending"], "ROMS/Wave Race 64 (USA).z64")
             while state["runner"] is not None or "apply_pending" in state:
                 root.update()
             self.assertEqual(state["last_apply"], 0)
-            games = {game["path"]: game for game in card_catalog.load(card)["games"]}
-            self.assertEqual(games["ROMS/Hacks/Kaizo.z64"]["title"], "Kaizo Race")
-            self.assertEqual(games["ROMS/Hacks/Kaizo.z64"]["genre"], "Racing")
-            self.assertEqual(games["ROMS/Wave Race 64 (USA).z64"]["description"], "Waves.")
-            self.assertNotIn("Other/Loose.z64", games, "applied with the card's games folder")
+            on_card = {game["path"]: game for game in card_catalog.load(card)["games"]}
+            self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["title"], "Kaizo Race")
+            self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["genre"], "Platforms")
+            self.assertEqual(on_card["ROMS/Wave Race 64 (USA).z64"]["description"], "Waves.")
+            self.assertNotIn("Other/Loose.z64", on_card, "applied with the card's games folder")
             self.assertIn(b"Kaizo Race", (card / "sleekmenu" / "catalog.ebc").read_bytes())
-            self.assertEqual(catalog.pending, {})
-            self.assertEqual(catalog.selected()["path"], "ROMS/Wave Race 64 (USA).z64", "the row stays")
-            self.assertEqual(catalog.edit_note.get(), "On the card: SleekMenu shows it the next time it starts.")
-            # and a Remove goes back the same way
-            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            self.assertEqual(games.pending, {})
+            self.assertEqual(games.selected()["path"], "ROMS/Wave Race 64 (USA).z64", "the row stays")
+            self.assertEqual(games.edit_note.get(), "On the card: SleekMenu shows it the next time it starts.")
+            self.assertEqual(str(games.labels["description"].cget("text")), "Description · yours")
+            self.assertEqual(str(games.show_buttons["changed"].cget("text")), "Changed by me 2")
+            self.assertEqual(games.tree.set("ROMS/Hacks/Kaizo.z64", "status"), "Changed by me")
+            # and an Undo goes back the same way
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()
-            catalog.remove_edit()
+            self.assertEqual(str(games.labels["title"].cget("text")), "Title · yours")
+            self.assertEqual(str(games.labels["genre"].cget("text")), "Genre · yours")
+            self.assertEqual(str(games.labels["year"].cget("text")), "Year")
+            games.remove_edit()
             while state["runner"] is not None:
                 root.update()
-            games = {game["path"]: game for game in card_catalog.load(card)["games"]}
-            self.assertEqual(games["ROMS/Hacks/Kaizo.z64"]["title"], "Kaizo")
-            self.assertEqual(catalog.edit_note.get(), "On the card: SleekMenu shows it the next time it starts.")
+            on_card = {game["path"]: game for game in card_catalog.load(card)["games"]}
+            self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["title"], "Kaizo")
+            self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["genre"], "Racing")
+            self.assertEqual(games.edit_note.get(), "On the card: SleekMenu shows it the next time it starts.")
             root.destroy()
 
-    def test_the_edit_panel_writes_and_removes_the_owners_files(self):
+    def test_the_panel_writes_and_removes_the_owners_files(self):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             write_rom(card / "ROMS" / "Hacks" / "Kaizo.z64", 0x33, 0x44, game_code="WR")
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
             picture(card / "box.png")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
             root = sleekmenu_gui.build(card=str(card))
             root.update()
-            catalog = root.sleekmenu_state["catalog"]
-            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games = root.sleekmenu_state["catalog"]
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()
-            self.assertEqual(str(catalog.remove_button["state"]), "disabled", "nothing of the owner's yet")
-            catalog.picture.set(str(card / "box.png"))
-            catalog.own_title.set("Kaizo Race")
-            catalog.own_text.insert("1.0", "Hard.")
-            catalog.own_genre.set("Racing")
-            catalog.own_year.set("1996")
-            catalog.own_players.set("2")
-            catalog.own_regions["USA"].set(True)
-            catalog.save_edit()
+            self.assertEqual(str(games.undo_button["state"]), "disabled", "nothing of the owner's yet")
+            # saved as it stands, there is nothing to write
+            games.save_edit()
+            self.assertIn("Nothing to save", games.edit_note.get())
+            self.assertFalse((card / "sleekmenu" / "art").exists())
+            games.set_picture(str(card / "box.png"))
+            self.assertEqual(games.box.cget("text"), "NOT SAVED YET")
+            games.title.set("Kaizo Race")
+            games.text.insert("1.0", "Hard.")
+            games.players.set("2")
+            games.regions["JAPAN"].set(True)
+            games.save_edit()
             self.assertTrue((card / "sleekmenu" / "art" / "Kaizo.png").is_file())
             self.assertEqual((card / "sleekmenu" / "art" / "Kaizo.txt").read_text(),
-                             "Title: Kaizo Race\nGenre: Racing\nYear: 1996\nPlayers: 2\nRegions: USA\n\nHard.\n")
-            self.assertIn("press the button on the Card tab", catalog.edit_note.get())
-            self.assertEqual(str(catalog.remove_button["state"]), "normal")
-            # shown at once, as the next Prepare will catalog it: the row,
-            # the pane, the header's count, and the fields still filled in
-            self.assertEqual(catalog.tree.item("ROMS/Hacks/Kaizo.z64", "text"), "Kaizo Race")
-            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "genre"), "Racing")
-            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "year"), "1996")
-            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "cover"), "yours, pending")
-            self.assertEqual(catalog.tree.item("ROMS/Hacks/Kaizo.z64", "tags"), ("pending",))
-            self.assertEqual(catalog.title.get(), "Kaizo Race")
-            self.assertEqual(catalog.facts.get(), "Racing · Nintendo · 1996 · 2 players · USA")
-            # the database already had the genre, year and region: not changes
-            self.assertIn("Changed here, not in the catalog yet: title, text, players, picture",
-                          catalog.notes.get())
-            self.assertNotIn("No box", catalog.notes.get())
-            self.assertNotIn("No description", catalog.notes.get())
-            self.assertIn("1 edit waiting for a Prepare", catalog.summary.get())
-            self.assertEqual(catalog.own_genre.get(), "Racing")
-            self.assertEqual(catalog.own_year.get(), "1996")
-            self.assertTrue(catalog.own_regions["USA"].get())
-            self.assertEqual(catalog.box.cget("text"), "PENDING")
+                             "Title: Kaizo Race\nPlayers: 2\nRegions: USA, JAPAN\n\nHard.\n",
+                             "the genre, publisher and year were left as the card has them")
+            self.assertIn("press the button on the Card tab", games.edit_note.get(), "no collection to apply with")
+            self.assertEqual(str(games.undo_button["state"]), "normal")
+            # shown at once, as the next update will catalog it: the row,
+            # the fields, the marks, and the count of what is waiting
+            self.assertEqual(games.tree.item("ROMS/Hacks/Kaizo.z64", "text"), "Kaizo Race")
+            self.assertEqual(games.tree.set("ROMS/Hacks/Kaizo.z64", "status"), "Edit waiting")
+            self.assertEqual(games.tree.item("ROMS/Hacks/Kaizo.z64", "tags"), ("pending",))
+            self.assertEqual((games.title.get(), games.players.get()), ("Kaizo Race", "2"))
+            self.assertEqual(str(games.labels["players"].cget("text")), "Players · yours")
+            self.assertEqual(str(games.labels["genre"].cget("text")), "Genre")
+            self.assertIn("Changed here, not on the card yet: title, players, region, description, box.",
+                          games.notes.get())
+            self.assertIn("1 edit not on the card yet", games.note.get())
+            self.assertEqual(games.box.cget("text"), "NOT ON THE CARD YET")
             # a bad year is refused before anything is written
-            catalog.own_year.set("soon")
-            catalog.save_edit()
-            self.assertTrue(catalog.edit_note.get().startswith("Not saved: the year"))
-            catalog.own_year.set("1996")
-            # and once prepared, nothing is pending and the values hold
+            games.year.set("soon")
+            games.save_edit()
+            self.assertTrue(games.edit_note.get().startswith("Not saved: the year"))
+            # and once updated, nothing is waiting and the values hold
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
-            catalog.reload()
-            self.assertEqual(catalog.pending, {})
-            self.assertNotIn("waiting", catalog.summary.get())
-            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "genre"), "Racing")
-            self.assertEqual(catalog.tree.set("ROMS/Hacks/Kaizo.z64", "cover"), "yours")
-            self.assertEqual(catalog.tree.item("ROMS/Hacks/Kaizo.z64", "tags"), "")
-            catalog.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games.reload()
+            self.assertEqual(games.pending, {})
+            self.assertEqual(games.note.get(), "")
+            self.assertEqual(games.tree.set("ROMS/Hacks/Kaizo.z64", "status"), "Changed by me")
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()
-            catalog.remove_edit()
-            self.assertFalse((card / "sleekmenu" / "art" / "Kaizo.png").exists())
+            self.assertEqual(games.box.cget("text"), "")
+            # emptying a field of the owner's gives the original back
+            games.players.set("")
+            games.save_edit()
+            self.assertEqual((card / "sleekmenu" / "art" / "Kaizo.txt").read_text(),
+                             "Title: Kaizo Race\nRegions: USA, JAPAN\n\nHard.\n")
+            # for every version of the game: the code's file, and this ROM's own out of its way
+            games.others.set(True)
+            games.genre.set("Platforms")
+            games.save_edit()
+            self.assertEqual((card / "sleekmenu" / "art" / "NWRE.txt").read_text(),
+                             "Title: Kaizo Race\nGenre: Platforms\nRegions: USA, JAPAN\n\nHard.\n")
             self.assertFalse((card / "sleekmenu" / "art" / "Kaizo.txt").exists())
-            self.assertIn("Removed", catalog.edit_note.get())
-            self.assertIn("file is gone: the next Prepare brings the original back", catalog.notes.get())
-            self.assertEqual(catalog.tree.item("ROMS/Hacks/Kaizo.z64", "tags"), ("pending",))
-            catalog.picture.set(str(card / "ROMS" / "Hacks" / "Kaizo.z64"))
-            catalog.save_edit()
-            self.assertTrue(catalog.edit_note.get().startswith("Not saved"), "a ROM is not a picture")
+            self.assertTrue((card / "sleekmenu" / "art" / "Kaizo.png").is_file(), "no new picture: the box stays")
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            root.update()
+            self.assertTrue(games.others.get(), "the edit is the code's: the box stays ticked")
+            games.remove_edit()
+            self.assertFalse((card / "sleekmenu" / "art" / "Kaizo.png").exists())
+            self.assertFalse((card / "sleekmenu" / "art" / "NWRE.txt").exists())
+            self.assertIn("Your changes are removed", games.edit_note.get())
+            games.set_picture(str(card / "ROMS" / "Hacks" / "Kaizo.z64"))
+            games.save_edit()
+            self.assertTrue(games.edit_note.get().startswith("Not saved"), "a ROM is not a picture")
+            root.destroy()
+
+    def test_narrowing_the_list_keeps_what_was_typed_and_a_fixed_game_leaves_needs_a_look(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Homebrew" / "Flappy.z64", 3, 4, game_code="\0\0", country="\0")
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            picture(card / "box.png")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            games = root.sleekmenu_state["catalog"]
+            flappy = "ROMS/Homebrew/Flappy.z64"
+            games.show.set(sleekmenu_gui.SHOW_LOOK)
+            games.fill()
+            games.tree.selection_set(flappy)
+            root.update()
+            games.title.set("Flappy Bird")
+            games.query.set("flap")
+            games.fill()
+            root.update()
+            self.assertEqual(games.title.get(), "Flappy Bird", "typing in the search does not undo typing in the panel")
+            self.assertEqual(games.tree.selection(), (flappy,))
+            games.query.set("nothing like it")
+            games.fill()
+            self.assertEqual(str(games.title_entry.cget("state")), "disabled", "not in the list: not in the panel")
+            games.query.set("")
+            games.fill()
+            games.tree.selection_set(flappy)
+            root.update()
+            games.set_picture(str(card / "box.png"))
+            games.genre.set("Action")
+            games.save_edit()
+            self.assertEqual(games.tree.set(flappy, "status"), "Edit waiting", "still to look at until it is on the card")
+            self.assertEqual(games.genre.get(), "Action")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
+            games.applied(flappy, 0)
+            self.assertFalse(games.tree.exists(flappy), "it has its box and a genre now")
+            self.assertEqual(str(games.title_entry.cget("state")), "disabled")
+            self.assertEqual(games.edit_note.get(), "Flappy: On the card: SleekMenu shows it the next time it starts.")
+            games.show.set(sleekmenu_gui.SHOW_CHANGED)
+            games.fill()
+            self.assertEqual(games.tree.set(flappy, "status"), "Changed by me")
+            root.destroy()
+
+    def test_change_box_offers_libretros_boxes_by_region_and_the_choice_is_saved_as_the_owners(self):
+        from tests.test_fetch import Server
+        from tests.test_hires import box_png, route
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            mario = next(entry for entry in sleekmenu_prep.coverdb.load(
+                Path(__file__).resolve().parent.parent / "data" / "coverdb.csv").values()
+                if entry.name == "Super Mario 64 (USA)")
+            write_rom(card / "ROMS" / "Super Mario 64 (USA).z64",
+                      int(mario.crc[:8], 16), int(mario.crc[8:], 16), game_code="SM")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
+            europe = box_png((200, 30, 30, 255))
+            routes = {route("Super Mario 64 (USA)"): (200, box_png()),
+                      route("Super Mario 64 (Europe) (En,Fr,De)"): (200, europe)}
+            with mock.patch.dict(os.environ):
+                os.environ.pop(fetch.OFFLINE_VARIABLE, None)
+                root = sleekmenu_gui.build(card=str(card))
+                root.update()
+                games = root.sleekmenu_state["catalog"]
+                games.tree.selection_set("ROMS/Super Mario 64 (USA).z64")
+                root.update()
+                with Server(routes) as server, \
+                     mock.patch.object(hires, "BASE_URL", server.url("/Named_Boxarts/")):
+                    games.choose_box()
+                    picker = games.picker
+                    self.assertEqual(list(picker.tiles), ["current", "USA", "Europe", "Japan"])
+                    self.assertEqual(str(picker.use.cget("state")), "disabled", "nothing chosen yet")
+                    for _ in range(400):
+                        root.update()
+                        if str(picker.tiles["Japan"].cget("text")) != "Japan: looking…":
+                            break
+                        import time
+                        time.sleep(0.01)
+                self.assertEqual(str(picker.tiles["USA"].cget("text")), "USA")
+                self.assertEqual(str(picker.tiles["Europe"].cget("text")), "Europe")
+                self.assertEqual(str(picker.tiles["Japan"].cget("text")), "Japan: none")
+                self.assertEqual(str(picker.tiles["Japan"].cget("state")), "disabled")
+                picker.choice.set("Europe")
+                self.assertEqual(str(picker.use.cget("state")), "normal")
+                picker.confirm()
+                self.assertIsNone(games.picker)
+                self.assertEqual(games.box.cget("text"), "NOT SAVED YET")
+                self.assertIn("Press Save", games.edit_note.get())
+                games.save_edit()
+            self.assertEqual((card / "sleekmenu" / "art" / "Super Mario 64 (USA).png").read_bytes(), europe)
+            self.assertEqual(games.tree.set("ROMS/Super Mario 64 (USA).z64", "status"), "Edit waiting")
+            # with downloads off there is only the owner's own picture to choose
+            with mock.patch.dict(os.environ, {fetch.OFFLINE_VARIABLE: "1"}):
+                games.choose_box()
+                self.assertEqual(list(games.picker.tiles), ["current"])
+                self.assertIn("Downloads are off", games.picker.note.get())
+                games.picker.close()
             root.destroy()
 
 

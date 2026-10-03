@@ -218,7 +218,7 @@ if __name__ == "__main__":
 
 
 class EditTests(unittest.TestCase):
-    """What the window writes and removes on the catalog tab: the same
+    """What the window writes and removes on the Games tab: the same
     files a person would drop into sleekmenu/art/ by hand."""
 
     def setUp(self):
@@ -258,6 +258,24 @@ class EditTests(unittest.TestCase):
             self.assertEqual(text.description, "The one everyone has.")
         with self.assertRaises(custom_art.EditError):
             custom_art.save(self.card, {"path": "ROMS/x.z64", "code": ""}, None, "t", "", scope=custom_art.SCOPE_CODE)
+
+    def test_save_by_code_takes_this_roms_own_file_out_of_its_way(self):
+        """A file under the ROM's name answers before the code's does: left
+        in place, the ROM the edit was made on would be the one it missed."""
+        custom_art.save(self.card, self.hack, self.source, "Star Road", "A hack.")
+        touched = custom_art.save(self.card, self.hack, None, "Mario for all", "", scope=custom_art.SCOPE_CODE)
+        self.assertEqual(sorted(p.name for p in touched), ["NSME.txt", "Star Road.txt"])
+        self.assertFalse((self.art / "Star Road.txt").exists())
+        self.assertTrue((self.art / "Star Road.jpg").is_file(), "no new picture: this ROM keeps its own")
+        for rom_path in ("ROMS/Mario.z64", "ROMS/Hacks/Star Road.z64"):
+            text = custom_art.find_text(custom_art.Index(), self.card, rom_path, self.art, "NSME")
+            self.assertEqual(text.title, "Mario for all")
+        # a picture for every version takes this ROM's own picture with it
+        png = picture(self.card / "downloads" / "all.png")
+        custom_art.save(self.card, self.hack, png, "Mario for all", "", scope=custom_art.SCOPE_CODE)
+        self.assertFalse((self.art / "Star Road.jpg").exists())
+        found = custom_art.find_art(custom_art.Index(), self.card, "ROMS/Hacks/Star Road.z64", self.art, "NSME")
+        self.assertEqual(found.path, self.art / "NSME.png")
 
     def test_a_new_picture_replaces_one_of_the_other_suffix(self):
         custom_art.save(self.card, self.hack, self.source, "", "")

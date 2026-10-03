@@ -3,9 +3,9 @@
 
 The tool builds a catalog from four places -- the ROM header, the shipped
 database, the collection on the card, and the card owner's own files -- and
-the window's catalog tab shows which one answered for each field, so "what
-did I change?" is a filter and "why is this the wrong box?" is a column.
-Nothing here is a hidden flag: a picture's source is where the file is
+catalog.json records which one answered for each field. The window's Games
+tab reads that to mark what is the owner's own, to list what they changed,
+and to say when a box is another region's. Nothing here is a hidden flag: a picture's source is where the file is
 (tools/custom_art.py, tools/hires.py) and a fact's source is which lookup
 found it (tools/build_metadata.py). The vocabulary is fixed here so the
 builders, the JSON on the card and the window all say the same words.
@@ -57,33 +57,3 @@ def is_yours(label: str) -> bool:
 def edited(sources: dict) -> bool:
     """Whether any field of a game is the card owner's own."""
     return any(is_yours(str(sources.get(field, ""))) for field in FIELDS)
-
-
-def notes(game: dict) -> list[str]:
-    """What a person looking at one game should know about where it came
-    from -- the fallbacks, in plain words. Empty for a game whose every
-    field came from the obvious place."""
-    sources = game.get("sources") or {}
-    cover = sources.get("cover", NONE)
-    text = sources.get("description", NONE)
-    out = []
-    if cover == COVER_COLLECTION_REGION:
-        out.append("The box is another region's scan; the collection has none for this one.")
-    elif cover == COVER_LIBRETRO_MODIFIED:
-        out.append("The box in sleekmenu/art/hires/ is not the one the tool fetched from libretro: "
-                   "changed since, or put there by hand.")
-    elif cover == NONE:
-        out.append("No box anywhere: the browser draws a placeholder.")
-    if text == TEXT_COLLECTION_BY_CODE:
-        out.append("The text is the collection's for this game code; for a hack, "
-                   "that is the parent game's.")
-    elif text == NONE:
-        out.append("No description.")
-    if sources.get("title") == YOURS:
-        out.append("The title is yours; the file is named differently.")
-    identified = game.get("identified", "")
-    if identified == "":
-        out.append("The database does not know this dump or its game code.")
-    elif identified != "crc":
-        out.append("The database knows the game code, not this exact dump.")
-    return out

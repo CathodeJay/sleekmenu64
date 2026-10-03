@@ -9,8 +9,8 @@ first run. This is the rest.
 
 The same tool as `sleekmenu-prep.pyz`, in a window: pick the card, prepare
 it, and see it the way the browser will before it goes back in the
-console — every game, its box, where each fact came from — and give any
-game your own picture, text or facts.
+console — every game, its box, its facts — and give any game your own
+picture, text or facts.
 
 [Install](../README.md#install) says which download is yours and what to
 click the first time. With Python and Tk installed,
@@ -48,49 +48,48 @@ click the first time. With Python and Tk installed,
 
 ### Games
 
-![The Games tab: the card's folders and games with genre, year, publisher, players, region and where the box and text came from; the selected game's box, facts and description on the right; and the panel for your own art and text underneath](screenshots/prep-gui-catalog.png)
+The card as the browser will show it, and the place to change a game.
 
-The card as the browser will show it. The first line counts the games, says
-when the catalog was built, how many have a box and how many of those are
-high-resolution, how many carry your own art or text, and how many edits
-are not on the card yet. The second line, in amber, counts the ROMs copied
-on since the last Prepare and the files set aside as not ROMs.
+The list follows the card's folders, with the number of games in each, and
+the last column says the one thing worth knowing about a row:
 
-The list follows the card's folders, with the number of games in each.
-Every game shows its genre, year, publisher, players and region as the
-console will, and in the Box and Text columns where those came from:
-`collection`, `other region` (another region's scan of the same game),
-`high-res` (libretro), `yours`, or `none`. A row's colour says where it
-stands:
-
-| Row | Means |
+| Row says | Means |
 |---|---|
-| plain | in the catalog; this is what the console shows |
-| blue | your edit, not yet on the card's catalog |
-| amber | on the card but not in the catalog: copied on since the last Prepare, listed by the browser without a box |
-| grey | set aside: a ROM-shaped file with no N64 header (a 64DD IPL dump, a broken download), which the browser never lists and Prepare will not add |
+| nothing | in the catalog; this is what the console shows |
+| No box, No facts | nothing was found for it: a hack of an unknown game, homebrew |
+| Changed by me | it carries a picture, text or facts of your own |
+| Edit waiting | your edit is saved but not on the card's catalog yet |
+| New | copied on since the last update: the browser lists it without a box until the next one |
+| Not a ROM | set aside: a ROM-shaped file with no N64 header (a 64DD IPL dump, a broken download), which the browser never lists |
 
 Search narrows the list as you type, over the title, the file name, the
-publisher, the genre, the year and the game code. Show narrows it to only
-what you changed, or only what is not in the catalog. Reload reads the card
-again.
-
-Select a game and the right side shows its box exactly as the console draws
-it, its facts, where its cover, text and title came from and what the box
-view will draw, and its description. The same is in `sleekmenu/catalog.json`
-on the card, beside the catalog the console reads.
+publisher, the genre, the year and the game code. **All**, **Needs a
+look**, **Changed by me** and **New** narrow it to those rows, each with
+its count; Needs a look is the games with no box or no facts. Reload reads
+the card again.
 
 ### Editing a game
 
-The panel under the list holds your own art and text for the selected game.
-Choose a picture (Browse, or drop one on the field when your Python has
-`tkinterdnd2`), and fill in any of the title, genre, publisher, year,
-players, regions and text. An empty field keeps what the card has: in the
-screenshot, 40 Winks has its own text, genre, publisher, year and region,
-and Players is left empty, so the database's two players stay. "This ROM
-only" writes for this one file; "Every game with code …" writes for every
-ROM whose header carries that game code — its revisions, and hacks built on
-it — and the line under the choice says how many games that reaches.
+Select a game and the right side is that game as the console shows it: its
+box, drawn exactly as the console draws it, and its title, genre,
+publisher, year, players, region and description, each in a field you can
+type in. A field marked "· yours" holds a value of your own.
+
+Change what you like and press **Save**. Only what you changed is written:
+a field left as the card has it stays the database's or the collection's.
+Empty a field to get the original back. **Undo my changes** removes
+everything of yours for that game; the original was never touched.
+
+**Change box…** shows the boxes libretro has for the game, one per region
+it was released in, beside the one on the card; pick one, or **My own
+picture…** for a PNG or JPEG of yours (a picture can also be dropped on the
+box when your Python has `tkinterdnd2`). The choice shows in the panel and
+goes on the card with Save, as a picture of your own: no later download
+replaces it.
+
+When the card holds other versions of the game — its revisions, and hacks
+built on it, which carry the same game code — **Also change the other
+versions of this game** saves the edit for all of them at once.
 
 Save writes exactly the files described in [Your own art and text](#your-own-art-and-text)
 into `sleekmenu/art/`, the picture as it is, then puts them in the card's
@@ -98,12 +97,9 @@ catalog and covers straight away. That is the same run as Update card,
 with the games folder the card remembers and nothing downloaded, and it
 takes seconds since only what changed is redone. The console reads only the
 catalog, so this run is what makes the edit appear there, the next time
-SleekMenu starts. While it runs, or while the card has no collection to
-prepare with, the row stays blue, the box shows your picture fitted as the
-console will draw it, and the first line counts the edit as waiting.
-
-Remove my edit deletes your files and puts the original back the same way;
-the original was never touched.
+SleekMenu starts. While it runs, or while the card has no collection yet,
+the row says Edit waiting and the box shows your picture fitted as the
+console will draw it.
 
 ## Your own art and text
 
@@ -153,9 +149,7 @@ details) draws them at full size. A card that has them keeps them
 complete: every later run fetches the boxes of the games added since,
 without being asked. Only what is missing is fetched; a game libretro has no box for is noted and not asked
 about again unless you pass `--hires` yourself; a picture of your own
-still wins; Stop ends it between two boxes. The Games tab counts the
-high-resolution boxes and says, for each game, what the box view will
-draw.
+still wins; Stop ends it between two boxes.
 
 **From the prep GUI.** The Games tab writes these files for one game or
 one game code and puts them on the card as you save: see

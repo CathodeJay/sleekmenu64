@@ -32,7 +32,7 @@ case-sensitive place.
 
 Read when the tool runs, never by the browser: a new picture needs a re-run
 of the tool, like a new game does. The window writes these same files from
-its catalog tab (save() and remove() below) and nothing else: the picture
+its Games tab (save() and remove() below) and nothing else: the picture
 is copied as it is, the sizes are derived at build time, and reverting an
 edit is deleting the file, since the original was never touched.
 """
@@ -239,7 +239,9 @@ def save(card: Path, game: dict, picture: Path | None, title: str, description: 
     (PNG or JPEG; anything else is refused), replacing one of the other
     suffix so the lookup cannot find a stale file first. The text file is
     written when there is a title, a fact or a description, and removed
-    when there is none of them. Returns the files written or removed."""
+    when there is none of them. An edit saved by game code takes this
+    ROM's own file of the same kind out of sleekmenu/art/, which would
+    otherwise answer first. Returns the files written or removed."""
     folder = art_dir(card)
     key = key_for(game, scope)
     touched: list[Path] = []
@@ -270,6 +272,18 @@ def save(card: Path, game: dict, picture: Path | None, title: str, description: 
         target.write_bytes(picture.read_bytes())
         touched.append(target)
     title, description = title.strip(), " ".join(description.split())
+    if scope == SCOPE_CODE:
+        # A file under the ROM's own name answers before the code's does:
+        # left there, this ROM would be the one game the edit did not reach.
+        stem = PurePosixPath(str(game["path"])).stem
+        index = Index()
+        names = ([stem + TEXT_SUFFIX] if title or description or facts else []) \
+            + ([stem + suffix for suffix in ART_SUFFIXES] if picture is not None else [])
+        for name in names:
+            shadow = index.lookup(folder, name)
+            if shadow is not None and card_layout.fold(stem) != card_layout.fold(key):
+                shadow.unlink()
+                touched.append(shadow)
     text_file = Index().lookup(folder, key + TEXT_SUFFIX) or folder / (key + TEXT_SUFFIX)
     if title or description or facts:
         folder.mkdir(parents=True, exist_ok=True)

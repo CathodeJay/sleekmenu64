@@ -170,9 +170,9 @@ collection's sprite name for that code. `Star Road.txt` in either place, or
 `NSME.txt` in `sleekmenu/art/`, is the description, and a first line
 `Title: ...` the title (`tools/custom_art.py`).
 
-The window's catalog tab writes these same files and no others: Save copies
+The window's Games tab writes these same files and no others: Save copies
 the chosen picture as it is into `sleekmenu/art/` under the ROM's name or
-its code and writes the `.txt` beside it; Remove my edit deletes the files
+its code and writes the `.txt` beside it; Undo my changes deletes the files
 in `sleekmenu/art/` the selected game uses, never one beside a ROM, which it
 only names. The two sizes a picture becomes are made at the next update,
 so nothing is stored twice and a better picture later is one file to
@@ -201,7 +201,7 @@ Your own text wins over both: `<ROM name>.txt` beside the ROM or in
 set that one field, checked the way the catalog checks it (a year in
 1970..2100, players 1..8, regions from USA, Japan and Europe under the
 usual spellings), and the first line that is not a header starts the
-description. The window's edit panel writes this same file
+description. The window's Games tab writes this same file
 (`tools/custom_art.py`), and reads it back to show the edit as the next
 update will catalog it.
 
