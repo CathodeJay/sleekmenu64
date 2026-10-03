@@ -76,16 +76,22 @@ def available() -> bool:
 
 # -- disks -------------------------------------------------------------------
 
+#: Volumes macOS keeps for itself, by the names it gives them, lower case.
+#: They are mounted under /Volumes on some Macs, and none is a card.
+MAC_SYSTEM_VOLUMES = frozenset({"recovery", "preboot", "vm", "update", "xarts", "iscpreboot", "hardware"})
+
+
 def removable_volumes(platform: str = sys.platform, listdir=os.listdir, is_root=None) -> list[Path]:
     """Where a card would be mounted, per platform: /Volumes on macOS less the
-    boot disk, removable drive letters on Windows, the media folders on
-    Linux. Never the system disk, so a wrong click cannot prepare it."""
+    boot disk and the system's own volumes, removable drive letters on
+    Windows, the media folders on Linux. Never the system disk, so a wrong
+    click cannot prepare it."""
     found: list[Path] = []
     is_root = is_root or _is_root
     if platform == "darwin":
         for name in sorted(_listing(listdir, "/Volumes")):
             path = Path("/Volumes") / name
-            if not is_root(path):
+            if name.lower() not in MAC_SYSTEM_VOLUMES and not is_root(path):
                 found.append(path)
     elif platform == "win32":
         found.extend(_windows_removable())
@@ -1617,10 +1623,26 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     options = ttk.Frame(page)
     options.grid(row=0, column=2, sticky="nsew", padx=(20, 0))
     options.columnconfigure(0, weight=1)
+    # A column is half the tab whatever is in it. Its text wraps at its
+    # width (fit, below), so its width must not come from its text: when it
+    # did, a line that filled a column to the pixel made the column a pixel
+    # wider, which wrapped the line, which made it a pixel narrower, without
+    # end -- the window never answered again. The odd pixel of an odd width
+    # goes to one column or the other depending on whether the two ask for
+    # more than there is, and that was the pixel.
+    body.grid_propagate(False)
+    options.grid_propagate(False)
 
     def fit(frame, labels) -> None:
-        """Text that wraps at its column's width, whatever the window's."""
+        """Text that wraps at its column's width, whatever the window's.
+        Only a change of width is acted on: the event also comes for a
+        change of height, and for none."""
+        seen = {"width": None}
+
         def on_size(event) -> None:
+            if event.width == seen["width"]:
+                return
+            seen["width"] = event.width
             for label, inset in labels:
                 label.configure(wraplength=max(160, event.width - inset))
         frame.bind("<Configure>", on_size)
@@ -2092,7 +2114,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     def on_focus(event) -> None:
         """Back from copying games onto the card in another window: the
         card is read again, so the tab counts them without a Refresh."""
-        if event.widget is root and state["runner"] is None and time.monotonic() - state.get("walked", 0) > 3:
+        now = time.monotonic()
+        if event.widget is root and state["runner"] is None and \
+                now - max(state.get("walked", 0), state.get("looked", 0)) > 3:
+            state["looked"] = now               # with no card nothing is walked, and this still waits
             refresh(fresh=True)
             # The card may have been to the console and back: show the
             # theme it has now, unless another is being picked here.

@@ -14,6 +14,7 @@ import io
 import os
 import sys
 import tempfile
+import time
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -32,6 +33,18 @@ class VolumeTests(unittest.TestCase):
             "darwin", listdir=lambda p: listed.get(p, []),
             is_root=lambda p: p.name == "Macintosh HD")
         self.assertEqual(found, [Path("/Volumes/CARD")])
+
+    def test_macos_never_offers_a_volume_of_its_own_as_a_card(self):
+        """Some Macs keep Recovery mounted under /Volumes. With the card
+        out it was the only disk listed, so it was picked as the card."""
+        listed = {"/Volumes": ["Macintosh HD", "Recovery", "Preboot", "VM", "Update"]}
+        found = sleekmenu_gui.removable_volumes(
+            "darwin", listdir=lambda p: listed.get(p, []), is_root=lambda p: p.name == "Macintosh HD")
+        self.assertEqual(found, [])
+        listed["/Volumes"].append("Untitled")
+        found = sleekmenu_gui.removable_volumes(
+            "darwin", listdir=lambda p: listed.get(p, []), is_root=lambda p: p.name == "Macintosh HD")
+        self.assertEqual(found, [Path("/Volumes/Untitled")])
 
     def test_linux_lists_the_media_folders(self):
         listed = {"/media": ["jerome"], "/media/jerome": ["CARD", "Backup"],
@@ -735,6 +748,49 @@ class WindowTests(unittest.TestCase):
                 root.update()
                 self.assertFalse(button.winfo_ismapped(), "and gone again with the card")
                 root.destroy()
+
+    def test_the_window_settles_at_every_width(self):
+        """The Card tab's text wraps at its column's width. When the column's
+        width also came from its text, a line that filled it to the pixel
+        at an odd window width set the two chasing each other, and the
+        window stopped answering. At any width the wrap is set once and
+        the window goes quiet. The events are pumped one at a time against
+        the clock, so a window that never settles fails here and does not
+        hang the tests."""
+        import _tkinter
+        import tkinter
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "Recovery"       # a card with no games: the words that did it
+            card.mkdir()
+            root = sleekmenu_gui.build(card=str(card))
+            state = root.sleekmenu_state
+            self.assertEqual(state["words"]["headline"].get(), "No games on this card yet")
+            for column in state["columns"].values():
+                self.assertFalse(column.grid_propagate(), "a column's width is not its text's")
+            sized = []
+            wrapped = tkinter.CallWrapper.__call__
+
+            def counted(wrapper, *args):
+                if getattr(wrapper.func, "__name__", "") == "on_size":
+                    sized.append(1)
+                return wrapped(wrapper, *args)
+
+            def pump(seconds):
+                end = time.monotonic() + seconds
+                while time.monotonic() < end:
+                    if not root.tk.dooneevent(_tkinter.DONT_WAIT):
+                        time.sleep(0.002)
+
+            with mock.patch.object(tkinter.CallWrapper, "__call__", counted):
+                pump(0.2)
+                for width in list(range(1073, 1088)) + [961, 979, 1031, 1125, 1157]:
+                    del sized[:]
+                    root.geometry(f"{width}x720")
+                    pump(0.12)
+                    self.assertLess(len(sized), 12, f"the window never settles at {width} wide")
+                    status, options = state["columns"]["card"], state["columns"]["options"]
+                    self.assertLess(abs(options.winfo_width() - status.winfo_width()), 2)
+            root.destroy()
 
     def test_the_banner_ends_the_row_above_the_tabs_and_opens_the_page(self):
         root = sleekmenu_gui.build(card="")

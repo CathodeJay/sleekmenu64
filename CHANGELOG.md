@@ -53,6 +53,8 @@ once. Your catalog, boxes and edits are kept.
 
 ### Fixes
 
+- The prep GUI no longer takes a volume of macOS's own (Recovery, on the
+  Macs that keep it mounted) for the card when no card is in.
 - Boxes were missing for the revisions libretro files as a link to their
   game's box (Castlevania Rev 1 is one of about 130). The link is followed;
   a card that recorded those as missing asks again by itself.
