@@ -1902,11 +1902,16 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             roms_var.set(raw)
 
     def update_buttons() -> None:
-        """The button acts on a card and is named for what it will do;
-        nothing starts while a run is going, and only then can one stop."""
+        """The button acts on a card and is named for what it will do, so
+        it is there only when there is a card for it; nothing starts while
+        a run is going, and only then can one stop."""
         busy = state["runner"] is not None
         status = state["status"]
         action.configure(text=status.action, state="normal" if status.ready and not busy else "disabled")
+        if status.ready or busy:
+            actions.grid()
+        else:
+            actions.grid_remove()
         if busy:
             stop.pack(side="left", padx=(8, 0))
         else:

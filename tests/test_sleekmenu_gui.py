@@ -709,6 +709,31 @@ class WindowTests(unittest.TestCase):
             self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
             root.destroy()
 
+    def test_the_button_is_there_only_when_there_is_a_card_to_act_on(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            with mock.patch.object(sleekmenu_gui, "removable_volumes", return_value=[]):
+                root = sleekmenu_gui.build(card="")
+                root.update()
+                state = root.sleekmenu_state
+                button = state["buttons"]["action"]
+                self.assertEqual(state["words"]["headline"].get(), "Pick your card")
+                self.assertFalse(button.winfo_ismapped(), "no card: nothing to set up")
+                state["fields"]["card"].set(str(Path(scratch) / "nowhere"))
+                root.update()
+                self.assertEqual(state["words"]["headline"].get(), "That is not a card")
+                self.assertFalse(button.winfo_ismapped())
+                state["fields"]["card"].set(str(card))
+                root.update()
+                self.assertTrue(button.winfo_ismapped())
+                self.assertEqual(str(button.cget("text")), "Set up card")
+                self.assertEqual(str(button.cget("state")), "normal")
+                state["fields"]["card"].set("")
+                root.update()
+                self.assertFalse(button.winfo_ismapped(), "and gone again with the card")
+                root.destroy()
+
     def test_the_banner_ends_the_row_above_the_tabs_and_opens_the_page(self):
         root = sleekmenu_gui.build(card="")
         root.update()
