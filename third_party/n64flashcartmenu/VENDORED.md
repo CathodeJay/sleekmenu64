@@ -14,7 +14,7 @@ What is used is the generic IPL2->IPL3 handoff, which is hardware-generic.
 ## LICENCE — READ THIS
 
 N64FlashcartMenu is **AGPL-3.0** (see LICENSE.md). Linking it in makes the
-combined ROM a derivative work, so **EverBrowse 64 is AGPL-3.0-only** — see
+combined ROM a derivative work, so **SleekMenu 64 is AGPL-3.0-only** — see
 the top-level LICENSE. That was not a preference; it is what this dependency
 requires, and it is the same licence the upstream boot code already ships
 under. AGPL section 13 is inert for a cartridge ROM (there is no network
@@ -33,7 +33,7 @@ the part that would take real work to reproduce independently.
 
 boot.c uses `C0_STATUS_CU0`, `C0_STATUS_CU1` and `C0_STATUS_FR`, defined in
 libdragon's include/cop0.h on the **preview** branch, which N64FlashcartMenu
-pins. EverBrowse vendors libdragon **trunk** (494f1f5), where they are absent.
+pins. SleekMenu vendors libdragon **trunk** (494f1f5), where they are absent.
 src/boot_compat.h supplies exactly the preview values under `#ifndef` guards
 and is injected with -include, so the vendored sources stay byte-for-byte
 upstream and a later libdragon upgrade cannot clash (an identical macro
