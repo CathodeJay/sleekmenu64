@@ -98,6 +98,19 @@ int main(int argc, char **argv) {
     assert(sm_cheats_file_from_rom_path("sd:/ROMS/Game.v64", name, sizeof(name)) && !strcmp(name, "Game.cht"));
     assert(!sm_cheats_file_from_rom_path("ROMS/.z64", name, sizeof(name)));
     assert(!sm_cheats_file_from_rom_path("ROMS/Game.z64", name, 8));
+    {
+        /* A fetched file is named by the header's two checksum words. */
+        uint8_t header[0x40];
+        static const uint8_t crc[8] = { 0x63, 0x5A, 0x2B, 0xFF, 0x8B, 0x02, 0x23, 0x26 };
+        memset(header, 0, sizeof(header));
+        assert(!sm_cheats_file_from_header(header, sizeof(header), name, sizeof(name)));   /* zero checksums */
+        memcpy(header + 0x10, crc, sizeof(crc));
+        assert(sm_cheats_file_from_header(header, sizeof(header), name, sizeof(name)));
+        assert(!strcmp(name, "635A2BFF8B022326.cht"));
+        assert(!sm_cheats_file_from_header(header, 0x17, name, sizeof(name)));             /* cut short */
+        assert(!sm_cheats_file_from_header(header, sizeof(header), name, 20));             /* no room */
+        assert(!sm_cheats_file_from_header(NULL, sizeof(header), name, sizeof(name)));
+    }
     /* --- the engine's list ------------------------------------------------ */
     assert(sm_cheats_enabled_count(&set) == 1);
     {

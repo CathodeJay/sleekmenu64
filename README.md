@@ -5,6 +5,7 @@ descriptions and filters for your N64 library, and the game you pick boots
 straight from it. It is an ordinary ROM on the card, started from the
 EverDrive's own menu, which stays where it is; saves go to the same
 `ED64/gamedata/` folder, so a game carries its save between the two menus.
+On an X7 the console can start straight in it.
 
 ![The list view: folders and games on the left, the selected game's box, year, publisher, genre, region, save type and size on the right](docs/screenshots/list.png)
 
@@ -47,13 +48,21 @@ card**. Only what changed is read and only the new games' boxes are
 fetched. Until then a new game still shows up and plays, just without its
 box.
 
+**Starting the console in SleekMenu (X7):** on the prep GUI's Options tab,
+tick **Start the console in SleekMenu** and press Update card. From then on
+the console powers on in SleekMenu; a reset inside a game returns to the
+EverDrive menu. Untick it and update to go back. The EverDrive-64 Pro has
+no such switch: see [docs/CONSOLE.md](docs/CONSOLE.md#starting-the-console-in-sleekmenu).
+
 The prep GUI also shows your card the way the console will, and lets you
 give any game your own picture, description or facts; see
 [docs/PREP.md](docs/PREP.md). Descriptions come from the
 community-maintained
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata)
-collection and boxes from
-[libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64);
+collection, boxes from
+[libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
+and, when you ask for them, cheat codes from
+[libretro-database](https://github.com/libretro/libretro-database);
 SleekMenu ships none of them.
 
 ## Using it
@@ -88,7 +97,8 @@ initials under the shelf.
 - **Hacks** that black-screen on a console because of a stale header
   checksum are fixed as they launch.
 - **Cheats** come from the EverDrive-64 Pro's cheat pack in `ED64/CHEATS/`,
-  and need an Expansion Pak.
+  or from libretro when you tick **Fetch cheat codes** on the prep GUI's
+  Options tab, and need an Expansion Pak.
 - **`.z64` and `.v64`** dumps load; `.n64` ones do not — convert them first.
 
 Everything else about the console — the screens, saves, the clock, 64DD,
@@ -97,7 +107,7 @@ cheats in detail — is in [docs/CONSOLE.md](docs/CONSOLE.md).
 ## More
 
 - [docs/PREP.md](docs/PREP.md) — the prep GUI in full, your own art and
-  text, high-resolution boxes, and the command line
+  text, high-resolution boxes, cheat codes, and the command line
 - [docs/CONSOLE.md](docs/CONSOLE.md) — using SleekMenu on the console
 - [docs/CARD_LAYOUT.md](docs/CARD_LAYOUT.md) — every file on the card
 - [docs/DESIGN.md](docs/DESIGN.md) — how it is put together and why

@@ -206,6 +206,22 @@ uint32_t sm_cheats_parse(sm_cheat_set_t *set, const char *text, size_t length) {
 
 /* -- names ------------------------------------------------------------------ */
 
+bool sm_cheats_file_from_header(const uint8_t *header, size_t header_length, char *out, size_t out_size) {
+    static const char digits[] = "0123456789ABCDEF";
+    bool any = false;
+    size_t i;
+    if (!header || !out || header_length < 0x18u || out_size < 21u) return false;
+    for (i = 0; i < 8u; i++) {
+        uint8_t byte = header[0x10u + i];
+        if (byte) any = true;
+        out[i * 2u] = digits[byte >> 4];
+        out[i * 2u + 1u] = digits[byte & 0x0Fu];
+    }
+    if (!any) return false;
+    memcpy(out + 16, ".cht", 5);
+    return true;
+}
+
 bool sm_cheats_file_from_rom_path(const char *rom_path, char *out, size_t out_size) {
     const char *slash, *name, *dot;
     size_t stem;

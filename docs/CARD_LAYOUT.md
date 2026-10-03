@@ -24,8 +24,10 @@ this is the reference.
 /sleekmenu/history.txt      the last fifteen launches          written by the browser
 /sleekmenu/cheats.txt       which cheats are on, per game      written by the browser
 /sleekmenu/cheats/          your own .cht files (optional)     yours
+/sleekmenu/cheats/libretro/ cheat codes, one file per dump     fetched by the tool (--cheats)
 /sleekmenu/art/             your own box art and text (optional)  yours
 
+/ED64/autoexec.v64          a copy of the browser (X7, optional)  written by the tool (--direct-boot)
 /ED64/CHEATS/               the Pro menu's cheat pack          the EverDrive's, read only
 /ED64/gamedata/             saves                              shared with the EverDrive menu
 /ED64/sysdata/registry.dat  which game is loaded, save type    shared with the EverDrive menu
@@ -57,7 +59,22 @@ It never creates folders, never renames, moves or deletes a file, and never
 touches the network. The prep tool creates the `sleekmenu/` folder and
 writes `catalog.ebc` and `covers.pak` into it, and fetches
 `release-metadata.zip` to the card root when the card has no collection;
-everything else it reads in place.
+everything else it reads in place. One file of the tool's lives outside
+`sleekmenu/`, and only when asked for: `ED64/autoexec.v64`, below.
+
+## Starting in the browser
+
+An EverDrive-64 X7's stock OS starts `ED64/autoexec.v64` by itself at
+power-on when the file is there. `--direct-boot on`, or the switch on the
+window's Options tab, copies the card's `SleekMenu64.z64` to that name, byte
+for byte; `off` removes it. The tool offers this only where it can work and
+do no harm (`tools/direct_boot.py`): `ED64/OS64.v64` must be on the card and
+carry that file name inside it, which is how an OS with the feature is told
+from one without, whatever its version; and an `autoexec.v64` that is not
+the browser (its header title says) is another program's and is never
+overwritten or removed. A run told nothing leaves the switch where it is,
+and copies the browser again when the one at the root has been replaced. A
+card for the EverDrive-64 Pro has no `OS64.v64` and no such file.
 
 ## Where every field came from
 
@@ -204,6 +221,32 @@ usual spellings), and the first line that is not a header starts the
 description. The window's Games tab writes this same file
 (`tools/custom_art.py`), and reads it back to show the edit as the next
 update will catalog it.
+
+## How a game finds its cheats
+
+In this order, the first that has a file:
+
+```text
+sleekmenu/cheats/Star Road.cht              yours: named like the ROM file
+ED64/CHEATS/Super Mario 64 (U).cht          the EverDrive's pack, when its file's region tag
+                                            agrees with the cartridge
+sleekmenu/cheats/libretro/635A2BFF8B022326.cht   fetched: the dump's own
+ED64/CHEATS/Some Game.cht                   the pack again, when it can only guess: a file with
+                                            no region tag, the Europe file for a French cartridge
+```
+
+A fetched file is named by the two checksum words in the ROM's header
+(0x10 to 0x17), sixteen hex digits, which is the key `data/coverdb.csv`
+knows a dump by: `--cheats` fetches
+`cht/Nintendo - Nintendo 64/<No-Intro name>.cht` from libretro-database for
+every ROM on the card whose checksum the database has, skipping what is
+there, and records each in `sleekmenu/cheats/libretro/downloads.json`
+(name, address, date, SHA-256) with the dumps libretro had no file for and
+whether the card still wants them (`tools/cheat_codes.py`). A hack has
+another checksum and gets none. The browser reads the first 96 KB of a
+file and its first 256 codes; libretro's per-dump files run from a few
+codes to thousands, which is why the pack's shorter list is preferred
+where the pack is sure of the game.
 
 ## Covers
 

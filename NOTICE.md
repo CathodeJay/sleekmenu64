@@ -16,6 +16,7 @@ ships here at all.**
 | `third_party/spleen/` | BSD-2-Clause | Frederic Cambus (Spleen 5x8), vendored unmodified |
 | `data/coverdb.csv`, `data/genres.csv` | CC BY-SA 4.0 | libretro-database, plus corrections |
 | box art | not distributed | the respective publishers |
+| cheat codes | not distributed | libretro-database (CC BY-SA 4.0), fetched onto the user's card |
 
 ## The downloadable window
 
@@ -72,6 +73,14 @@ The interface font is [Spleen](https://github.com/fcambus/spleen) 5x8, kept
 as its BDF under `third_party/spleen/` and rasterised into a sprite at build
 time by `tools/build_compact_font.py`. BSD-2-Clause composes with AGPL; the
 licence text travels with the file, and the built ROM carries the glyphs.
+
+## Cheat codes
+
+None are included. When the card's owner asks for them, the prep tool
+fetches libretro-database's `.cht` file for each of their games from that
+project's repository, by the user's machine, onto the user's card, and
+records each there with its address. The files are libretro-database's,
+under its CC BY-SA 4.0; this project neither hosts nor redistributes them.
 
 ## Box art
 

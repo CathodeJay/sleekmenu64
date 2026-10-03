@@ -27,8 +27,9 @@ click the first time. With Python and Tk installed,
 - **Set up card**, the first time, and **Update card** after, do
   everything: read the games, fetch what the card lacks, build the catalog
   and the covers, write them. What it fetches is the collection, once
-  (about 52 MB), and a 512-pixel box for each game the database knows
-  (about 400 KB each). The four steps show where it is. Stop ends it; what
+  (about 52 MB), a 512-pixel box for each game the database knows
+  (about 400 KB each) and, if you ticked them on the Options tab, cheat
+  codes. The four steps show where it is. Stop ends it; what
   was fetched is kept, and the next run carries on from there. A download
   that fails does not stop the run: the card gets its catalog, and the tab
   says what is missing and to press the button again.
@@ -96,6 +97,10 @@ button on the Card tab.
 
 - **Where the games are**: the whole card, or one folder (`ROMS`) to
   catalog only that. The card remembers the choice.
+- **Fetch cheat codes** fetches a file of GameShark codes for every game
+  the database knows, for the games the EverDrive's cheat pack does not
+  cover; see [Cheat codes](#cheat-codes). Off until you tick it; the card
+  remembers that too.
 - **Repair hacks that show a black screen on a console** rewrites a stale
   header checksum in the file itself. Hacks and homebrew are always
   checked (see [Hacks and homebrew](CONSOLE.md#hacks-and-homebrew)).
@@ -103,6 +108,9 @@ button on the Card tab.
   box again, and asks libretro again for the boxes it did not have, for a
   card that looks wrong.
 - **Do not download anything** uses only what is already on the card.
+- **Start the console in SleekMenu**, on a card for an EverDrive-64 X7:
+  the console powers on in SleekMenu instead of the EverDrive menu. See
+  [Starting the console in SleekMenu](#starting-the-console-in-sleekmenu).
 - **Boxes and descriptions**: a `release-metadata.zip` you already have can
   be chosen in place of the download; the line under it says which
   collection a run will read.
@@ -165,6 +173,51 @@ still wins; Stop ends it between two boxes.
 one game code and puts them on the card as you save: see
 [Editing a game](#editing-a-game).
 
+## Cheat codes
+
+Tick **Fetch cheat codes** on the Options tab (`--cheats` on the command
+line) and the next run fetches a `.cht` file from
+[libretro-database](https://github.com/libretro/libretro-database) for
+every game on the card that the database knows by its checksum, most of
+them a few KB, into `sleekmenu/cheats/libretro/`. Each file is the one
+libretro keeps for that exact dump, region and revision included, and
+libretro has one for about three dumps in four — more games than the
+EverDrive's own pack covers. A hack gets none: its codes would be its
+parent's, written for other addresses.
+
+They are bigger and rougher than the pack's files: most hold a few dozen
+codes, some hold thousands, with every variant anyone collected and now and
+then a description in German. The console shows the first 256 of a file.
+So the pack's file is still the one used where the pack has the game for
+your cartridge's region, and a fetched file serves the rest: the games the
+pack lacks, has for another region only, or can only guess at.
+
+A card that asked keeps its cheats complete: every later run fetches the
+files of the games added since. A game libretro has no file for is noted
+and not asked about again, unless you rebuild from scratch. Untick the box
+(`--no-cheats`) and nothing more is fetched; the files already on the card
+stay, and the console goes on reading them.
+
+On the console a file of your own in `sleekmenu/cheats/`, named like the
+ROM, always comes first. See [Cheats](CONSOLE.md#cheats).
+
+## Starting the console in SleekMenu
+
+On an EverDrive-64 X7 the stock OS starts the file `ED64/autoexec.v64` by
+itself at power-on, when there is one. The switch on the Options tab
+(`--direct-boot on`) copies the card's `SleekMenu64.z64` there, and the
+console starts in SleekMenu; unticking it (`--direct-boot off`) removes the
+copy, and the console starts in the EverDrive menu again. An update keeps
+the copy in step when you replace `SleekMenu64.z64` with a newer one. Leave
+`SleekMenu64.z64` at the card root: it is what the copy is made from.
+
+The switch shows only for a card with an X7's OS on it, and is greyed, with
+the reason, when it cannot act: the OS is too old to have the feature,
+`SleekMenu64.z64` is not on the card yet, or `ED64/autoexec.v64` is some
+other program, which is never replaced or removed. What it means on the
+console, and why the EverDrive-64 Pro has no such switch, is in
+[CONSOLE.md](CONSOLE.md#starting-the-console-in-sleekmenu).
+
 ## The command line
 
 `sleekmenu-prep.pyz`, also on the releases page, is the same tool for a
@@ -185,13 +238,15 @@ fetched when you ask with `--hires`, and kept complete after. Offline, the card 
 report says where to download the zip by hand — drop it at the root of the
 card and run the tool again. The options mirror the GUI's:
 
-- `--roms ROMS` catalogs one folder instead of the whole card, like the
-  Games folder field. Only that folder is scanned, the browser opens inside
+- `--roms ROMS` catalogs one folder instead of the whole card, like Where
+  the games are. Only that folder is scanned, the browser opens inside
   it, the report names any ROM-shaped file elsewhere that was left out, and
   the choice holds on the next run; `--roms .` is the whole card again.
 - `--hires` fetches the high-resolution boxes; `--rebuild` starts from
   nothing; `--fix-checksums` rewrites a hack's stale header checksum, and
   `--no-checksums` skips the check.
+- `--cheats` fetches the cheat codes and `--no-cheats` stops;
+  `--direct-boot on` and `--direct-boot off` set an X7's start-up switch.
 - `--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps
   the tool off the network altogether; `--dry-run` writes nothing.
 - `--gui` opens the prep GUI; `--version` says which release it is; `--help`
@@ -202,8 +257,8 @@ card and run the tool again. The options mirror the GUI's:
 The box art and descriptions come from
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata/releases),
 a community-maintained collection of box scans and descriptions for every
-cartridge, shared with other N64 menus. SleekMenu ships none of it:
-Download puts its `release-metadata.zip` on the card, where it is read in
+cartridge, shared with other N64 menus. SleekMenu ships none of it: the
+tool puts its `release-metadata.zip` on the card, where it is read in
 place from then on.
 
 What the tool writes, and what it leaves alone:
@@ -214,6 +269,9 @@ What the tool writes, and what it leaves alone:
 /sleekmenu/catalog.json    the same, readable, with where every field came from
 /sleekmenu/covers.pak      every cover in one file
 /sleekmenu/covers-large.pak the same covers at 256×180, for the box view
+/sleekmenu/art/hires/      the 512-pixel boxes, one per game code
+/sleekmenu/cheats/libretro/ cheat codes, one file per dump, when asked for
+/ED64/autoexec.v64         a copy of SleekMenu64.z64, when an X7 starts in it
 /sleekmenu/favorites.txt   written by the browser as you star games
 /sleekmenu/history.txt     the last fifteen games you launched
 /sleekmenu/cheats.txt      which cheats are on, per game
@@ -223,8 +281,9 @@ What the tool writes, and what it leaves alone:
 Both the catalog and the covers are optional: with no catalog the browser
 scans the card and shows filenames, with no covers it draws a placeholder.
 The tool never moves, renames or deletes anything on the card, apart from
-a picture or text of your own in `sleekmenu/art/` when you press Remove my
-edit in the prep GUI.
+two things it put there itself: a picture or text of your own in
+`sleekmenu/art/` when you press Undo my changes in the prep GUI, and
+`ED64/autoexec.v64` when you untick Start the console in SleekMenu.
 
 Every file, who writes it and how a game is matched to its box is in
 [CARD_LAYOUT.md](CARD_LAYOUT.md).

@@ -69,6 +69,14 @@ bool sm_cheats_parse_code(const char *text, size_t length, uint32_t *code, uint3
    extension swapped for .cht. False when it would not fit. */
 bool sm_cheats_file_from_rom_path(const char *rom_path, char *out, size_t out_size);
 
+/* The name a fetched file goes by: the dump's two checksum words from its
+   header (0x10..0x17) as sixteen hex digits, which is the key the prep
+   tool's database knows a dump by -- "635A2BFF8B022326.cht" for the
+   American Super Mario 64. False for a header too short to carry them, for
+   checksums of zero (no dump the database knows has those), and for a
+   buffer too small. */
+bool sm_cheats_file_from_header(const uint8_t *header, size_t header_length, char *out, size_t out_size);
+
 /* Enabled entries, in file order, as the engine's list. Returns the words
    written including the terminator, or 0 when nothing is enabled (the
    caller passes no list). The engine stages itself at 7 MB and settles near

@@ -54,9 +54,9 @@ class FieldTests(unittest.TestCase):
     def test_the_choices_become_the_runs_options(self):
         options = sleekmenu_gui.options_from("/Volumes/CARD")
         self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD"), roms=sleekmenu_prep.WHOLE_CARD,
-                                                         hires=True),
+                                                         hires=True, cheats=False),
                          "an empty games folder is the whole card, said so -- never 'as remembered' -- "
-                         "and the boxes are asked for")
+                         "the boxes are asked for, and cheats are not unless ticked")
         options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", " ROMS/ ", fix_checksums=True,
                                              offline=True, remembered=True)
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
@@ -69,6 +69,19 @@ class FieldTests(unittest.TestCase):
         rebuilt = sleekmenu_gui.options_from("/Volumes/CARD", rebuild=True, remembered=True)
         self.assertTrue(rebuilt.rebuild and rebuilt.hires, "from scratch asks for every box again")
         self.assertFalse(options.no_large_covers, "the window always builds the box view's pack")
+
+    def test_the_two_switches_the_card_remembers_become_the_runs_options(self):
+        from_window = sleekmenu_gui.options_from
+        self.assertIs(from_window("/c", cheats=True).cheats, True, "ticked on a card that never asked: asked for")
+        self.assertIsNone(from_window("/c", cheats=True, cheats_remembered=True).cheats,
+                          "ticked on a card that has them: kept complete, absences not asked about again")
+        self.assertIs(from_window("/c", cheats=True, cheats_remembered=True, rebuild=True).cheats, True,
+                      "from scratch asks again")
+        self.assertIs(from_window("/c", cheats=False, cheats_remembered=True).cheats, False,
+                      "unticked: the card is told to stop")
+        self.assertIsNone(from_window("/c").direct_boot, "a card with no start-up switch is told nothing")
+        self.assertIs(from_window("/c", direct_boot=True).direct_boot, True)
+        self.assertIs(from_window("/c", direct_boot=False).direct_boot, False)
 
 
 class CardStatusTests(unittest.TestCase):
@@ -153,6 +166,11 @@ class StepTests(unittest.TestCase):
         self.assertAlmostEqual(steps.fraction, 212 / 716)
         steps.progress("boxes", 716, 716)
         self.assertEqual(steps.notes[1], "716 boxes")
+        steps.line("cheats:   640 files to fetch from libretro")
+        steps.progress("cheats", 12, 640)
+        self.assertEqual((steps.current, steps.notes[1]), (1, "12 of 640 cheat files"))
+        steps.progress("cheats", 640, 640)
+        self.assertEqual(steps.notes[1], "640 cheat files")
         steps.line("covers:   900 ROMs have a box, 4 do not")
         self.assertEqual((steps.current, steps.fraction), (2, 0.0))
         steps.progress("sprites", 5, 900)
@@ -183,6 +201,14 @@ class StepTests(unittest.TestCase):
                       line(0, sleekmenu_prep.Outcome(collection_failed=True), status))
         self.assertIn("2 boxes could not be downloaded", line(0, sleekmenu_prep.Outcome(boxes_unreached=2), status))
         self.assertIn("1 box could", line(0, sleekmenu_prep.Outcome(boxes_unreached=1), status))
+        self.assertIn("3 cheat files could not be downloaded",
+                      line(0, sleekmenu_prep.Outcome(cheats_unreached=3), status))
+        self.assertIn("2 boxes and 1 cheat file could not be downloaded",
+                      line(0, sleekmenu_prep.Outcome(boxes_unreached=2, cheats_unreached=1), status))
+        self.assertEqual(line(0, sleekmenu_prep.Outcome(), status, direct=True),
+                         "Done. Eject the card and switch the console on: it starts in SleekMenu.")
+        self.assertIn("could not be downloaded", line(0, sleekmenu_prep.Outcome(boxes_unreached=2), status,
+                                                      direct=True), "what went wrong comes first")
         self.assertIn("Copy your games onto the card", line(0, sleekmenu_prep.Outcome(), status, games_on_card=False))
         self.assertEqual(line(1, sleekmenu_prep.Outcome(), status), "", "the run's own error line says it")
 
@@ -663,6 +689,143 @@ class WindowTests(unittest.TestCase):
             self.assertFalse((card / "release-metadata.zip").exists(), "nothing was fetched")
             self.assertFalse((card / "sleekmenu" / "art" / "hires").exists())
             self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
+            root.destroy()
+
+    def test_the_banner_sits_in_the_top_right_corner_and_opens_the_page(self):
+        root = sleekmenu_gui.build(card="")
+        root.update()
+        banner = root.sleekmenu_state["buttons"]["coffee"]
+        self.assertEqual(banner.cget("text"), "Buy me a coffee")
+        self.assertEqual(sleekmenu_gui.COFFEE_URL, "https://buymeacoffee.com/CathodeJay")
+        self.assertTrue(banner.winfo_ismapped())
+        right = banner.winfo_x() + banner.winfo_width()
+        self.assertGreater(right, root.winfo_width() - 24, "against the right edge")
+        self.assertLess(banner.winfo_y(), 12, "at the top")
+        notebook = root.sleekmenu_state["notebook"]
+        last_tab = notebook.bbox(len(notebook.tabs()) - 1)
+        self.assertLess(last_tab[0] + last_tab[2], banner.winfo_x(), "clear of the tabs")
+        with mock.patch("webbrowser.open") as opened:
+            banner.event_generate("<Button-1>", x=4, y=4)
+            root.update()
+        opened.assert_called_once_with(sleekmenu_gui.COFFEE_URL)
+        for page in ("games", "options", "details"):
+            notebook.select(root.sleekmenu_state["pages"][page])
+            root.update()
+            self.assertTrue(banner.winfo_ismapped(), f"still there on the {page} tab")
+        root.destroy()
+
+    def test_the_cheats_box_is_off_until_ticked_and_then_the_card_remembers(self):
+        from tests.test_cheat_codes import CHT, FOLDER, route
+        from tests.test_fetch import Server
+        from tools import cheat_codes
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            mario = next(entry for entry in hires.coverdb.load(sleekmenu_prep.data_file("coverdb.csv", Path(scratch)))
+                         .values() if entry.name == "Super Mario 64 (USA)")
+            write_rom(card / "ROMS" / "Super Mario 64 (USA).z64",
+                      int(mario.crc[:8], 16), int(mario.crc[8:], 16), game_code="SM")
+            write_collection(card / "release-metadata.zip", "NSME", zipped=True)
+            with mock.patch.dict(os.environ):
+                os.environ.pop(fetch.OFFLINE_VARIABLE, None)
+                with Server({route("Super Mario 64 (USA)"): (200, CHT)}) as server, \
+                     mock.patch.object(cheat_codes, "BASE_URL", server.url(FOLDER)), \
+                     mock.patch.object(hires, "BASE_URL", server.url("/Named_Boxarts/")):
+                    root = sleekmenu_gui.build(card=str(card))
+                    root.update()
+                    state = root.sleekmenu_state
+                    self.assertFalse(state["options"]["cheats"].get(), "off by default")
+                    state["start"]()
+                    while state["runner"] is not None:
+                        root.update()
+                    self.assertFalse(any(".cht" in request for request in server.requests))
+                    self.assertFalse(cheat_codes.folder(card).exists())
+                    state["options"]["cheats"].set(True)
+                    state["start"]()
+                    while state["runner"] is not None:
+                        root.update()
+                    self.assertEqual(state["last_code"], 0)
+                    self.assertEqual((cheat_codes.folder(card) / f"{mario.crc}.cht").read_bytes(), CHT)
+                    self.assertEqual(state["steps"].notes[1], "1 cheat file")
+                    root.destroy()
+                    # the card remembers: the box is ticked the next time it is opened
+                    root = sleekmenu_gui.build(card=str(card))
+                    root.update()
+                    state = root.sleekmenu_state
+                    self.assertTrue(state["options"]["cheats"].get())
+                    state["options"]["cheats"].set(False)
+                    state["start"]()
+                    while state["runner"] is not None:
+                        root.update()
+                    self.assertFalse(cheat_codes.remembered(card), "unticked: told to stop")
+                    self.assertTrue((cheat_codes.folder(card) / f"{mario.crc}.cht").is_file(), "the files stay")
+                    root.destroy()
+
+    def test_the_start_up_switch_is_there_for_an_x7_card_only_and_does_what_it_says(self):
+        from tests.test_direct_boot import browser, stock_os
+        from tools import direct_boot
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            (card / "ED64" / "sysdata").mkdir(parents=True)
+            (card / "ED64" / "sysdata" / "config.ini").write_text("[state]\n")
+            (card / "SleekMenu64.z64").write_bytes(browser())
+            root = sleekmenu_gui.build(card=str(card))
+            state = root.sleekmenu_state
+            state["notebook"].select(state["pages"]["options"])
+            root.update()
+            self.assertFalse(state["boot_row"].winfo_ismapped(), "a Pro card has no such switch")
+            self.assertFalse(state["boot"].available)
+            root.destroy()
+
+            (card / "ED64" / "sysdata" / "config.ini").unlink()
+            (card / "ED64" / "OS64.v64").write_bytes(stock_os())
+            direct_boot._facts.clear()
+            root = sleekmenu_gui.build(card=str(card))
+            state = root.sleekmenu_state
+            state["notebook"].select(state["pages"]["options"])
+            root.update()
+            self.assertTrue(state["boot_row"].winfo_ismapped())
+            self.assertEqual(str(state["buttons"]["boot"].cget("state")), "normal")
+            self.assertIn("A reset inside a game returns to the EverDrive menu", state["boot_note"].get())
+            self.assertFalse(state["options"]["boot"].get(), "off: the card has no start-up file")
+            state["options"]["boot"].set(True)
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(state["last_code"], 0)
+            self.assertEqual((card / "ED64" / "autoexec.v64").read_bytes(), browser())
+            self.assertIn("it starts in SleekMenu", state["words"]["result"].get())
+            self.assertTrue(state["options"]["boot"].get(), "read back from the card after the run")
+            root.destroy()
+
+            # opened again, the switch shows the card as it is; off removes the file
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            self.assertTrue(state["options"]["boot"].get())
+            state["options"]["boot"].set(False)
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertFalse((card / "ED64" / "autoexec.v64").exists())
+            self.assertIn("start SleekMenu64.z64 from the EverDrive menu", state["words"]["result"].get())
+            root.destroy()
+
+            # another program's start-up file: the switch is shown, greyed, and says why
+            write_rom(card / "ED64" / "autoexec.v64", 1, 2, game_code="XX")
+            direct_boot._facts.clear()
+            root = sleekmenu_gui.build(card=str(card))
+            state = root.sleekmenu_state
+            state["notebook"].select(state["pages"]["options"])
+            root.update()
+            self.assertEqual(str(state["buttons"]["boot"].cget("state")), "disabled")
+            self.assertIn("another program", state["boot_note"].get())
+            theirs = (card / "ED64" / "autoexec.v64").read_bytes()
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual((card / "ED64" / "autoexec.v64").read_bytes(), theirs)
             root.destroy()
 
     def test_a_build_check_never_downloads_and_ends_on_its_own(self):

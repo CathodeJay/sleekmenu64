@@ -1093,6 +1093,15 @@ class FlashcartInterfaceTests(unittest.TestCase):
         self.assertLess(io.index("try_file(SM_CHEATS_DIR, by_file"),
                         io.index("sm_cheat_pack_find(pack, rom_path, header, header_length)"))
         self.assertLess(io.index("sm_cheat_pack_find("), io.index("try_file(SM_FIRMWARE_CHEATS_DIR, match.name"))
+        # a file fetched for the dump comes after the pack's sure answer
+        # and before its guess
+        sure = io.index("if (sm_cheat_match_sure(&match)) found = try_file(SM_FIRMWARE_CHEATS_DIR")
+        fetched = io.index("try_file(SM_CHEATS_FETCHED_DIR, by_file")
+        guess = io.index("if (!found && match.name && !sm_cheat_match_sure(&match))")
+        self.assertLess(io.index("try_file(SM_CHEATS_DIR, by_file"), sure)
+        self.assertLess(sure, fetched)
+        self.assertLess(fetched, guess)
+        self.assertIn('#define SM_CHEATS_FETCHED_DIR SM_CHEATS_DIR "/libretro"', self.source("card_paths.h"))
         self.assertNotIn("by_title", io)
         # the pack is listed once, at startup, not at the first launch card
         main = self.source("main.c")

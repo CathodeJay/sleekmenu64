@@ -41,6 +41,32 @@ applies it. The header shows how many games match.
 
 ![The filter screen: genres with counts, then region, players, publisher, year and favourites](screenshots/filters.png)
 
+## Starting the console in SleekMenu
+
+**EverDrive-64 X7.** The stock OS starts a file by itself at power-on when
+the card has one, and the prep tool can make SleekMenu that file: tick
+**Start the console in SleekMenu** on the prep GUI's Options tab and press
+Update card ([PREP.md](PREP.md#starting-the-console-in-sleekmenu)). From
+then on:
+
+| You do | You land in |
+|---|---|
+| Power on | SleekMenu |
+| Reset while in SleekMenu | SleekMenu |
+| Reset while in a game | the EverDrive menu |
+
+The EverDrive OS still starts first, briefly: it writes the last game's
+save to the card, then hands over. Nothing about saves changes. A reset inside a game shows the EverDrive menu because
+the OS only starts the file again when the file was the last thing it
+launched; `SleekMenu64.z64` is still at the card root to pick from there,
+and the next power-on is SleekMenu again. To go back for good, untick the
+switch and update the card, or delete `ED64/autoexec.v64`.
+
+**EverDrive-64 Pro.** The Pro's menu is part of its firmware and has no
+start-up file, so the console always powers on in the Pro's menu. Start
+there opens Recently played, where SleekMenu stays first: games started
+from SleekMenu are not added to that list.
+
 ## Saves
 
 Written to `ED64/gamedata/` under the EverDrive's own file names. On the X7
@@ -61,8 +87,9 @@ A hack whose author never recomputed the header checksum runs in an emulator
 and black-screens on a console. SleekMenu corrects the checksum in cartridge
 memory as it launches, the way the EverDrive menu does; the prep tool checks
 every hack, translation and homebrew on the card, names the ones whose
-checksum is stale, and rewrites them if you tick "Rewrite a stale checksum"
-in the prep GUI (`--fix-checksums` on the command line).
+checksum is stale, and rewrites them if you tick "Repair hacks that show a
+black screen on a console" in the prep GUI (`--fix-checksums` on the
+command line).
 
 ## ROM formats
 
@@ -95,9 +122,14 @@ Controller Pak (`.mpk`) backup and restore.
 
 ## Cheats
 
-GameShark codes, from the cheat pack the EverDrive-64 Pro's menu ships in
-`ED64/CHEATS/` (one `.cht` file per game). If that folder is on your card,
-there is nothing to set up.
+GameShark codes, from two places. The EverDrive-64 Pro's menu ships a
+cheat pack in `ED64/CHEATS/` (one `.cht` file per game): if that folder is
+on your card, there is nothing to set up. And the prep tool fetches
+libretro's file for each of your games when you tick **Fetch cheat codes**
+([PREP.md](PREP.md#cheat-codes)); those are filed by the exact dump, and
+serve the games the pack has no file for, or none for your region. Where
+the pack has the game for your cartridge's region, its shorter list is the
+one used.
 
 **To use them:** open a game's details, press C-down, tick the codes you
 want, press B. Your choices are remembered per game in
@@ -116,14 +148,15 @@ when it had to guess.
   has no file for your region. Codes from another region point at the wrong
   memory addresses and do nothing, so they are not offered.
 - *"Not in the cheat pack"* — the pack has files for some 540 games, most
-  of the well-known ones, far from all.
+  of the well-known ones, far from all. Fetching libretro's files covers
+  more.
 - *"WILL NOT RUN"* in red on the card — the console has no Expansion Pak, or
   the game's boot code is not the retail one (hacks, homebrew). The cheats
   page says which.
 
 **Your own codes.** Put a `.cht` file in `sleekmenu/cheats/`, named exactly
 like the ROM file (`Super Mario 64 (USA).cht` for `Super Mario 64 (USA).z64`).
-It is used instead of the pack. The format is the pack's own; a cheat made
+It is used instead of a fetched file and of the pack. The format is the pack's own; a cheat made
 of several lines of code joins them with `;`:
 
 ```text

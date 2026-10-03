@@ -39,13 +39,18 @@
 #ifndef SM_HISTORY_PATH
 #define SM_HISTORY_PATH SM_CARD_DIR "/history.txt"
 #endif
-/* Which cheats are on, per game; and where a card owner can drop .cht files
-   of their own, looked up after the firmware's database. */
+/* Which cheats are on, per game; where a card owner can drop .cht files of
+   their own, read before any other; and inside that folder, the files the
+   prep tool fetched from libretro, one per dump, named by the two checksum
+   words of the dump's header. tools/card_layout.py has the same names. */
 #ifndef SM_CHEATS_STATE_PATH
 #define SM_CHEATS_STATE_PATH SM_CARD_DIR "/cheats.txt"
 #endif
 #ifndef SM_CHEATS_DIR
 #define SM_CHEATS_DIR SM_CARD_DIR "/cheats"
+#endif
+#ifndef SM_CHEATS_FETCHED_DIR
+#define SM_CHEATS_FETCHED_DIR SM_CHEATS_DIR "/libretro"
 #endif
 
 /* The stock firmware's own folder. Excluded from the library scan for the same

@@ -39,6 +39,17 @@ CATALOG_JSON_NAME = "catalog.json"
 #: Under CARD_FOLDER: the card owner's own pictures and text, by ROM name
 #: or game code (tools/custom_art.py). Read by the tool, never the browser.
 ART_FOLDER = "art"
+#: Under CARD_FOLDER: the card owner's own .cht files, by ROM name, which
+#: the browser reads first; and inside it the folder of files the tool
+#: fetched from libretro, by the dump's checksum pair
+#: (tools/cheat_codes.py). src/card_paths.h has the same two names.
+CHEATS_FOLDER = "cheats"
+CHEATS_FETCHED_FOLDER = "libretro"
+#: Under FIRMWARE_FOLDER on an EverDrive-64 X7: the stock OS itself, and
+#: the ROM it starts on its own at power-on when there is one
+#: (tools/direct_boot.py).
+FIRMWARE_OS = "OS64.v64"
+FIRMWARE_AUTOEXEC = "autoexec.v64"
 
 #: Folder names the library scan never descends into, case-folded for
 #: comparison against a directory name from the card: the browser's own, the

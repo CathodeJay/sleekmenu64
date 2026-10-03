@@ -91,6 +91,14 @@ typedef struct {
 sm_cheat_match_t sm_cheat_pack_find(const sm_cheat_pack_t *pack, const char *rom_path,
     const uint8_t *header, size_t header_length);
 
+/* Whether the pack's answer is one it is sure of: a file named like the
+   ROM, or one whose region tag agrees with the cartridge. Such a file is
+   taken before one fetched for the dump, because the pack's lists are
+   short and chosen and libretro's per-dump files are everything anyone
+   collected; a guess -- the Europe file for a French cartridge, a file
+   with no region -- gives way to the fetched file. */
+bool sm_cheat_match_sure(const sm_cheat_match_t *match);
+
 /* Exposed for the tests: a name with its tags dropped, folded to the
    letters and digits that survive. Returns the length. */
 size_t sm_cheat_pack_normalise(const char *text, char *out, size_t out_size);

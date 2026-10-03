@@ -7,8 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 
-/* The largest .cht in the Pro's database is under 40 KB; the buffer is
-   sized for one twice that, and a bigger file is read as far as it goes. */
+/* The largest .cht in the Pro's pack is under 40 KB; the buffer is sized for
+   one twice that, and a bigger file -- libretro has a few of a megabyte and
+   more -- is read as far as it goes. */
 static char file_text[SM_CHEAT_FILE_MAX];
 static char state_text[SM_CHEATS_STATE_MAX];
 static char state_out[SM_CHEATS_STATE_MAX];
@@ -60,6 +61,7 @@ static bool try_file(const char *directory, const char *name, sm_cheat_set_t *se
 bool sm_cheats_load(const char *rom_path, const uint8_t *header, size_t header_length,
     const sm_cheat_pack_t *pack, sm_cheat_set_t *set, sm_cheat_source_t *source) {
     char by_file[300];
+    sm_cheat_match_t match = { SM_CHEAT_MATCH_NONE, NULL, 0, 0 };
     bool found = false;
     size_t state_length;
 
@@ -73,16 +75,27 @@ bool sm_cheats_load(const char *rom_path, const uint8_t *header, size_t header_l
         found = try_file(SM_CHEATS_DIR, by_file, set, source);
         if (found && source) source->kind = SM_CHEAT_MATCH_EXACT;
     }
+    /* Then the pack's file, when the pack is sure of it. */
     if (!found && pack) {
-        sm_cheat_match_t match = sm_cheat_pack_find(pack, rom_path, header, header_length);
+        match = sm_cheat_pack_find(pack, rom_path, header, header_length);
         if (source) {
             source->kind = match.kind;
             source->rom_region = match.rom_region;
             source->found = match.found;
         }
-        if (match.name) found = try_file(SM_FIRMWARE_CHEATS_DIR, match.name, set, source);
-        if (!found && source) source->kind = match.name ? SM_CHEAT_MATCH_NONE : match.kind;
+        if (sm_cheat_match_sure(&match)) found = try_file(SM_FIRMWARE_CHEATS_DIR, match.name, set, source);
     }
+    /* Then the file the prep tool fetched for this very dump, named by the
+       header's checksum words: for the games the pack does not have, has
+       for another region only, or can only guess at. */
+    if (!found && sm_cheats_file_from_header(header, header_length, by_file, sizeof(by_file))) {
+        found = try_file(SM_CHEATS_FETCHED_DIR, by_file, set, source);
+        if (found && source) source->kind = SM_CHEAT_MATCH_EXACT;
+    }
+    /* Last, the pack's guess. */
+    if (!found && match.name && !sm_cheat_match_sure(&match))
+        found = try_file(SM_FIRMWARE_CHEATS_DIR, match.name, set, source);
+    if (!found && pack && source) source->kind = match.name ? SM_CHEAT_MATCH_NONE : match.kind;
     if (!found) return false;
 
     state_length = read_whole(SM_CHEATS_STATE_PATH, state_text, sizeof(state_text));

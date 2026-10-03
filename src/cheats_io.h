@@ -18,9 +18,10 @@
    and read. */
 void sm_cheats_read_pack(sm_cheat_pack_t *pack);
 
-/* Fill the set for a game: the browser's own folder by file name, then
-   the pack's file for the game and region (cheat_pack.h); then the state
-   file's section for the game. `rom_path` is the catalog's card-relative
+/* Fill the set for a game: the browser's own folder by file name; then the
+   pack's file for the game and region when the pack is sure of it
+   (cheat_pack.h); then the file the prep tool fetched for the dump; then
+   the pack's guess. Then the state file's section for the game. `rom_path` is the catalog's card-relative
    form, `header` the normalised header. `source`, when given, says which
    file answered and how sure the match is, or why none did. False, with
    an empty set, when no file fits the game -- which is most games and not

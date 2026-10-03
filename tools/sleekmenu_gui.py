@@ -42,12 +42,15 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import (card_catalog, card_layout, coverdb, custom_art, fetch, genre_map, hires, library, make_sprite,
-                   metadata_repo, progress, provenance, sleekmenu_prep, version)
+from tools import (card_catalog, card_layout, cheat_codes, coverdb, custom_art, direct_boot, fetch, genre_map,
+                   hires, library, make_sprite, metadata_repo, progress, provenance, sleekmenu_prep, version)
 from tools.metadata_repo import MetadataRepo
 
 TITLE = f"SleekMenu 64 {version.VERSION} — prepare a card"
 DOWNLOAD_URL = metadata_repo.RELEASES_URL
+#: The banner in the window's top right corner, and where it leads.
+COFFEE_TEXT = "Buy me a coffee"
+COFFEE_URL = "https://buymeacoffee.com/CathodeJay"
 #: The box is 96x72 on the console; twice that on a desktop screen is
 #: legible without pretending to be the source picture.
 BOX_ZOOM = 2
@@ -224,9 +227,10 @@ def card_status(card: Path | None, offline: bool = False, roms: list[str] | None
 STEPS = ("Read your games", "Fetch boxes and descriptions", "Build the catalog", "Write it to the card")
 #: The run's passes, by the label their progress carries, and the step each
 #: belongs to.
-STEP_OF_PASS = {"scanning": 0, "checksums": 0, "fetching": 1, "boxes": 1, "sprites": 2}
+STEP_OF_PASS = {"scanning": 0, "checksums": 0, "fetching": 1, "boxes": 1, "cheats": 1, "sprites": 2}
 #: Lines of the report that start a step with no pass of its own.
-STEP_OF_LINE = (("writing:", 3), ("covers:", 2), ("hires:", 1), ("metadata: not on the card", 1))
+STEP_OF_LINE = (("writing:", 3), ("covers:", 2), ("hires:", 1), ("cheats:", 1),
+                ("metadata: not on the card", 1))
 
 
 class Steps:
@@ -261,6 +265,9 @@ class Steps:
             self.notes[step] = f"{count // pieces} of {max(1, total // pieces)} MB"
         elif label == "boxes":
             self.notes[step] = plural(total, "box", "boxes") if count >= total else f"{count:,} of {total:,} boxes"
+        elif label == "cheats":
+            self.notes[step] = (plural(total, "cheat file") if count >= total
+                                else f"{count:,} of {total:,} cheat files")
         elif label == "sprites":
             self.notes[step] = plural(total, "cover") if count >= total else f"{count:,} of {total:,} covers"
 
@@ -283,8 +290,10 @@ class Steps:
         return "done" if step < self.current else "now" if step == self.current else "next"
 
 
-def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: bool = True) -> str:
-    """One sentence for how a run ended."""
+def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: bool = True,
+                  direct: bool = False) -> str:
+    """One sentence for how a run ended. `direct` is a card whose console
+    starts in SleekMenu, which changes what to do next."""
     if code == 3:
         return f"Stopped. What was fetched is kept; press {status.action} to carry on."
     if code != 0:
@@ -294,9 +303,14 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
     if outcome is not None and outcome.collection_failed:
         return ("Done, but the boxes and descriptions could not be downloaded. Check the connection "
                 f"and press {status.action} again.")
-    if outcome is not None and outcome.boxes_unreached:
-        return (f"Done, but {plural(outcome.boxes_unreached, 'box', 'boxes')} could not be downloaded. "
+    unreached = [plural(count, one, many) for count, one, many in (
+        (getattr(outcome, "boxes_unreached", 0), "box", "boxes"),
+        (getattr(outcome, "cheats_unreached", 0), "cheat file", None)) if count]
+    if unreached:
+        return (f"Done, but {' and '.join(unreached)} could not be downloaded. "
                 f"Press {status.action} again when the connection is back.")
+    if direct:
+        return "Done. Eject the card and switch the console on: it starts in SleekMenu."
     return "Done. Eject the card and start SleekMenu64.z64 from the EverDrive menu."
 
 
@@ -445,8 +459,9 @@ def collection_status(card: Path | None, chosen: str = "", offline: bool = False
 
 
 def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: bool = False,
-                 rebuild: bool = False, offline: bool = False,
-                 remembered: bool = False) -> sleekmenu_prep.Options:
+                 rebuild: bool = False, offline: bool = False, remembered: bool = False,
+                 cheats: bool = False, cheats_remembered: bool = False,
+                 direct_boot: bool | None = None) -> sleekmenu_prep.Options:
     """The window's choices as the run takes them. An empty collection
     means whatever is on the card, fetched when there is none. An empty
     games folder is the whole card, said so: the field shows what the card
@@ -456,7 +471,11 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
     (`remembered`), where the boxes libretro was found not to have are not
     asked about every time. Hacks are always checked; `fix_checksums`
     rewrites the stale ones. The box view's pack is always built from the
-    window; --no-large-covers is the terminal's."""
+    window; --no-large-covers is the terminal's.
+    Cheat codes are the owner's choice: ticked, they are asked for, or kept
+    complete on a card that already asked (`cheats_remembered`); unticked,
+    the card is told to stop. `direct_boot` is the X7's start-up switch as
+    the tab shows it, None on a card that has no such switch."""
     return sleekmenu_prep.Options(
         card=Path(card) if card.strip() else None,
         metadata=Path(metadata) if metadata.strip() else None,
@@ -464,6 +483,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
         fix_checksums=fix_checksums,
         no_download=bool(offline),
         hires=None if remembered and not rebuild else True,
+        cheats=False if not cheats else None if cheats_remembered and not rebuild else True,
+        direct_boot=direct_boot,
         rebuild=bool(rebuild),
     )
 
@@ -1535,6 +1556,12 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     root.geometry("1080x720")
     notebook = ttk.Notebook(root)
     notebook.pack(fill="both", expand=True)
+    # The banner, over the empty end of the tab row: the top right corner
+    # of the window on every tab.
+    coffee = tk.Label(root, text=COFFEE_TEXT, background="#FFDD00", foreground="#0D0C22", cursor="hand2",
+                      padx=10, pady=2)
+    coffee.place(relx=1.0, x=-8, y=3, anchor="ne")
+    coffee.bind("<Button-1>", lambda _event: webbrowser.open(COFFEE_URL))
     page = ttk.Frame(notebook, padding=12)
     notebook.add(page, text="Card")
     page.columnconfigure(0, weight=1)
@@ -1550,6 +1577,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     fix_var = tk.BooleanVar(value=False)
     rebuild_var = tk.BooleanVar(value=False)
     offline_var = tk.BooleanVar(value=smoke or fetch.offline_by_request())
+    cheats_var = tk.BooleanVar(value=False)
+    boot_var = tk.BooleanVar(value=False)
+    boot_note = tk.StringVar()
     headline_var = tk.StringVar()
     detail_var = tk.StringVar()
     explain_var = tk.StringVar()
@@ -1642,6 +1672,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     ttk.Label(options, textvariable=roms_note, foreground=colors["muted"], wraplength=width - 40,
               justify="left").grid(row=4, column=0, sticky="w", pady=(2, 0))
     for row, (variable, text, hint) in enumerate((
+            (cheats_var, "Fetch cheat codes",
+             "From libretro, for the games the EverDrive's cheat pack does not cover. Needs an Expansion Pak."),
             (fix_var, "Repair hacks that show a black screen on a console",
              "Rewrites the checksum inside those files."),
             (rebuild_var, "Rebuild everything from scratch",
@@ -1649,13 +1681,19 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             (offline_var, "Do not download anything",
              "Uses only what is already on the card.")), start=0):
         ttk.Checkbutton(options, text=text, variable=variable).grid(row=5 + row * 2, column=0, sticky="w",
-                                                                    pady=(14, 0))
+                                                                    pady=(12, 0))
         ttk.Label(options, text=hint, foreground=colors["muted"]).grid(row=6 + row * 2, column=0, sticky="w",
                                                                        padx=(24, 0))
-    ttk.Label(options, text="Boxes and descriptions", font=strong).grid(row=11, column=0, sticky="w",
-                                                                         pady=(20, 0))
+    # The X7's start-up switch: a row that is there only for an X7 card.
+    boot_row = ttk.Frame(options)
+    boot_check = ttk.Checkbutton(boot_row, text="Start the console in SleekMenu", variable=boot_var)
+    boot_check.grid(row=0, column=0, sticky="w", pady=(12, 0))
+    ttk.Label(boot_row, textvariable=boot_note, foreground=colors["muted"], wraplength=width - 40,
+              justify="left").grid(row=1, column=0, sticky="w", padx=(24, 0))
+    ttk.Label(options, text="Boxes and descriptions", font=strong).grid(row=14, column=0, sticky="w",
+                                                                         pady=(18, 0))
     pack_row = ttk.Frame(options)
-    pack_row.grid(row=12, column=0, sticky="ew", pady=(4, 0))
+    pack_row.grid(row=15, column=0, sticky="ew", pady=(4, 0))
     pack_row.columnconfigure(0, weight=1)
     ttk.Label(pack_row, text="Use a release-metadata.zip you already have").grid(row=0, column=0, sticky="w")
     choose_pack = ttk.Button(pack_row, text="Choose the file…")
@@ -1663,7 +1701,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     forget_pack = ttk.Button(pack_row, text="Use the card's")
     note = ttk.Label(options, textvariable=metadata_note, foreground=colors["muted"], wraplength=width - 40,
                      justify="left", cursor="hand2")
-    note.grid(row=13, column=0, sticky="w", pady=(2, 0))
+    note.grid(row=16, column=0, sticky="w", pady=(2, 0))
 
     # -- the report, on a tab of its own ----------------------------------------
     details_page = ttk.Frame(notebook, padding=12)
@@ -1793,7 +1831,23 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             forget_pack.grid_remove()
         folders = sorted({path.split("/", 1)[0] for path in roms or [] if "/" in path}, key=str.casefold)
         roms_box.configure(values=[WHOLE_CARD_LABEL] + folders)
+        boot = direct_boot.state(chosen) if chosen is not None else direct_boot.State()
+        state["boot"] = boot
+        if boot.cart == direct_boot.X7:
+            boot_row.grid(row=13, column=0, sticky="ew")
+            boot_check.configure(state="normal" if boot.available else "disabled")
+            boot_note.set("EverDrive-64 X7. A reset inside a game returns to the EverDrive menu; "
+                          "untick to start in the EverDrive menu again." if boot.available else boot.why)
+        else:
+            boot_row.grid_remove()
         update_buttons()
+
+    def read_choices() -> None:
+        """The two switches the card itself remembers, set from the card:
+        when another card is chosen, and after a run has changed it."""
+        chosen = current_card()
+        cheats_var.set(cheat_codes.remembered(chosen))
+        boot_var.set(chosen is not None and direct_boot.state(chosen).on)
 
     def on_card_change(*_args) -> None:
         chosen = card_var.get().strip()
@@ -1802,6 +1856,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             catalog.reload()
             remembered = card_catalog.remembered_roms(Path(chosen)) if chosen and Path(chosen).is_dir() else ""
             roms_var.set(remembered)
+            read_choices()
             state["steps"] = Steps()
             result_var.set("")
             draw_steps()
@@ -1932,9 +1987,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         # run was given, which the card now remembers.
         state["walk"] = None
         catalog.reload()
+        read_choices()
         refresh(fresh=True)
         draw_steps()
-        line = finished_line(code, runner.outcome, state["status"], bool(walk()))
+        line = finished_line(code, runner.outcome, state["status"], bool(walk()), state["boot"].on)
         plain = code == 0 and line.startswith("Done.")
         result.configure(foreground=colors["good"] if plain else colors["warn"])
         error = error.removeprefix("sleekmenu-prep: ")
@@ -1955,7 +2011,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             return
         begin(Runner(options_from(str(chosen), metadata_var.get(), roms_var.get(), fix_var.get(),
                                   rebuild_var.get(), offline_var.get(),
-                                  hires.remembered(custom_art.art_dir(chosen)))))
+                                  hires.remembered(custom_art.art_dir(chosen)),
+                                  cheats=cheats_var.get(), cheats_remembered=cheat_codes.remembered(chosen),
+                                  direct_boot=boot_var.get() if state["boot"].available else None)))
 
     def on_focus(event) -> None:
         """Back from copying games onto the card in another window: the
@@ -1996,12 +2054,15 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state["last_code"] = None
     # For the tests: the fields and the buttons, without walking widgets.
     state["fields"] = {"card": card_var, "roms": roms_var, "metadata": metadata_var}
-    state["options"] = {"fix": fix_var, "rebuild": rebuild_var, "offline": offline_var}
+    state["options"] = {"fix": fix_var, "rebuild": rebuild_var, "offline": offline_var,
+                        "cheats": cheats_var, "boot": boot_var}
+    state["boot_row"] = boot_row
+    state["boot_note"] = boot_note
     state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var,
                       "result": result_var, "last": last_var, "pack": metadata_note}
     state["start"] = start
     state["stop"] = ask_stop
-    state["buttons"] = {"action": action, "stop": stop}
+    state["buttons"] = {"action": action, "stop": stop, "coffee": coffee, "boot": boot_check}
     state["notebook"] = notebook
     state["pages"] = {"card": page, "games": catalog_page, "options": options_page, "details": details_page}
     root.sleekmenu_state = state  # type: ignore[attr-defined]

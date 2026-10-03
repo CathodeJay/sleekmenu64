@@ -400,3 +400,8 @@ sm_cheat_match_t sm_cheat_pack_find(const sm_cheat_pack_t *pack, const char *rom
     }
     return match;
 }
+
+bool sm_cheat_match_sure(const sm_cheat_match_t *match) {
+    return match && match->name &&
+        (match->kind == SM_CHEAT_MATCH_EXACT || match->kind == SM_CHEAT_MATCH_REGION);
+}

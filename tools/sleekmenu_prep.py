@@ -52,9 +52,9 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tools import (build_catalog, card_catalog, card_layout, cover_pack, coverdb, custom_art, fetch,
-                   headers, hires, library, make_sprite, metadata_repo, n64_checksum, pack_covers,
-                   prepare_card, progress, version)
+from tools import (build_catalog, card_catalog, card_layout, cheat_codes, cover_pack, coverdb, custom_art,
+                   direct_boot, fetch, headers, hires, library, make_sprite, metadata_repo, n64_checksum,
+                   pack_covers, prepare_card, progress, version)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 
@@ -318,6 +318,10 @@ class Options:
     no_download: bool = False       # never reach for the collection, even when it is missing
     hires: bool | None = None       # fetch high-resolution boxes: True asks, False refuses, None
                                     # is as the card remembers (it has some: keep them complete)
+    cheats: bool | None = None      # fetch cheat codes: True asks, False stops, None is as the
+                                    # card remembers (it asked before: keep them complete)
+    direct_boot: bool | None = None  # an X7 starts in SleekMenu: True, False, or None to leave
+                                     # the card as it is and keep the copy in step
     no_large_covers: bool = False   # skip the box view's covers-large.pak
     rebuild: bool = False           # read every header and convert every box again, whatever
                                     # the last run remembered
@@ -330,6 +334,7 @@ class Outcome:
     of its own, as the window does."""
     collection_failed: bool = False     # the collection was wanted and no address delivered it
     boxes_unreached: int = 0            # high-resolution boxes the network would not give
+    cheats_unreached: int = 0           # cheat files the network would not give
 
 
 def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None,
@@ -372,6 +377,12 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
     if not options.dry_run:
         for folder in lay_out(card):
             log(f"created   {folder.relative_to(card)}/")
+        # Where the console starts is a fact about the card, not about its
+        # games: it is settled before a card with no games ends the run.
+        try:
+            direct_boot.sync(card, options.direct_boot, log)
+        except OSError as error:
+            log(f"boot:     not changed ({error})")
     if found.created is not None:
         log(f"created   {found.created.relative_to(card)}/")
         log("")
@@ -440,6 +451,18 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
                 boxes = hires.fetch_for_card(roms, rom_paths, database_path, custom_art.art_dir(card),
                                              progress_factory, cancel, log, asked=bool(options.hires))
                 outcome.boxes_unreached = len(boxes.failed)
+        wants_cheats = options.cheats if options.cheats is not None else cheat_codes.remembered(card)
+        if options.cheats is False and not options.dry_run and cheat_codes.forget(card):
+            log("cheats:   no longer fetched; the files already on the card stay")
+        if wants_cheats and not options.dry_run:
+            # One file per dump the database knows, into
+            # sleekmenu/cheats/libretro/, skipping what is there.
+            if offline:
+                log("cheats:   not fetched; downloads are off")
+            else:
+                cheats = cheat_codes.fetch_for_card(roms, rom_paths, database_path, card,
+                                                    progress_factory, cancel, log, asked=bool(options.cheats))
+                outcome.cheats_unreached = len(cheats.failed)
         if source is None:
             log("metadata: no collection on the card; the card gets a catalog and no covers")
             log(f"          download {metadata_repo.RELEASE_ZIP_NAME} from "
@@ -508,6 +531,15 @@ def main(argv: list[str] | None = None) -> int:
                         help="fetch a high-resolution box from libretro-thumbnails for every game the "
                              "database knows, once (about 400 KB each), and build the covers from those; "
                              "a card that has them keeps them complete on every later run")
+    parser.add_argument("--cheats", action="store_true",
+                        help="fetch libretro's cheat codes for every game the database knows, once (most "
+                             "a few KB), into sleekmenu/cheats/libretro/; a card that has asked keeps them "
+                             "complete on every later run")
+    parser.add_argument("--no-cheats", action="store_true",
+                        help="stop fetching cheat codes for this card; the files already there stay")
+    parser.add_argument("--direct-boot", choices=("on", "off"), default=None,
+                        help="EverDrive-64 X7: start the console in SleekMenu (on copies the card's "
+                             f"{card_layout.BROWSER_ROM} to {direct_boot.AUTOEXEC_SHOWN}, off removes it)")
     parser.add_argument("--gui", action="store_true",
                         help="open the window instead of running in the terminal")
     parser.add_argument("--version", action="version", version=f"%(prog)s {version.VERSION}")
@@ -528,8 +560,10 @@ def main(argv: list[str] | None = None) -> int:
         return run(Options(card=args.card, roms=args.roms, metadata=args.metadata,
                            dry_run=args.dry_run, fix_checksums=args.fix_checksums,
                            no_checksums=args.no_checksums, no_download=args.no_download,
-                           hires=True if args.hires else None, no_large_covers=args.no_large_covers,
-                           rebuild=args.rebuild),
+                           hires=True if args.hires else None,
+                           cheats=False if args.no_cheats else True if args.cheats else None,
+                           direct_boot=None if args.direct_boot is None else args.direct_boot == "on",
+                           no_large_covers=args.no_large_covers, rebuild=args.rebuild),
                    log=print, fail=lambda message: print(message, file=sys.stderr))
     except KeyboardInterrupt:
         # Ctrl-C during the fetch leaves no .part on the card; during a

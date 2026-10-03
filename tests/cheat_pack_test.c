@@ -202,6 +202,24 @@ int main(void) {
         assert(m.kind == SM_CHEAT_MATCH_UNVERIFIED);
     }
 
+    /* --- what is taken before a fetched file -------------------------------- */
+    {
+        sm_cheat_match_t m = { SM_CHEAT_MATCH_REGION, "F-Zero X (U).cht", SM_CART_REGION_USA, SM_CART_REGION_USA };
+        assert(sm_cheat_match_sure(&m));
+        m.kind = SM_CHEAT_MATCH_EXACT;
+        assert(sm_cheat_match_sure(&m));
+        m.kind = SM_CHEAT_MATCH_PAL;            /* the Europe file for a French cartridge: a guess */
+        assert(!sm_cheat_match_sure(&m));
+        m.kind = SM_CHEAT_MATCH_UNVERIFIED;     /* no region anyone could settle: a guess */
+        assert(!sm_cheat_match_sure(&m));
+        m.kind = SM_CHEAT_MATCH_OTHER_REGION;
+        m.name = NULL;
+        assert(!sm_cheat_match_sure(&m));
+        m.kind = SM_CHEAT_MATCH_REGION;         /* a kind with no file is no answer */
+        assert(!sm_cheat_match_sure(&m));
+        assert(!sm_cheat_match_sure(NULL));
+    }
+
     /* --- limits ------------------------------------------------------------ */
     {
         static char name[300];

@@ -19,10 +19,11 @@ and the matching of games to art and text in detail.
 descriptions and the ROMs are yours, on your card, and the console never
 touches the network. The only data shipped is `data/coverdb.csv` (titles,
 genre, publisher, year, players; CC BY-SA 4.0), which holds no images. The
-tool that prepares the card fetches two things, each once and each onto
+tool that prepares the card fetches three things, each once and each onto
 the card: the box-art collection, from its own releases page, when the
-card lacks it (`tools/fetch.py`), and, only when asked, high-resolution
-boxes from libretro-thumbnails (`tools/hires.py`). The collection's zip
+card lacks it (`tools/fetch.py`); high-resolution boxes from
+libretro-thumbnails (`tools/hires.py`); and, only when asked, cheat codes
+from libretro-database (`tools/cheat_codes.py`). The collection's zip
 lands through a `.part` file and is kept only once it opens as a collection
 with boxes in it, so an interrupted download never passes for one; three
 addresses are tried, since GitHub's `releases/latest/download/` answers only
@@ -141,7 +142,15 @@ add.
 **The card is the EverDrive's.** The browser writes five files (see
 CARD_LAYOUT.md), never creates, renames or deletes anything else, and uses the
 EverDrive menu's own save files and records so the two menus can be used
-interchangeably.
+interchangeably. The prep tool writes inside the EverDrive's folder in one
+case, on request: `ED64/autoexec.v64`, the file an X7's stock OS starts by
+itself at power-on, as a copy of the browser (`tools/direct_boot.py`). The
+OS is not replaced and still runs first — it loads its FPGA cores and
+writes the last save out before it hands over, which is why starting this
+way changes nothing about saves — and it starts the file
+again after a reset only when the file was the last thing it launched, so a
+reset inside a game shows the EverDrive menu. The EverDrive-64 Pro's menu
+is firmware with no such file, and the switch is not offered there.
 
 ## Art and metadata
 
@@ -405,9 +414,25 @@ that could not be settled are offered flagged as unverified.
 
 Over a 3,400-ROM No-Intro library this finds a region-verified file for just
 over half the games, tells about 300 that the pack has the game for another
-region only, and leaves about 950 with nothing. The full libretro database
-has twice the files; reading a copy dropped on the card would be the next
-step.
+region only, and leaves about 950 with nothing.
+
+**Fetched files.** The newer half of libretro's database is filed by the
+No-Intro name of the dump, which `data/coverdb.csv` knows for every dump it
+knows by checksum. So the prep tool can fetch a game's file exactly
+(`tools/cheat_codes.py`): it lands in `sleekmenu/cheats/libretro/` under
+the dump's two header checksum words, and the browser, which has the header
+in hand when a game is opened, reads it by that name — no listing, no name
+matching, no region to settle. libretro has such a file for about three in
+four of the dumps in the database. A hack is given none.
+
+These files are not the pack's equal, though. The pack's are short, chosen
+lists; libretro's per-dump files are everything anyone collected — a median
+of fifty codes, a tenth of them over three hundred, one of thirty thousand
+— and the browser keeps the first 256 of a file. So a fetched file fills
+the pack's gaps rather than replacing it: the order is the owner's own
+file, the pack's when it is sure of the match (a file named like the ROM,
+or a region tag that agrees with the cartridge), the fetched file, and last
+the pack's guess (`sm_cheat_match_sure()` in `cheat_pack.c`).
 
 ## Maintaining the database
 
@@ -459,4 +484,3 @@ Open:
 - Cheats on CIC 6101 cartridges (see above).
 - A crisper picture: the VI filter cannot be turned off at this resolution and
   depth, so it is a 32-bit framebuffer or a 640-pixel mode.
-- Reading libretro's full cheat database from the card.
