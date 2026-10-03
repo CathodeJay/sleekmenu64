@@ -908,7 +908,35 @@ class WindowTests(unittest.TestCase):
             # opened again, the window shows the card's theme
             root = sleekmenu_gui.build(card=str(card))
             root.update()
-            self.assertEqual(root.sleekmenu_state["options"]["theme"].get(), "Jungle")
+            state = root.sleekmenu_state
+            theme = state["options"]["theme"]
+            self.assertEqual(theme.get(), "Jungle")
+
+            # The console changes the theme while the window is open. A run
+            # that picked no theme here leaves the console's choice alone...
+            themes.path(card).write_bytes(b"fire\n")
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(themes.path(card).read_bytes(), b"fire\n", "not put back to what the window showed")
+            self.assertEqual(theme.get(), "Fire", "and the window shows it after the run")
+            # ...and coming back to the window shows it without a run,
+            themes.path(card).write_bytes(b"ice\n")
+            state["walked"] = 0
+            root.event_generate("<FocusIn>")
+            root.update()
+            self.assertEqual(theme.get(), "Ice")
+            # unless a theme is being picked here: that pick is kept, and the run writes it.
+            theme.set("Grape")
+            themes.path(card).write_bytes(b"fire\n")
+            state["walked"] = 0
+            root.event_generate("<FocusIn>")
+            root.update()
+            self.assertEqual(theme.get(), "Grape")
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(themes.path(card).read_bytes(), b"grape\n")
             root.destroy()
 
     def test_a_build_check_never_downloads_and_ends_on_its_own(self):

@@ -236,7 +236,8 @@ command line) and press Update card: the choice is written to
 `sleekmenu/theme.txt`, and the browser reads it the next time it starts.
 The same file is written by the console itself when you change the theme
 there ([CONSOLE.md](CONSOLE.md#themes)), and the window shows whichever was
-chosen last. A
+chosen last. Update card puts a theme on the card only when you picked
+another one in the window; otherwise the console's choice stays. A
 theme changes colours only: every screen is laid out the same, a warning is
 still amber and an error red, and the buttons on the help bar keep the
 colours they have on the controller.

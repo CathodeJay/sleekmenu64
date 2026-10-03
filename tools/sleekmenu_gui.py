@@ -1900,7 +1900,15 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         chosen = current_card()
         cheats_var.set(cheat_codes.remembered(chosen))
         boot_var.set(chosen is not None and direct_boot.state(chosen).on)
-        theme_var.set(themes.read(chosen).name)
+        read_theme()
+
+    def read_theme() -> None:
+        """The card's theme, shown. The console changes it too, so the
+        window remembers what it read: a run puts a theme on the card only
+        when another was picked here since, and never writes back a choice
+        the card has moved on from."""
+        state["theme_read"] = themes.read(current_card()).name
+        theme_var.set(state["theme_read"])
 
     def on_card_change(*_args) -> None:
         chosen = card_var.get().strip()
@@ -2072,13 +2080,24 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                                   hires.remembered(custom_art.art_dir(chosen)),
                                   cheats=cheats_var.get(), cheats_remembered=cheat_codes.remembered(chosen),
                                   direct_boot=boot_var.get() if state["boot"].available else None,
-                                  theme=(themes.by_name(theme_var.get()) or themes.DEFAULT).id)))
+                                  theme=picked_theme())))
+
+    def picked_theme() -> str | None:
+        """The theme picked in the window, None when it is still the one
+        the card was read to have: that one is the card's to keep."""
+        if theme_var.get() == state.get("theme_read"):
+            return None
+        return (themes.by_name(theme_var.get()) or themes.DEFAULT).id
 
     def on_focus(event) -> None:
         """Back from copying games onto the card in another window: the
         card is read again, so the tab counts them without a Refresh."""
         if event.widget is root and state["runner"] is None and time.monotonic() - state.get("walked", 0) > 3:
             refresh(fresh=True)
+            # The card may have been to the console and back: show the
+            # theme it has now, unless another is being picked here.
+            if picked_theme() is None:
+                read_theme()
 
     def ask_stop() -> None:
         runner = state["runner"]
