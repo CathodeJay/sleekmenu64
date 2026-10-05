@@ -12,6 +12,8 @@ it, and see it the way the browser will before it goes back in the
 console — every game, its box, its facts — and give any game your own
 picture, text or facts.
 
+![The prep GUI's Games tab: the card's games on the left; on the right the selected game's box, its title, genre, publisher, year, players and region in fields, and its description in a box below](screenshots/tool.png)
+
 [Install](../README.md#install) says which download is yours and what to
 click the first time. With Python and Tk installed,
 `python3 sleekmenu-prep.pyz --gui` opens the same window.

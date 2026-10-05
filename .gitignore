@@ -24,7 +24,8 @@ covers/
 *.jpg
 *.jpeg
 *.webp
-# ...except the screenshots in the README.
+# ...except the README's banner and screenshots.
+!docs/banner.png
 !docs/screenshots/*.jpg
 !docs/screenshots/*.png
 

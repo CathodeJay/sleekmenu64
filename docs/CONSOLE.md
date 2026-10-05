@@ -40,7 +40,7 @@ players, publisher, year and favourites, combined. Z again clears it, B
 applies it. The header shows how many games match. The last row of the
 page is not a filter: it is the [theme](#themes).
 
-![The filter screen: genres with counts, then region, players, publisher, year and favourites](screenshots/filters.png)
+![The filter screen, in the Ice theme: genres with counts, then region, players, publisher, year and favourites, and the theme row under them](screenshots/filters.png)
 
 The bar along the bottom of every screen says what the buttons do on that
 screen. Each button is a small picture in the colour it has on the
@@ -64,10 +64,12 @@ title bar names the genre you are in, spelled out.
 ## Starting the console in SleekMenu
 
 **EverDrive-64 X7.** The stock OS starts a file by itself at power-on when
-the card has one, and the prep tool can make SleekMenu that file: tick
-**Start the console in SleekMenu** on the prep GUI's Card tab and press
-Update card ([PREP.md](PREP.md#starting-the-console-in-sleekmenu)). From
-then on:
+the card has one: `ED64/autoexec.v64`. SleekMenu only has to be that file.
+The prep tool makes it so: tick **Start the console in SleekMenu** on the
+prep GUI's Card tab and press Update card
+([PREP.md](PREP.md#starting-the-console-in-sleekmenu)). By hand it is a
+copy of `SleekMenu64.z64` in the `ED64` folder, renamed `autoexec.v64`;
+nothing is converted. From then on:
 
 | You do | You land in |
 |---|---|
