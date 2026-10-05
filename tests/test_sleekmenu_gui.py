@@ -845,17 +845,22 @@ class WindowTests(unittest.TestCase):
                                      root.winfo_rooty() + root.winfo_height(), (width, height))
                 return root.winfo_height(), games.text.winfo_height()
 
-            _small, at_smallest = sized(1040, 680)
+            # What is asked of every desktop: five lines in the smallest
+            # window (it was three or four), and every pixel a taller window
+            # adds. Nothing is asked in lines of a window the screen would
+            # not let be the size it was asked to be: a build machine's
+            # screen is smaller than the default window, and widgets are
+            # taller on some desktops than on others.
+            smallest, at_smallest = sized(1040, 680)
+            if smallest >= 678:
+                self.assertGreaterEqual(at_smallest, 5 * line, "five lines at the smallest window")
             window, at_default = sized(1080, 720)
-            # Widgets are taller on some desktops than on others, so the
-            # count is what any of them gives; before, it was three or four.
-            self.assertGreaterEqual(at_smallest, 5 * line, "five lines at the smallest window")
-            self.assertGreaterEqual(at_default, 7 * line)
-            # A taller window is a taller box, by all of the difference --
-            # as much taller as the screen lets the window be.
+            if window > smallest + 20:
+                self.assertGreaterEqual(at_default - at_smallest, (window - smallest) - 24)
             taller, at_taller = sized(1080, min(900, root.winfo_screenheight() - 120))
             if taller > window + 40:
-                self.assertGreaterEqual(at_taller - at_default, (taller - window) - 24)
+                self.assertGreaterEqual(at_taller - at_default, (taller - window) - 24,
+                                        "a taller window is a taller box, by all of the difference")
             # the facts sit beside the box, not under it
             self.assertGreater(games.title_entry.winfo_rootx(), games.box.winfo_rootx() + games.box.winfo_width())
             self.assertLess(games.title_entry.winfo_rooty(), games.box.winfo_rooty() + games.box.winfo_height())
