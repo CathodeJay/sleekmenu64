@@ -1,6 +1,7 @@
 ![SleekMenu 64: a game browser for EverDrive-64](docs/banner.png)
+[!["Buy Me A Coffee"](https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/CathodeJay)
 
-# SleekMenu 64
+---
 
 A game browser for the EverDrive-64 X7 and Pro: box art, genres,
 descriptions and filters for your N64 library, and the game you pick boots
