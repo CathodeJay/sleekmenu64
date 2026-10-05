@@ -91,7 +91,7 @@ the last column says the one thing worth knowing about a row:
 | Changed by me | it carries a picture, text or facts of your own |
 | Edit waiting | your edit is saved but not on the card's catalog yet |
 | New | copied on since the last update: the browser lists it without a box until the next one |
-| Not a ROM | set aside: a ROM-shaped file with no N64 header (a 64DD IPL dump, a broken download), which the browser never lists |
+| Not a ROM | not listed on the console: a ROM-shaped file with no N64 header (a 64DD IPL dump, a broken download) |
 
 Search narrows the list as you type, over the title, the file name, the
 publisher, the genre, the year and the game code. **All**, **Needs a

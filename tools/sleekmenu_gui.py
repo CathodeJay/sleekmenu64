@@ -1206,8 +1206,8 @@ class GamesTab:
                 parts.append(f"{plural(len(waiting), 'edit')} not on the card yet: press Update card on the "
                              "Card tab.")
             if aside:
-                parts.append(f"{plural(aside, 'file')} set aside as not a ROM; the browser never lists "
-                             f"{'it' if aside == 1 else 'them'}.")
+                parts.append("1 file is not listed: it is not a ROM." if aside == 1 else
+                             f"{aside:,} files are not listed: they are not ROMs.")
             self.note.set(" ".join(parts))
 
     def effective(self, game: dict) -> dict:
@@ -1336,8 +1336,7 @@ class GamesTab:
                 self.box.configure(image=self.placeholder, text="NOT YET", compound="center",
                                    foreground="#8291a0")
             else:
-                self.notes.set(f"Set aside by the tool ({game.get('why', '')}): the browser never lists "
-                               "it, and an update will not add it.")
+                self.notes.set(not_listed_note(game.get("why", "")))
                 self.box.configure(image=self.placeholder, text="NOT A ROM", compound="center",
                                    foreground="#8291a0")
             return
@@ -1542,6 +1541,14 @@ class GamesTab:
 
 
 # -- the window -------------------------------------------------------------
+
+def not_listed_note(why: str) -> str:
+    """Why a ROM-shaped file is not in the list, in a sentence. `why` is
+    the catalog's word for it ("not a ROM: no N64 header"); what follows
+    the colon is the detail."""
+    detail = why.partition(":")[2].strip() if why.lower().startswith("not a rom") else why.strip()
+    return "Not listed because it is not a ROM" + (f": {detail}." if detail else ".")
+
 
 def shown_folder(raw: str) -> str:
     """A games folder as the window shows it: a path from the card's root,

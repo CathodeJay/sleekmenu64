@@ -83,6 +83,16 @@ class FieldTests(unittest.TestCase):
         self.assertTrue(rebuilt.rebuild and rebuilt.hires, "from scratch asks for every box again")
         self.assertFalse(options.no_large_covers, "the window always builds the box view's pack")
 
+    def test_a_file_that_is_not_a_rom_is_said_to_be_not_listed_and_why(self):
+        note = sleekmenu_gui.not_listed_note
+        self.assertEqual(note("not a ROM: no N64 header"), "Not listed because it is not a ROM: no N64 header.")
+        self.assertEqual(note("not a ROM"), "Not listed because it is not a ROM.")
+        self.assertEqual(note(""), "Not listed because it is not a ROM.")
+        self.assertEqual(note("a 64DD IPL dump"), "Not listed because it is not a ROM: a 64DD IPL dump.")
+        for words in (note("not a ROM: no N64 header"), note("")):
+            self.assertNotIn("browser", words)
+            self.assertNotIn("set aside", words.lower())
+
     def test_the_games_folder_is_shown_as_a_path_from_the_cards_root(self):
         self.assertEqual(sleekmenu_gui.shown_folder(""), "/")
         self.assertEqual(sleekmenu_gui.shown_folder("ROMS"), "/ROMS")
@@ -583,11 +593,11 @@ class WindowTests(unittest.TestCase):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
             games.reload()
             self.assertEqual(str(games.show_buttons["new"].cget("text")), "New 0")
-            self.assertIn("1 file set aside as not a ROM", games.note.get())
+            self.assertEqual(games.note.get(), "1 file is not listed: it is not a ROM.")
             self.assertEqual(games.tree.set("ROMS/Tools/IPL.z64", "status"), "Not a ROM")
             games.tree.selection_set("ROMS/Tools/IPL.z64")
             root.update()
-            self.assertIn("Set aside by the tool", games.notes.get())
+            self.assertEqual(games.notes.get(), "Not listed because it is not a ROM: no N64 header.")
             self.assertEqual(str(games.save_button.cget("state")), "disabled")
             self.assertEqual(games.tree.set("ROMS/New.z64", "status"), "No box, no facts",
                              "catalogued by the run: a game like any other, and one to look at")
