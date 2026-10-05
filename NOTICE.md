@@ -20,9 +20,10 @@ ships here at all.**
 
 ## The downloadable window
 
-`SleekMenu-Prep-*` on the releases page is `tools/sleekmenu_gui.py` frozen
-with its interpreter by PyInstaller (`.github/workflows/release.yml`). A
-build carries, besides this project's own AGPL code and `data/`:
+`SleekMenu-Catalog-Manager-*` on the releases page is
+`tools/sleekmenu_gui.py` frozen with its interpreter by PyInstaller
+(`.github/workflows/release.yml`). A build carries, besides this project's
+own AGPL code and `data/`:
 
 | Component | Licence |
 |---|---|
@@ -76,10 +77,10 @@ licence text travels with the file, and the built ROM carries the glyphs.
 
 ## Cheat codes
 
-None are included. When the card's owner asks for them, the prep tool
-fetches libretro-database's `.cht` file for each of their games from that
-project's repository, by the user's machine, onto the user's card, and
-records each there with its address. The files are libretro-database's,
+None are included. When the card's owner asks for them, the Game Catalog
+Manager fetches libretro-database's `.cht` file for each of their games
+from that project's repository, by the user's machine, onto the user's
+card, and records each there with its address. The files are libretro-database's,
 under its CC BY-SA 4.0; this project neither hosts nor redistributes them.
 
 ## Box art
@@ -93,7 +94,7 @@ resolution, as part of a picture of the software, to show what it does; they
 are not a source of box art and carry no licence of their own. Any of them
 will be removed on request.
 
-The prep tool reads the
+The Game Catalog Manager reads the
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata)
 collection — the Unlicense set the N64FlashcartMenu and the
 EverDrive-64 Pro's own menu draw on — from the user's card, and converts the

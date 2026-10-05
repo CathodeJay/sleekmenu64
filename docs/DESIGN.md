@@ -140,17 +140,18 @@ names them with the reason rather than counting them as games still to
 add.
 
 **The card is the EverDrive's.** The browser writes five files (see
-CARD_LAYOUT.md), never creates, renames or deletes anything else, and uses the
-EverDrive menu's own save files and records so the two menus can be used
-interchangeably. The prep tool writes inside the EverDrive's folder in one
-case, on request: `ED64/autoexec.v64`, the file an X7's stock OS starts by
-itself at power-on, as a copy of the browser (`tools/direct_boot.py`). The
-OS is not replaced and still runs first — it loads its FPGA cores and
-writes the last save out before it hands over, which is why starting this
-way changes nothing about saves — and it starts the file
-again after a reset only when the file was the last thing it launched, so a
-reset inside a game shows the EverDrive menu. The EverDrive-64 Pro's menu
-is firmware with no such file, and the switch is not offered there.
+CARD_LAYOUT.md), never creates, renames or deletes anything else, and uses
+the EverDrive menu's own save files and records so the two menus can be
+used interchangeably. The Game Catalog Manager writes inside the
+EverDrive's folder in one case, on request: `ED64/autoexec.v64`, the file
+an X7's stock OS starts by itself at power-on, as a copy of the browser
+(`tools/direct_boot.py`). The OS is not replaced and still runs first — it
+loads its FPGA cores and writes the last save out before it hands over,
+which is why starting this way changes nothing about saves — and it starts
+the file again after a reset only when the file was the last thing it
+launched, so a reset inside a game shows the EverDrive menu. The
+EverDrive-64 Pro's menu is firmware with no such file, and the switch is
+not offered there.
 
 ## Art and metadata
 
@@ -336,10 +337,10 @@ mean something. The card names its theme in `sleekmenu/theme.txt`, read
 once after the cartridge is found. It is chosen on the filter page, as a
 row under the filters: no screen and no button is spent on it, each step
 is used at once so the page shows what is being chosen, and the file is
-written once, when the page is left. The prep tool writes the same file.
-What is painted once into a surface -- the folder picture on the coverflow
-shelf, the paragraph under it -- is painted again when the theme is
-another.
+written once, when the page is left. The Game Catalog Manager writes the
+same file. What is painted once into a surface -- the folder picture on the
+coverflow shelf, the paragraph under it -- is painted again when the theme
+is another.
 
 **The help bar draws the buttons.** A line of help is written with a
 button's code in braces -- `{S}PLAY {A}INFO {<}{>}TABS` -- and `buttons`
@@ -388,8 +389,8 @@ on hardware — the read-back decides, and a correction that did not take
 stops that launch with a message rather than booting into a black screen;
 the next Start goes ahead regardless. `tools/n64_checksum.py` is the same
 sum on the computer, checked against real cartridges of every boot code;
-the prep tool runs it over every dump the database does not know and
-rewrites the file only when asked (`--fix-checksums`).
+the Game Catalog Manager runs it over every dump the database does not know
+and rewrites the file only when asked (`--fix-checksums`).
 
 **The clock.** A game that keeps time — Animal Forest and its translations —
 is flagged by the same lookup that resolves its save type. On the Pro the
@@ -452,12 +453,12 @@ region only, and leaves about 950 with nothing.
 
 **Fetched files.** The newer half of libretro's database is filed by the
 No-Intro name of the dump, which `data/coverdb.csv` knows for every dump it
-knows by checksum. So the prep tool can fetch a game's file exactly
-(`tools/cheat_codes.py`): it lands in `sleekmenu/cheats/libretro/` under
-the dump's two header checksum words, and the browser, which has the header
-in hand when a game is opened, reads it by that name — no listing, no name
-matching, no region to settle. libretro has such a file for about three in
-four of the dumps in the database. A hack is given none.
+knows by checksum. So the Game Catalog Manager can fetch a game's file
+exactly (`tools/cheat_codes.py`): it lands in `sleekmenu/cheats/libretro/`
+under the dump's two header checksum words, and the browser, which has the
+header in hand when a game is opened, reads it by that name — no listing,
+no name matching, no region to settle. libretro has such a file for about
+three in four of the dumps in the database. A hack is given none.
 
 These files are not the pack's equal, though. The pack's are short, chosen
 lists; libretro's per-dump files are everything anyone collected — a median

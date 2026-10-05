@@ -3,11 +3,16 @@
 ## 2.0.0
 
 **Upgrading from 1.2:** copy the new `SleekMenu64.z64` over the old one at
-the root of the card, download the new prep GUI, and press **Update card**
-once. Your catalog, boxes and edits are kept.
+the root of the card, download the Game Catalog Manager (the prep GUI,
+under its new name), and press **Update card** once. Your catalog, boxes
+and edits are kept.
 
-### The prep GUI
+### The Game Catalog Manager
 
+- A new name for the prep GUI, which does more than prepare a card. Its
+  downloads are `SleekMenu-Catalog-Manager-*` and the terminal archive is
+  `sleekmenu-catalog-manager.pyz`; a `sleekmenu-prep.pyz` left on a card
+  can be deleted.
 - One button. **Set up card** the first time and **Update card** after do
   the whole job in one run: read the games, fetch what the card lacks,
   build the catalog and the covers, write them. Four steps show where it
@@ -42,18 +47,19 @@ once. Your catalog, boxes and edits are kept.
 
 - Themes: Midnight, Charcoal, Jungle, Grape, Fire and Ice. Midnight is the
   look it always had. Z, then the THEME row under the filters, changes it;
-  so does the prep GUI.
+  so does the Game Catalog Manager.
 - The help bar shows each button as a picture in the button's own colour:
   a blue A, a green B, a red Start, yellow C buttons with their arrow,
   grey Z, L and R, a cross for the D-pad.
 - In the grid and coverflow the title bar spells the genre out (ACTION,
   not ACT).
 - Cheats: a game the EverDrive's cheat pack has no file for, or none for
-  the cartridge's region, uses the file the prep GUI fetched for it.
+  the cartridge's region, uses the file the Game Catalog Manager fetched
+  for it.
 
 ### Fixes
 
-- The prep GUI no longer takes a volume of macOS's own (Recovery, on the
+- The window no longer takes a volume of macOS's own (Recovery, on the
   Macs that keep it mounted) for the card when no card is in.
 - Boxes were missing for the revisions libretro files as a link to their
   game's box (Castlevania Rev 1 is one of about 130). The link is followed;

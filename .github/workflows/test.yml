@@ -7,7 +7,7 @@ on:
   pull_request:
 
 env:
-  # Every test that runs the prep tool sets this itself; here it also
+  # Every test that prepares a card sets this itself; here it also
   # covers whatever a future test forgets, so CI never reaches GitHub.
   SLEEKMENU_NO_DOWNLOAD: '1'
 
@@ -41,7 +41,7 @@ jobs:
         # in the release layout; the tool never fetches anything.
         run: |
           mkdir -p /tmp/card/ROMS
-          cp build/release/sleekmenu-prep.pyz /tmp/card/
+          cp build/release/sleekmenu-catalog-manager.pyz /tmp/card/
           python3 - <<'PY'
           from pathlib import Path
           from tests.rom_fixtures import write_rom
@@ -50,10 +50,10 @@ jobs:
           write_rom(Path("/tmp/card/ROMS/Nothing Knows This.z64"), 0x99, 0x88, game_code="QQ")
           write_collection(Path("/tmp/card/release-metadata.zip"), "NWRE", zipped=True)
           PY
-          cd /tmp/card && python3 sleekmenu-prep.pyz
+          cd /tmp/card && python3 sleekmenu-catalog-manager.pyz
           test -f /tmp/card/sleekmenu/catalog.ebc
           test -f /tmp/card/sleekmenu/covers.pak
-          ls -la /tmp/card/sleekmenu-prep.pyz
+          ls -la /tmp/card/sleekmenu-catalog-manager.pyz
 
       - name: Prove the card tooling works on a library it has never seen
         # A smoke test in the same spirit as tests/test_portability.py, but

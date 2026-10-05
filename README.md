@@ -24,22 +24,22 @@ to install.
 
 **1. Download two files** from the
 [releases page](https://github.com/CathodeJay/sleekmenu64/releases/latest):
-`SleekMenu64.z64` and the prep GUI for your computer.
+`SleekMenu64.z64` and the Game Catalog Manager for your computer.
 
-| Your computer | The prep GUI |
+| Your computer | The Game Catalog Manager |
 |---|---|
-| Mac with Apple silicon (M1 and later) | `SleekMenu-Prep-mac-arm64.zip` |
-| Mac with an Intel processor | `SleekMenu-Prep-mac-intel.zip` |
-| Windows | `SleekMenu-Prep-windows.exe` |
-| Linux | `SleekMenu-Prep-linux` |
+| Mac with Apple silicon (M1 and later) | `SleekMenu-Catalog-Manager-mac-arm64.zip` |
+| Mac with an Intel processor | `SleekMenu-Catalog-Manager-mac-intel.zip` |
+| Windows | `SleekMenu-Catalog-Manager-windows.exe` |
+| Linux | `SleekMenu-Catalog-Manager-linux` |
 
 **2. Copy `SleekMenu64.z64` to the root of the card.**
 
-**3. Open the prep GUI.** On a Mac, unzip it first. It is not code-signed,
-so the first launch warns. On macOS 15 and later, open it once, then press
-Open Anyway in System Settings → Privacy & Security (earlier macOS:
-right-click → Open). On Windows: More info → Run anyway. On Linux:
-`chmod +x SleekMenu-Prep-linux` first.
+**3. Open the Game Catalog Manager.** On a Mac, unzip it first. It is not
+code-signed, so the first launch warns. On macOS 15 and later, open it
+once, then press Open Anyway in System Settings → Privacy & Security
+(earlier macOS: right-click → Open). On Windows: More info → Run anyway. On
+Linux: `chmod +x SleekMenu-Catalog-Manager-linux` first.
 
 **4. Set up the card.** It is picked for you when it is the only removable
 disk. Press **Set up card**: it fetches a box and a description for each of
@@ -50,23 +50,23 @@ complete library, once; you can stop and carry on later.
 EverDrive menu.** Start plays a game,
 A shows its details; reset the console to get back to the EverDrive menu.
 
-**Adding games later:** copy them on, open the prep GUI, press **Update
-card**. Only what changed is read and only the new games' boxes are
-fetched. Until then a new game still shows up and plays, just without its
-box.
+**Adding games later:** copy them on, open the Game Catalog Manager, press
+**Update card**. Only what changed is read and only the new games' boxes
+are fetched. Until then a new game still shows up and plays, just without
+its box.
 
 **Starting the console in SleekMenu:** an X7 can power on straight into
 it; see [below](#starting-the-console-in-sleekmenu-x7-only).
 
 **Themes:** the browser comes in six sets of colours: Midnight, Charcoal,
 Jungle, Grape, Fire and Ice. Change it on the console (Z, then the THEME
-row) or under **Console** on the prep GUI's Card tab.
+row) or under **Console** on the Game Catalog Manager's Card tab.
 
-The prep GUI also shows your card the way the console will, and lets you
-give any game your own picture, description or facts; see
+The Game Catalog Manager also shows your card the way the console will, and
+lets you give any game your own picture, description or facts; see
 [docs/PREP.md](docs/PREP.md).
 
-![The prep GUI's Games tab: the card's games on the left; on the right the selected game's box, its title, genre, publisher, year, players and region in fields, and its description in a box below](docs/screenshots/tool.png)
+![The Game Catalog Manager's Games tab: the card's games on the left; on the right the selected game's box, its title, genre, publisher, year, players and region in fields, and its description in a box below](docs/screenshots/tool.png)
 
 Descriptions come from the
 community-maintained
@@ -116,9 +116,9 @@ be that file. Two ways to put it there:
 - **By hand:** copy `SleekMenu64.z64` into the card's `ED64` folder and
   rename the copy `autoexec.v64`. Only the name changes; nothing is
   converted. Do it again when you install a newer SleekMenu.
-- **With the prep GUI:** tick **Start the console in SleekMenu** on the
-  Card tab and press Update card. It makes the same copy and keeps it up to
-  date when you replace `SleekMenu64.z64`.
+- **With the Game Catalog Manager:** tick **Start the console in
+  SleekMenu** on the Card tab and press Update card. It makes the same copy
+  and keeps it up to date when you replace `SleekMenu64.z64`.
 
 From then on the console powers on in SleekMenu. A reset inside a game
 returns to the EverDrive menu, where `SleekMenu64.z64` is still at the card
@@ -137,8 +137,8 @@ always started from the EverDrive menu. More in
 - **Hacks** that black-screen on a console because of a stale header
   checksum are fixed as they launch.
 - **Cheats** come from the EverDrive-64 Pro's cheat pack in `ED64/CHEATS/`,
-  or from libretro when you tick **Fetch cheat codes** on the prep GUI's
-  Card tab, and need an Expansion Pak.
+  or from libretro when you tick **Fetch cheat codes** on the Game Catalog
+  Manager's Card tab, and need an Expansion Pak.
 - **`.z64` and `.v64`** dumps load; `.n64` ones do not — convert them first.
 
 Everything else about the console — the screens, saves, the clock, 64DD,
@@ -146,8 +146,8 @@ cheats in detail — is in [docs/CONSOLE.md](docs/CONSOLE.md).
 
 ## More
 
-- [docs/PREP.md](docs/PREP.md) — the prep GUI in full, your own art and
-  text, high-resolution boxes, cheat codes, and the command line
+- [docs/PREP.md](docs/PREP.md) — the Game Catalog Manager in full, your own
+  art and text, high-resolution boxes, cheat codes, and the command line
 - [docs/CONSOLE.md](docs/CONSOLE.md) — using SleekMenu on the console
 - [docs/CARD_LAYOUT.md](docs/CARD_LAYOUT.md) — every file on the card
 - [docs/DESIGN.md](docs/DESIGN.md) — how it is put together and why
@@ -160,7 +160,7 @@ Needs a [libdragon](https://github.com/DragonMinded/libdragon) toolchain.
 ```sh
 make test                                   # host-side tests, no hardware needed
 make slim N64_INST=/path/to/libdragon       # build/release/SleekMenu64.z64
-make prep                                   # build/release/sleekmenu-prep.pyz
+make prep                                   # the Game Catalog Manager, as a .pyz
 make perf N64_INST=/path/to/libdragon       # the ROM with a frame-time readout
 ```
 

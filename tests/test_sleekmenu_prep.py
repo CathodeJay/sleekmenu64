@@ -94,7 +94,7 @@ class CardDiscoveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             card.mkdir()
-            archive = card / "sleekmenu-prep.pyz"
+            archive = card / "sleekmenu-catalog-manager.pyz"
             archive.write_bytes(b"PK")
             with mock.patch.object(sys, "argv", [str(archive)]):
                 self.assertEqual(sleekmenu_prep.find_card(None), card.resolve())
@@ -484,7 +484,7 @@ class ArchiveTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory()
-        cls.archive = Path(cls.temporary.name) / "sleekmenu-prep.pyz"
+        cls.archive = Path(cls.temporary.name) / "sleekmenu-catalog-manager.pyz"
         build_prep.build(cls.archive)
 
     @classmethod
@@ -517,7 +517,7 @@ class ArchiveTests(unittest.TestCase):
         nowhere on the path, --help must work -- which means every import
         inside the archive resolved."""
         with tempfile.TemporaryDirectory() as elsewhere:
-            copy = Path(elsewhere) / "sleekmenu-prep.pyz"
+            copy = Path(elsewhere) / "sleekmenu-catalog-manager.pyz"
             shutil.copy2(self.archive, copy)
             env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
             result = subprocess.run([sys.executable, str(copy), "--help"], cwd=elsewhere,
@@ -533,7 +533,7 @@ class ArchiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as scratch:
             card = Path(scratch) / "CARD"
             (card / "ROMS").mkdir(parents=True)
-            copy = card / "sleekmenu-prep.pyz"
+            copy = card / "sleekmenu-catalog-manager.pyz"
             shutil.copy2(self.archive, copy)
             # a cartridge the bundled database knows
             database = coverdb.load(ROOT / "data" / "coverdb.csv")

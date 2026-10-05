@@ -7,7 +7,7 @@
    folder of them. The browser reads the folder off the card a few entries a
    frame while the list is already on screen, and adds what it finds to the
    catalog as extras -- listed where their names sort, playable, and with no
-   box or facts until sleekmenu-prep is run again.
+   box or facts until the Game Catalog Manager is run again.
 
    The folder is read at most once per session: a finished scan is kept, so
    stepping back into a folder costs nothing. Only one thing reads the card

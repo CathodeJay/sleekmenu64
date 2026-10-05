@@ -14,11 +14,11 @@ all: help
 help:
 	@echo "SleekMenu 64"
 	@echo ""
-	@echo "The release is two files: the ROM and the card-preparation tool."
-	@echo "  make prep       Build build/release/sleekmenu-prep.pyz (Python only)"
+	@echo "The release is two files: the ROM and the Game Catalog Manager."
+	@echo "  make prep       Build build/release/sleekmenu-catalog-manager.pyz (Python only)"
 	@echo "  make release    Build both; needs the libdragon toolchain for the ROM"
 	@echo ""
-	@echo "  make gui        Open the card-preparation window (needs Tk in this Python)"
+	@echo "  make gui        Open the Game Catalog Manager's window (needs Tk in this Python)"
 	@echo ""
 	@echo "Preparing a card from a checkout (the .pyz does this for you on the card):"
 	@echo "  make card CARD=/Volumes/CARD ROMS_ROOT=/Volumes/CARD/ROMS [METADATA=release-metadata.zip] [ROM=...]"
@@ -127,9 +127,9 @@ coverdb:
 # file that runs from the card. No toolchain needed to build it, so it is also
 # what CI builds on every push.
 prep:
-	$(PYTHON) tools/build_prep.py --output $(BUILD_DIR)/release/sleekmenu-prep.pyz
-	@$(PYTHON) $(BUILD_DIR)/release/sleekmenu-prep.pyz --help > /dev/null
-	@echo "Release tool: $(BUILD_DIR)/release/sleekmenu-prep.pyz"
+	$(PYTHON) tools/build_prep.py --output $(BUILD_DIR)/release/sleekmenu-catalog-manager.pyz
+	@$(PYTHON) $(BUILD_DIR)/release/sleekmenu-catalog-manager.pyz --help > /dev/null
+	@echo "Release tool: $(BUILD_DIR)/release/sleekmenu-catalog-manager.pyz"
 
 # The window, from a checkout. The releases page carries it frozen with its
 # Python for people who have neither; .github/workflows/release.yml builds
@@ -142,7 +142,7 @@ gui:
 release: slim prep
 	@echo ""
 	@echo "Release contents:"
-	@ls -la $(BUILD_DIR)/release/SleekMenu64.z64 $(BUILD_DIR)/release/sleekmenu-prep.pyz
+	@ls -la $(BUILD_DIR)/release/SleekMenu64.z64 $(BUILD_DIR)/release/sleekmenu-catalog-manager.pyz
 
 # Inspect or correct data/coverdb.csv by hand. Everything curate.py can do is
 # reachable through ARGS: show, set-genre.

@@ -211,8 +211,8 @@ static void make_cover(void) {
     if (file) { fputs("sprite", file); fclose(file); }
 }
 
-/* The fixture stands for a catalog the prep tool wrote, unless a test says
-   it stands for the boot-time scan of a card without one. */
+/* The fixture stands for a catalog the Game Catalog Manager wrote, unless a
+   test says it stands for the boot-time scan of a card without one. */
 static bool start_discovered;
 
 static void start(const row_t *rows, uint32_t count) {
@@ -605,7 +605,7 @@ int main(void) {
             assert(ui.box_sprite == NULL);
             assert(sm_test_sprite_loads == loads);
             draw_clean();
-            assert(sm_test_drew("No large covers on this card"));
+            assert(sm_test_drew("No large covers yet"));
         }
         assert(sm_test_drew("Alpha"));
         assert(sm_test_drew("BACK") && drew_button(SM_BUTTON_B) && drew_button(SM_BUTTON_START));
@@ -1602,8 +1602,8 @@ int main(void) {
         assert(catalog_get(&CATALOG, ui.items[3], &game));
         assert(!strcmp(game.path, "ROMS/beta_two.z64") && !strcmp(game.title, "beta two"));
         assert(game.genre[0] == '\0' && game.cover[0] == '\0');
-        assert(strstr(game.description, "sleekmenu-prep") != NULL);
-        assert(ui.status && !strcmp(ui.status, "1 file not in the catalog: sleekmenu-prep adds it"));
+        assert(strstr(game.description, "Game Catalog Manager") != NULL);
+        assert(ui.status && !strcmp(ui.status, "1 new file: run Game Catalog Manager"));
         settle();
         draw();
         assert(sm_test_drew("[New]") && sm_test_drew("beta two"));
@@ -1651,7 +1651,7 @@ int main(void) {
         assert(sm_test_dir_opens == 2 && ui.item_count == 5u);
         assert(catalog_get(&CATALOG, ui.items[ui.selected] & ~SM_UI_FOLDER_BIT, &game) &&
                !strcmp(game.path, "ROMS/New/"));
-        assert(ui.status && strstr(ui.status, "1 file not in the catalog"));
+        assert(ui.status && strstr(ui.status, "1 new file"));
 
         /* A shortlist is the whole card, which has only been read here:
            starring the new game keeps it, but the tab does not list it. */
@@ -1738,7 +1738,7 @@ int main(void) {
            rather than listing it as new. */
         idle(3);
         assert(sm_test_dir_opens == 1 && ui.item_count == 1u && ui.items[0] == 0u);
-        assert(ui.status == NULL || !strstr(ui.status, "not in the catalog"));
+        assert(ui.status == NULL || !(strstr(ui.status, "new file") || strstr(ui.status, "not in the catalog")));
         frame(PRESS(genre_next));               /* favourites, flat */
         assert(ui.item_count == 0u);
         frame(PRESS(back));
@@ -1786,7 +1786,7 @@ int main(void) {
         assert(catalog_get(&CATALOG, ui.items[2], &game));
         assert(!strcmp(game.path, "ROMS/Pok\xc3\xa9mon Stadium 2 (NA).z64"));
         assert(!strcmp(game.title, "Pokemon Stadium 2 (NA)"));
-        assert(ui.status && strstr(ui.status, "1 file not in the catalog"));
+        assert(ui.status && strstr(ui.status, "1 new file"));
         settle();
         draw();
         assert(sm_test_drew("[Francais]") && sm_test_drew("Pokemon Stadium 2 (NA)"));

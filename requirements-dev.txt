@@ -8,6 +8,6 @@
 # tools/make_sprite.py writes libdragon's sprite container itself, so there is
 # no MIPS toolchain in the art path.
 Pillow>=9.0
-# Optional: lets a picture be dropped onto the prep GUI. The window works
-# without it, with a button in its place; the downloadable builds carry it.
+# Optional: lets a picture be dropped onto the Game Catalog Manager. The
+# window works without it, with a button in its place; the downloadable builds carry it.
 tkinterdnd2>=0.4

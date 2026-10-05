@@ -9,8 +9,8 @@
    and the theme in use says which colour that is. The themes are built in
    (theme_table.h, written from tools/themes.py) and the card picks one by
    name in sleekmenu/theme.txt, written by the THEME row of the filter page
-   and by the prep tool alike. A card that says nothing, or names a theme
-   this ROM does not have, gets the first.
+   and by the Game Catalog Manager alike. A card that says nothing, or names
+   a theme this ROM does not have, gets the first.
 
    The controller buttons' colours are not here: a blue A is blue in every
    theme, because that is the colour of the button under the thumb.

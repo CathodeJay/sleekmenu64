@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Prepare a card, from the card.
 
-    python3 sleekmenu-prep.pyz
+    python3 sleekmenu-catalog-manager.pyz
 
 That is the whole thing, when this file sits on the card: where it is
 running from is where the card is, so there is nothing to point it at. It
@@ -86,7 +86,7 @@ def find_card(explicit: Path | None) -> Path:
         return card
     archive = archive_path()
     if archive is None:
-        raise PrepError("Not running from the card. Either copy sleekmenu-prep.pyz "
+        raise PrepError("Not running from the card. Either copy sleekmenu-catalog-manager.pyz "
                         "to the card root, or pass --card.")
     return archive.parent
 
@@ -361,7 +361,7 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         found = find_library(card, options.roms, create=not options.dry_run)
         source = find_metadata(card, options.metadata)
     except (PrepError, library.LibraryError) as error:
-        fail(f"sleekmenu-prep: {error}")
+        fail(f"sleekmenu-catalog-manager: {error}")
         return 2
 
     roms, rom_paths = found.root, found.rom_paths
@@ -401,7 +401,7 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
             "onto it, in any folders you like, and run this again.")
         return 0
 
-    work = Path(tempfile.mkdtemp(prefix="sleekmenu-prep-"))
+    work = Path(tempfile.mkdtemp(prefix="sleekmenu-catalog-manager-"))
     repo = None
     try:
         # One pass over the card, with progress, before anything else asks.
@@ -485,12 +485,12 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
             rebuild=options.rebuild,
             checksums=checksums.verdicts if checksums is not None else None)
     except progress.Cancelled as stop:
-        fail(f"sleekmenu-prep: {stop}; the catalog and covers were not written")
+        fail(f"sleekmenu-catalog-manager: {stop}; the catalog and covers were not written")
         return 3
     except (PrepError, RepoError, prepare_card.PrepareError, coverdb.CoverDBError,
             pack_covers.CoverPackError, make_sprite.SpriteError, cover_pack.CoverPackError,
             build_catalog.CatalogError, library.LibraryError, OSError) as error:
-        fail(f"sleekmenu-prep: {error}")
+        fail(f"sleekmenu-catalog-manager: {error}")
         return 1
     finally:
         if repo is not None:
@@ -506,9 +506,10 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="sleekmenu-prep",
-        description="Prepare an SD card for SleekMenu 64: scan ROMs, find their box art and "
-                    "descriptions in the metadata collection, write the catalog and cover pack.")
+        prog="sleekmenu-catalog-manager",
+        description="The Game Catalog Manager, from a terminal. Prepare an SD card for SleekMenu 64: "
+                    "scan ROMs, find their box art and descriptions in the metadata collection, "
+                    "write the catalog and cover pack.")
     parser.add_argument("--card", type=Path, default=None,
                         help="card root (default: the folder this file is in)")
     parser.add_argument("--roms", type=Path, default=None,
@@ -560,7 +561,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.gui:
         from tools import sleekmenu_gui
         if not sleekmenu_gui.available():
-            print("sleekmenu-prep: no window toolkit (tkinter) in this Python; run from a terminal",
+            print("sleekmenu-catalog-manager: no window toolkit (tkinter) in this Python; run from a terminal",
                   file=sys.stderr)
             return 2
         return sleekmenu_gui.main([])
@@ -578,7 +579,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         # Ctrl-C during the fetch leaves no .part on the card; during a
         # pass, no catalog or covers. The newline ends a progress line.
-        print("\nsleekmenu-prep: stopped", file=sys.stderr)
+        print("\nsleekmenu-catalog-manager: stopped", file=sys.stderr)
         return 130
 
 

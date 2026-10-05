@@ -97,7 +97,7 @@ class ImportTests(unittest.TestCase):
     def test_no_tool_needs_a_newer_python_just_to_be_imported(self):
         """`Colour = tuple[int, int, int]` at the top of a module runs when
         the module is imported, and a Python older than 3.9 stops there:
-        the prep tool then does not start at all, window or command line,
+        the Game Catalog Manager then does not start at all, window or terminal,
         for a line that only named a type. Annotations are not run (every
         tool defers them), so the built-ins may be subscripted there; in
         code that runs at import, typing's names are used instead."""

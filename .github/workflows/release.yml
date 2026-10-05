@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-# A release, built from a tag: the prep GUI as one download per platform
-# (the same Python as sleekmenu-prep.pyz, frozen with its interpreter and
-# Pillow by PyInstaller, for people with no Python and no terminal) and the
-# archive itself, gathered into a draft release with its notes from
-# CHANGELOG.md. The ROM needs the libdragon toolchain and is added to the
+# A release, built from a tag: the Game Catalog Manager as one download per
+# platform (the same Python as sleekmenu-catalog-manager.pyz, frozen with
+# its interpreter and Pillow by PyInstaller, for people with no Python and
+# no terminal) and the archive itself, gathered into a draft release with
+# its notes from CHANGELOG.md. The ROM needs the libdragon toolchain and is added to the
 # draft by hand before it is published.
 #
 # Run it from the Actions tab (Run workflow) to try the builds without
@@ -44,7 +44,7 @@ jobs:
           grep -q "^## $version\b" CHANGELOG.md || {
             echo "::error::CHANGELOG.md has no section for $version"; exit 1; }
 
-  prep-gui:
+  window:
     needs: version
     strategy:
       fail-fast: false
@@ -93,7 +93,7 @@ jobs:
             *)     shape="--onefile" ;;
           esac
           python -m PyInstaller --noconfirm $shape --windowed \
-            --name "SleekMenu-Prep" --paths . \
+            --name "SleekMenu-Catalog-Manager" --paths . \
             --add-data "data/coverdb.csv:data" \
             --add-data "data/genres.csv:data" \
             --add-data "data/LICENSE:data" \
@@ -111,9 +111,9 @@ jobs:
           write_collection(Path("smoke/CARD/release-metadata.zip"), "NWRE", zipped=True)
           PY
           case "${{ runner.os }}" in
-            macOS)   app="dist/SleekMenu-Prep.app/Contents/MacOS/SleekMenu-Prep" ;;
-            Windows) app="dist/SleekMenu-Prep.exe" ;;
-            *)       app="dist/SleekMenu-Prep" ;;
+            macOS)   app="dist/SleekMenu-Catalog-Manager.app/Contents/MacOS/SleekMenu-Catalog-Manager" ;;
+            Windows) app="dist/SleekMenu-Catalog-Manager.exe" ;;
+            *)       app="dist/SleekMenu-Catalog-Manager" ;;
           esac
           card="$PWD/smoke/CARD"
           run=""
@@ -138,20 +138,20 @@ jobs:
           mkdir -p out
           case "${{ runner.os }}" in
             macOS)
-              ditto -c -k --keepParent dist/SleekMenu-Prep.app "out/SleekMenu-Prep-${{ matrix.name }}.zip" ;;
+              ditto -c -k --keepParent dist/SleekMenu-Catalog-Manager.app "out/SleekMenu-Catalog-Manager-${{ matrix.name }}.zip" ;;
             Windows)
-              cp dist/SleekMenu-Prep.exe "out/SleekMenu-Prep-${{ matrix.name }}.exe" ;;
+              cp dist/SleekMenu-Catalog-Manager.exe "out/SleekMenu-Catalog-Manager-${{ matrix.name }}.exe" ;;
             *)
-              cp dist/SleekMenu-Prep "out/SleekMenu-Prep-${{ matrix.name }}" ;;
+              cp dist/SleekMenu-Catalog-Manager "out/SleekMenu-Catalog-Manager-${{ matrix.name }}" ;;
           esac
           ls -la out
 
       - uses: actions/upload-artifact@v4
         with:
-          name: SleekMenu-Prep-${{ matrix.name }}
+          name: SleekMenu-Catalog-Manager-${{ matrix.name }}
           path: out/*
 
-  prep-archive:
+  archive:
     # The same tool for anyone with Python, run from the card.
     needs: version
     runs-on: ubuntu-latest
@@ -163,15 +163,15 @@ jobs:
       - run: make prep
       - uses: actions/upload-artifact@v4
         with:
-          name: sleekmenu-prep
-          path: build/release/sleekmenu-prep.pyz
+          name: sleekmenu-catalog-manager
+          path: build/release/sleekmenu-catalog-manager.pyz
 
   release:
     # One job makes the release, after every build has passed, so a
     # platform that failed never leaves a release with three downloads out
     # of four. A draft: the ROM goes on by hand, and nothing is public
     # until Publish is pressed.
-    needs: [prep-gui, prep-archive]
+    needs: [window, archive]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:

@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     assert(!catalog_get(&catalog, 3, &game));
     catalog_close(&catalog);
 
-    /* A format-1 catalog -- from a prep tool older than descriptions -- is
+    /* A format-1 catalog -- from a tool older than descriptions -- is
        refused with a message that says what to do, not misread as garbage. */
     assert(!catalog_load(&catalog, argv[2], error, sizeof(error)));
     assert(strstr(error, "older") != NULL);

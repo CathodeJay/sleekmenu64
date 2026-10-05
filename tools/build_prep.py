@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Build sleekmenu-prep.pyz: the whole host toolchain as one file.
+"""Build sleekmenu-catalog-manager.pyz: the whole host toolchain as one file.
 
 A Python zipapp is a zip with a #! line and a __main__.py. Python runs it
-directly -- `python3 sleekmenu-prep.pyz` -- with the archive itself on the
-import path, so the tools package inside works exactly as it does from a
-checkout. It needs Python 3.9+ and Pillow on the machine and nothing else.
+directly -- `python3 sleekmenu-catalog-manager.pyz` -- with the archive
+itself on the import path, so the tools package inside works exactly as it
+does from a checkout. It needs Python 3.9+ and Pillow on the machine and nothing else.
 
 What goes in: the tools package, the two data files the pipeline is derived
 from, and a generated entry point. What does not: tests, docs, the ROM, and
@@ -61,7 +61,7 @@ def stage(into: Path) -> None:
     data = into / DATA_PACKAGE
     data.mkdir()
     (data / "__init__.py").write_text(
-        '"""The database and genre map, carried inside sleekmenu-prep.pyz.\n'
+        '"""The database and genre map, carried inside sleekmenu-catalog-manager.pyz.\n'
         'Licensed CC BY-SA 4.0; see data/LICENSE in the repository."""\n',
         encoding="utf-8")
     for name in DATA_FILES:
@@ -84,7 +84,7 @@ def stage(into: Path) -> None:
 
 
 def build(target: Path, interpreter: str = "/usr/bin/env python3") -> Path:
-    with tempfile.TemporaryDirectory(prefix="sleekmenu-prep-build-") as scratch:
+    with tempfile.TemporaryDirectory(prefix="sleekmenu-catalog-manager-build-") as scratch:
         staging = Path(scratch) / "app"
         stage(staging)
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -99,9 +99,9 @@ def contents(archive: Path) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build sleekmenu-prep.pyz.")
+    parser = argparse.ArgumentParser(description="Build sleekmenu-catalog-manager.pyz.")
     parser.add_argument("--output", type=Path,
-                        default=ROOT / "build" / "release" / "sleekmenu-prep.pyz")
+                        default=ROOT / "build" / "release" / "sleekmenu-catalog-manager.pyz")
     parser.add_argument("--list", action="store_true", help="print what went in")
     args = parser.parse_args(argv)
     target = build(args.output)

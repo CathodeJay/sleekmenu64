@@ -1,22 +1,21 @@
-# Preparing a card
+# The Game Catalog Manager
 
 The console reads a catalog and a pack of covers that a computer writes onto
-the card. The prep GUI and `sleekmenu-prep.pyz` are the same tool, one in a
-window and one in a terminal; the [README](../README.md#install) covers the
-first run. This is the rest.
+the card. The Game Catalog Manager is the tool that writes them: a window
+to download, or `sleekmenu-catalog-manager.pyz` in a terminal. The
+[README](../README.md#install) covers the first run. This is the rest.
 
-## The prep GUI
+## The window
 
-The same tool as `sleekmenu-prep.pyz`, in a window: pick the card, prepare
-it, and see it the way the browser will before it goes back in the
-console — every game, its box, its facts — and give any game your own
-picture, text or facts.
+Pick the card, prepare it, and see it the way the browser will before it
+goes back in the console — every game, its box, its facts — and give any
+game your own picture, text or facts.
 
-![The prep GUI's Games tab: the card's games on the left; on the right the selected game's box, its title, genre, publisher, year, players and region in fields, and its description in a box below](screenshots/tool.png)
+![The Game Catalog Manager's Games tab: the card's games on the left; on the right the selected game's box, its title, genre, publisher, year, players and region in fields, and its description in a box below](screenshots/tool.png)
 
 [Install](../README.md#install) says which download is yours and what to
 click the first time. With Python and Tk installed,
-`python3 sleekmenu-prep.pyz --gui` opens the same window.
+`python3 sleekmenu-catalog-manager.pyz --gui` opens the same window.
 
 The card is chosen in the row above the tabs, and is the same one on every
 tab: it is picked for you when it is the only removable disk; Choose and
@@ -173,14 +172,14 @@ Each header wins over the database and the collection for that one field;
 the first line that is not a header starts the description. A genre the
 card has not seen becomes its own tab on the console. Pictures and text
 are read when the tool runs, so a new one needs a re-run of the tool, like
-a new game does; Save in the prep GUI does both at once.
+a new game does; Save in the window does both at once.
 
 **High-resolution boxes.** The collection's scans are 158 pixels wide,
 enough for the console's 96×72 thumbnail and no more.
 [libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
-keeps a 512-pixel box for every retail cartridge; the prep GUI (and
-`--hires` on the command line) fetches one for every game on the card the
-database knows, about 400 KB each, into `sleekmenu/art/hires/` by game
+keeps a 512-pixel box for every retail cartridge; the window (and `--hires`
+on the command line) fetches one for every game on the card the database
+knows, about 400 KB each, into `sleekmenu/art/hires/` by game
 code, and builds the covers from those — a 512-pixel box downscaled looks
 better than a 158-pixel one downscaled, and the box view (A on a game's
 details) draws them at full size. A card that has them keeps them
@@ -189,8 +188,8 @@ without being asked. Only what is missing is fetched; a game libretro has no box
 about again unless you pass `--hires` yourself; a picture of your own
 still wins; Stop ends it between two boxes.
 
-**From the prep GUI.** The Games tab writes these files for one game or
-one game code and puts them on the card as you save: see
+**From the window.** The Games tab writes these files for one game or one
+game code and puts them on the card as you save: see
 [Editing a game](#editing-a-game).
 
 ## Cheat codes
@@ -264,23 +263,23 @@ console, and why the EverDrive-64 Pro has no such switch, is in
 
 ## The command line
 
-`sleekmenu-prep.pyz`, also on the releases page, is the same tool for a
-terminal, for anyone with Python 3.9 or newer and
+`sleekmenu-catalog-manager.pyz`, also on the releases page, is the same
+tool for a terminal, for anyone with Python 3.9 or newer and
 [Pillow](https://python-pillow.org/) (`pip install Pillow`). Copy it to the
 root of the card and run it there, with no arguments; running it from the
 card is how it knows where the card is.
 
 ```sh
 cd /Volumes/CARD          # or wherever the card is mounted
-python3 sleekmenu-prep.pyz
+python3 sleekmenu-catalog-manager.pyz
 ```
 
-It does what the prep GUI's button does: fetches the collection onto a card
+It does what the window's button does: fetches the collection onto a card
 that lacks it, finds every ROM on the card, matches each one to its box and
 description, and writes the catalog and the covers. The 512-pixel boxes are
 fetched when you ask with `--hires`, and kept complete after. Offline, the card still gets its catalog, without covers, and the
 report says where to download the zip by hand — drop it at the root of the
-card and run the tool again. The options mirror the GUI's:
+card and run the tool again. The options mirror the window's:
 
 - `--roms ROMS` catalogs one folder instead of the whole card, like Where
   the games are. Only that folder is scanned, the browser opens inside
@@ -294,7 +293,7 @@ card and run the tool again. The options mirror the GUI's:
   `--theme` takes a theme's name in lower case (`--theme grape`).
 - `--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps
   the tool off the network altogether; `--dry-run` writes nothing.
-- `--gui` opens the prep GUI; `--version` says which release it is; `--help`
+- `--gui` opens the window; `--version` says which release it is; `--help`
   lists everything.
 
 ## What goes on the card
@@ -328,7 +327,7 @@ Both the catalog and the covers are optional: with no catalog the browser
 scans the card and shows filenames, with no covers it draws a placeholder.
 The tool never moves, renames or deletes anything on the card, apart from
 two things it put there itself: a picture or text of your own in
-`sleekmenu/art/` when you press Undo my changes in the prep GUI, and
+`sleekmenu/art/` when you press Undo my changes in the window, and
 `ED64/autoexec.v64` when you untick Start the console in SleekMenu.
 
 Every file, who writes it and how a game is matched to its box is in

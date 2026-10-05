@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Prepare a card from a window: the same run as sleekmenu-prep, without a
-terminal.
+"""The Game Catalog Manager's window: the same run as
+sleekmenu-catalog-manager.pyz, without a terminal.
 
 Pick the card (found on its own when it is the only removable disk), read
 what is on it, press the one button -- Set up card the first time, Update
@@ -12,7 +12,7 @@ decides anything about the card: the window collects a handful of answers
 and hands them to tools/sleekmenu_prep.run(), which is what the command
 line runs. The downloadable builds are this file frozen with its Python;
 from a checkout it is `python3 tools/sleekmenu_gui.py`, or
-`python3 sleekmenu-prep.pyz --gui`.
+`python3 sleekmenu-catalog-manager.pyz --gui`.
 
 Tkinter is imported when the window is made, not when this module is,
 because a Python without it still has to run the command line and the
@@ -47,7 +47,7 @@ from tools import (card_catalog, card_layout, cheat_codes, coverdb, custom_art, 
                    version)
 from tools.metadata_repo import MetadataRepo
 
-TITLE = f"SleekMenu 64 {version.VERSION} — prepare a card"
+TITLE = f"Game Catalog Manager — SleekMenu 64 {version.VERSION}"
 DOWNLOAD_URL = metadata_repo.RELEASES_URL
 #: The banner at the end of the row above the tabs, and where it leads.
 COFFEE_TEXT = "Buy me a coffee"
@@ -357,7 +357,7 @@ class Runner:
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
-        self._thread = threading.Thread(target=self._work, name="sleekmenu-prep", daemon=True)
+        self._thread = threading.Thread(target=self._work, name="sleekmenu-catalog-manager", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -395,7 +395,7 @@ class Runner:
                               lambda line: events.put(("error", line)),
                               Bar, self.stopping.is_set)
         except Exception as error:  # noqa: BLE001 -- the window must say it, not die
-            events.put(("error", f"sleekmenu-prep: {type(error).__name__}: {error}"))
+            events.put(("error", f"sleekmenu-catalog-manager: {type(error).__name__}: {error}"))
             runner.code = 1
         events.put(("done", runner.code))
 
@@ -2114,7 +2114,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         line = finished_line(code, runner.outcome, state["status"], bool(walk()), state["boot"].on)
         plain = code == 0 and line.startswith("Done.")
         result.configure(foreground=colors["good"] if plain else colors["warn"])
-        error = error.removeprefix("sleekmenu-prep: ")
+        error = error.removeprefix("sleekmenu-catalog-manager: ")
         result_var.set(line or (error + " The Log tab has the whole report." if error
                                 else "Something went wrong; the Log tab says what."))
         if smoke:
@@ -2217,15 +2217,15 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Prepare an SD card for SleekMenu 64 from a window.")
+    parser = argparse.ArgumentParser(description="The Game Catalog Manager: prepare an SD card for SleekMenu 64 from a window.")
     parser.add_argument("--smoke", action="store_true",
                         help="open the window and close it at once; a build check")
     parser.add_argument("--card", default="", help="with --smoke: prepare this card, then close")
     parser.add_argument("--metadata", default="", help="with --smoke: the collection to use")
     args = parser.parse_args(argv)
     if not available():
-        print("sleekmenu-prep: no window toolkit (tkinter) in this Python, or no display; "
-              "run sleekmenu-prep.pyz from a terminal instead", file=sys.stderr)
+        print("sleekmenu-catalog-manager: no window toolkit (tkinter) in this Python, or no display; "
+              "run sleekmenu-catalog-manager.pyz from a terminal instead", file=sys.stderr)
         return 2
     root = build(smoke=args.smoke, card=args.card, metadata=args.metadata)
     root.mainloop()

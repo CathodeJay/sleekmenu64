@@ -35,7 +35,7 @@ ASSET = metadata_repo.RELEASE_ZIP_NAME
 LATEST_URL = f"https://github.com/{REPOSITORY}/releases/latest/download/{ASSET}"
 API_URL = f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=10"
 PINNED_URL = f"https://github.com/{REPOSITORY}/releases/download/v0.1.0/{ASSET}"
-USER_AGENT = "sleekmenu-prep (+https://github.com/CathodeJay/sleekmenu64)"
+USER_AGENT = "sleekmenu-catalog-manager (+https://github.com/CathodeJay/sleekmenu64)"
 CHUNK = 256 * 1024
 TIMEOUT = 30
 #: How the tool is told to stay offline without a flag: CI, and anyone who

@@ -85,9 +85,9 @@ bool sm_cheats_load(const char *rom_path, const uint8_t *header, size_t header_l
         }
         if (sm_cheat_match_sure(&match)) found = try_file(SM_FIRMWARE_CHEATS_DIR, match.name, set, source);
     }
-    /* Then the file the prep tool fetched for this very dump, named by the
-       header's checksum words: for the games the pack does not have, has
-       for another region only, or can only guess at. */
+    /* Then the file the Game Catalog Manager fetched for this very dump,
+       named by the header's checksum words: for the games the pack does
+       not have, has for another region only, or can only guess at. */
     if (!found && sm_cheats_file_from_header(header, header_length, by_file, sizeof(by_file))) {
         found = try_file(SM_CHEATS_FETCHED_DIR, by_file, set, source);
         if (found && source) source->kind = SM_CHEAT_MATCH_EXACT;

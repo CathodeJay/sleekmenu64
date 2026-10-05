@@ -54,7 +54,7 @@ Midnight is the default. To change it, press Z and go to the **THEME** row
 under the filters (up from the top row gets there at once): left and right
 step through the themes, and the screen takes each one as you do. B keeps
 the choice, on the card in `sleekmenu/theme.txt`, and the browser starts in
-it from then on. The prep tool sets the same file
+it from then on. The Game Catalog Manager sets the same file
 ([PREP.md](PREP.md#themes)). The buttons' colours, the favourite star, a
 warning and an error are the same in every theme.
 
@@ -65,8 +65,8 @@ title bar names the genre you are in, spelled out.
 
 **EverDrive-64 X7.** The stock OS starts a file by itself at power-on when
 the card has one: `ED64/autoexec.v64`. SleekMenu only has to be that file.
-The prep tool makes it so: tick **Start the console in SleekMenu** on the
-prep GUI's Card tab and press Update card
+The Game Catalog Manager makes it so: tick **Start the console in
+SleekMenu** on its Card tab and press Update card
 ([PREP.md](PREP.md#starting-the-console-in-sleekmenu)). By hand it is a
 copy of `SleekMenu64.z64` in the `ED64` folder, renamed `autoexec.v64`;
 nothing is converted. From then on:
@@ -107,11 +107,11 @@ Pro.
 
 A hack whose author never recomputed the header checksum runs in an emulator
 and black-screens on a console. SleekMenu corrects the checksum in cartridge
-memory as it launches, the way the EverDrive menu does; the prep tool checks
-every hack, translation and homebrew on the card, names the ones whose
-checksum is stale, and rewrites them if you tick "Repair hacks that show a
-black screen on a console" in the prep GUI (`--fix-checksums` on the
-command line).
+memory as it launches, the way the EverDrive menu does; the Game Catalog
+Manager checks every hack, translation and homebrew on the card, names the
+ones whose checksum is stale, and rewrites them if you tick "Repair hacks
+that show a black screen on a console" in the window (`--fix-checksums` on
+the command line).
 
 ## ROM formats
 
@@ -146,12 +146,12 @@ Controller Pak (`.mpk`) backup and restore.
 
 GameShark codes, from two places. The EverDrive-64 Pro's menu ships a
 cheat pack in `ED64/CHEATS/` (one `.cht` file per game): if that folder is
-on your card, there is nothing to set up. And the prep tool fetches
-libretro's file for each of your games when you tick **Fetch cheat codes**
-([PREP.md](PREP.md#cheat-codes)); those are filed by the exact dump, and
-serve the games the pack has no file for, or none for your region. Where
-the pack has the game for your cartridge's region, its shorter list is the
-one used.
+on your card, there is nothing to set up. And the Game Catalog Manager
+fetches libretro's file for each of your games when you tick **Fetch cheat
+codes** ([PREP.md](PREP.md#cheat-codes)); those are filed by the exact
+dump, and serve the games the pack has no file for, or none for your
+region. Where the pack has the game for your cartridge's region, its
+shorter list is the one used.
 
 **To use them:** open a game's details, press C-down, tick the codes you
 want, press B. Your choices are remembered per game in

@@ -900,14 +900,14 @@ static void announce_extras(sm_ui_t *ui, const sm_catalog_t *catalog) {
     if (!extras->count) return;
     if (extras->capped)
         snprintf(ui->scan_status, sizeof(ui->scan_status),
-            "Over %u files not in the catalog: run sleekmenu-prep", (unsigned)SM_SCAN_MAX_EXTRAS);
+            "Over %u new files: run Game Catalog Manager", (unsigned)SM_SCAN_MAX_EXTRAS);
     else if (files)
         snprintf(ui->scan_status, sizeof(ui->scan_status),
-            "%u file%s not in the catalog: sleekmenu-prep adds %s",
-            (unsigned)files, files == 1u ? "" : "s", files == 1u ? "it" : "them");
+            "%u new file%s: run Game Catalog Manager",
+            (unsigned)files, files == 1u ? "" : "s");
     else
         snprintf(ui->scan_status, sizeof(ui->scan_status),
-            "%u folder%s not in the catalog", (unsigned)extras->count,
+            "%u new folder%s: run Game Catalog Manager", (unsigned)extras->count,
             extras->count == 1u ? "" : "s");
     ui->status = ui->scan_status;
 }
@@ -2786,12 +2786,12 @@ static void draw_box_view(surface_t *s, const sm_layout_t *l, const sm_catalog_t
         draw_truncated(s, l->safe_left + 3, l->footer_top - SM_FONT_HEIGHT - 2,
             sm_cover_pack_ready(&ui->covers_large)
                 ? "No large cover for this game"
-                : "No large covers on this card: run sleekmenu-prep again",
+                : "No large covers yet: run Game Catalog Manager",
             chars);
     } else if (!ui->box_sprite && have && item_uncatalogued(c, ui->items[ui->selected])) {
         graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         draw_truncated(s, l->safe_left + 3, l->footer_top - SM_FONT_HEIGHT - 2,
-            "Not in the catalog yet: sleekmenu-prep adds its box", chars);
+            "Not in the catalog yet: run Game Catalog Manager", chars);
     }
 
     draw_help(s, l, "{S}PLAY {B}BACK");

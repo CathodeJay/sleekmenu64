@@ -51,6 +51,6 @@ What is NOT here
 
 No box art. Cover images are the copyright of their respective publishers
 and are not redistributable, so none ship with this project -- not in the
-repository, not in a release, and not inside the prep tool. The tool fetches
-them to the user's own card from libretro-thumbnails at the user's request.
+repository, not in a release, and not inside the Game Catalog Manager. The
+tool fetches them to the user's own card from libretro-thumbnails at the user's request.
 See the README.

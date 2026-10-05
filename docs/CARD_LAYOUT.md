@@ -8,7 +8,8 @@ this is the reference.
 
 ```text
 /SleekMenu64.z64            the browser                        you copy it
-/sleekmenu-prep.pyz         the command-line prep tool         you copy it, if you use it
+/sleekmenu-catalog-manager.pyz
+                            the tool, for a terminal           you copy it, if you use it
 /release-metadata.zip       box art and descriptions           fetched by the tool
 /ROMS/...                   your games, in any folders          yours
 /<any other folder>/...     or anywhere else on the card        yours
@@ -59,8 +60,8 @@ These, and nothing else:
   so a game started from either menu finishes its save in the other
 
 It never creates folders, never renames, moves or deletes a file, and never
-touches the network. The prep tool creates the `sleekmenu/` folder and
-writes `catalog.ebc` and `covers.pak` into it, and fetches
+touches the network. The Game Catalog Manager creates the `sleekmenu/`
+folder and writes `catalog.ebc` and `covers.pak` into it, and fetches
 `release-metadata.zip` to the card root when the card has no collection;
 everything else it reads in place. One file of the tool's lives outside
 `sleekmenu/`, and only when asked for: `ED64/autoexec.v64`, below.

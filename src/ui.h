@@ -206,8 +206,8 @@ typedef struct {
     sm_cover_pack_t covers_large;
     /* The folder being browsed, read off the card for what the catalog
        does not know: a game copied on since the card was prepared is
-       listed and playable, with its box and facts to follow once
-       sleekmenu-prep has run. What it finds becomes the catalog's extras;
+       listed and playable, with its box and facts to follow once the Game
+       Catalog Manager has run. What it finds becomes the catalog's extras;
        the status line under the list says how many. */
     sm_folder_scan_t scan;
     char scan_status[64];

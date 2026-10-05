@@ -57,8 +57,8 @@ typedef struct {
 /* The launch card's text for a game the catalog does not know. */
 #define SM_EXTRA_DESCRIPTION \
     "This file was added after the card was last prepared, so the catalog " \
-    "has no box or facts for it yet. Run sleekmenu-prep on a computer to add " \
-    "them. It launches like any other."
+    "has no box or facts for it yet. Run the Game Catalog Manager on a " \
+    "computer to add them. It launches like any other."
 
 typedef struct {
     void *data;

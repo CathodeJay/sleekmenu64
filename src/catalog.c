@@ -84,7 +84,7 @@ bool catalog_load(sm_catalog_t *catalog, const char *path, char *error, size_t e
         bool older = memcmp(data, "EBC1", 4) == 0 && read_u16(data + 4) < SM_FORMAT_VERSION;
         free(data);
         set_error(error, error_size, older
-            ? "Catalog is from an older prep tool - run sleekmenu-prep again"
+            ? "This catalog is older: run Game Catalog Manager"
             : "Catalog format or checksum is invalid");
         return false;
     }

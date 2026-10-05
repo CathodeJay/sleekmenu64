@@ -41,8 +41,9 @@
 #endif
 /* Which cheats are on, per game; where a card owner can drop .cht files of
    their own, read before any other; and inside that folder, the files the
-   prep tool fetched from libretro, one per dump, named by the two checksum
-   words of the dump's header. tools/card_layout.py has the same names. */
+   Game Catalog Manager fetched from libretro, one per dump, named by the
+   two checksum words of the dump's header. tools/card_layout.py has the
+   same names. */
 #ifndef SM_CHEATS_STATE_PATH
 #define SM_CHEATS_STATE_PATH SM_CARD_DIR "/cheats.txt"
 #endif
@@ -53,8 +54,8 @@
 #define SM_CHEATS_FETCHED_DIR SM_CHEATS_DIR "/libretro"
 #endif
 /* Which colour theme to start in: the first word is a theme's id. Written
-   by the prep tool, read once at start; tools/card_layout.py has the same
-   name. */
+   by the Game Catalog Manager, read once at start; tools/card_layout.py has
+   the same name. */
 #ifndef SM_THEME_PATH
 #define SM_THEME_PATH SM_CARD_DIR "/theme.txt"
 #endif

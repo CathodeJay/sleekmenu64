@@ -10,8 +10,8 @@ first instruction, black screen; emulators skip the check, which is how a
 hack ships with the old words still in its header and boots everywhere but
 on hardware. The EverDrive's own menu quietly rewrites the words as it
 loads; SleekMenu does the same at launch (src/launch.c), and this module is
-the same sum on the computer, for the report the prep tool prints and for
-`--fix-checksums`.
+the same sum on the computer, for the report the Game Catalog Manager
+prints and for `--fix-checksums`.
 
 The sum depends on the boot code: each CIC variant seeds it differently, and
 the 6105 folds bytes of its own boot code into every step. Which one a ROM
