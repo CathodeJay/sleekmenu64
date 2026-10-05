@@ -1,5 +1,10 @@
-![SleekMenu 64: a game browser for EverDrive-64](docs/banner.png)
-[!["Buy Me A Coffee"](https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/CathodeJay)
+<p align="center">
+  <img src="docs/banner.png" alt="SleekMenu 64: a game browser for EverDrive-64">
+</p>
+
+<p align="center">
+  <a href="https://www.buymeacoffee.com/CathodeJay"><img src="https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee" alt="Buy Me A Coffee"></a>
+</p>
 
 ---
 
