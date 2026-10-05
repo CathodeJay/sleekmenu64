@@ -1,7 +1,6 @@
 <p align="center">
   <img src="docs/banner.png" alt="SleekMenu 64: a game browser for EverDrive-64">
 </p>
-
 <p align="center">
   <a href="https://www.buymeacoffee.com/CathodeJay"><img src="https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee" alt="Buy Me A Coffee"></a>
 </p>
@@ -172,8 +171,6 @@ make perf N64_INST=/path/to/libdragon       # the ROM with a frame-time readout
 SleekMenu 64 is free. If it earned a place on your card and you would like
 to support its development, you can
 [buy me a coffee](https://buymeacoffee.com/CathodeJay).
-
-[!["Buy Me A Coffee"](https://img.shields.io/badge/-buy_me_a%C2%A0coffee-gray?logo=buy-me-a-coffee)](https://www.buymeacoffee.com/CathodeJay)
 
 ## AI
 
