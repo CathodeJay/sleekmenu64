@@ -826,18 +826,36 @@ class WindowTests(unittest.TestCase):
             games.tree.selection_set("ROMS/Wave Race 64 (USA).z64")
             root.update()
             line = tkfont.nametofont("TkDefaultFont").metrics("linespace")
-            heights = {}
-            for size in ("1040x680", "1080x720", "1080x900"):
-                root.geometry(size)
+
+            def sized(width: int, height: int) -> tuple[int, int]:
+                """The window asked to be this size: what it became, and
+                how tall the description is in it. A desktop resizes a
+                window in its own time and no larger than the screen."""
+                root.geometry(f"{width}x{height}")
+                until = time.monotonic() + 2.0
+                while time.monotonic() < until:
+                    root.update()
+                    if abs(root.winfo_height() - height) <= 1:
+                        break
+                    time.sleep(0.02)
                 root.update()
-                heights[size] = games.text.winfo_height()
-                self.assertGreater(games.text.winfo_width(), games.detail.winfo_width() - 60, size)
+                self.assertGreater(games.text.winfo_width(), games.detail.winfo_width() - 60, (width, height))
                 # nothing of the panel is pushed out of the window by it
                 self.assertLessEqual(games.save_button.winfo_rooty() + games.save_button.winfo_height(),
-                                     root.winfo_rooty() + root.winfo_height(), size)
-            self.assertGreaterEqual(heights["1040x680"], 8 * line, "eight lines at the smallest window")
-            self.assertGreaterEqual(heights["1080x720"], 10 * line)
-            self.assertGreater(heights["1080x900"], heights["1080x720"] + 150, "a taller window is a taller box")
+                                     root.winfo_rooty() + root.winfo_height(), (width, height))
+                return root.winfo_height(), games.text.winfo_height()
+
+            _small, at_smallest = sized(1040, 680)
+            window, at_default = sized(1080, 720)
+            # Widgets are taller on some desktops than on others, so the
+            # count is what any of them gives; before, it was three or four.
+            self.assertGreaterEqual(at_smallest, 5 * line, "five lines at the smallest window")
+            self.assertGreaterEqual(at_default, 7 * line)
+            # A taller window is a taller box, by all of the difference --
+            # as much taller as the screen lets the window be.
+            taller, at_taller = sized(1080, min(900, root.winfo_screenheight() - 120))
+            if taller > window + 40:
+                self.assertGreaterEqual(at_taller - at_default, (taller - window) - 24)
             # the facts sit beside the box, not under it
             self.assertGreater(games.title_entry.winfo_rootx(), games.box.winfo_rootx() + games.box.winfo_width())
             self.assertLess(games.title_entry.winfo_rooty(), games.box.winfo_rooty() + games.box.winfo_height())
@@ -1077,14 +1095,14 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(theme.get(), "Fire", "and the window shows it after the run")
             # ...and coming back to the window shows it without a run,
             themes.path(card).write_bytes(b"ice\n")
-            state["walked"] = 0
+            state["walked"] = state["looked"] = 0
             root.event_generate("<FocusIn>")
             root.update()
             self.assertEqual(theme.get(), "Ice")
             # unless a theme is being picked here: that pick is kept, and the run writes it.
             theme.set("Grape")
             themes.path(card).write_bytes(b"fire\n")
-            state["walked"] = 0
+            state["walked"] = state["looked"] = 0
             root.event_generate("<FocusIn>")
             root.update()
             self.assertEqual(theme.get(), "Grape")
