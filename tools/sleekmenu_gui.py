@@ -954,7 +954,7 @@ class GamesTab:
     card has, whoever it came from; Save writes the ones that are the
     owner's to say, as the files tools/custom_art.py reads."""
 
-    DETAIL_WIDTH = 400
+    DETAIL_WIDTH = 540
 
     def __init__(self, parent, card_of, apply=None, colors=None, database=None, offline=None, genres=None):
         """`apply(path)`, when given, puts the owner's files on the card's
@@ -1039,8 +1039,8 @@ class GamesTab:
         left.columnconfigure(0, weight=1)
         self.tree = ttk.Treeview(left, columns=("genre", "year", "status"), selectmode="browse")
         self.tree.heading("#0", text="Game")
-        self.tree.column("#0", width=300, minwidth=180, stretch=True)
-        for name, heading, width in (("genre", "Genre", 120), ("year", "Year", 48), ("status", "", 124)):
+        self.tree.column("#0", width=180, minwidth=170, stretch=True)
+        for name, heading, width in (("genre", "Genre", 110), ("year", "Year", 48), ("status", "", 116)):
             self.tree.heading(name, text=heading)
             self.tree.column(name, width=width, minwidth=width, stretch=False, anchor="w")
         scroll = ttk.Scrollbar(left, orient="vertical", command=self.tree.yview)
@@ -1054,35 +1054,45 @@ class GamesTab:
         self.tree.tag_configure("look", foreground=self.colors["warn"])
 
         # -- the selected game ---------------------------------------------------
+        # The box and the facts side by side, and under them the description
+        # with all the height that is left: it is the one field that is a
+        # paragraph, and a paragraph is edited in a box that shows it.
         right = ttk.Frame(frame, padding=(14, 0, 0, 0), width=self.DETAIL_WIDTH)
         right.grid(row=2, column=1, sticky="nsew")
         right.grid_propagate(False)
         right.columnconfigure(0, weight=1)
-        right.rowconfigure(6, weight=1)
+        right.rowconfigure(2, weight=1)
         self.detail = right
         wrap = self.DETAIL_WIDTH - 20
+        head = ttk.Frame(right)
+        head.grid(row=0, column=0, sticky="ew")
+        head.columnconfigure(1, weight=1)
         # The box is always the box view's size, a placeholder when there
         # is none, so the fields stay put as the selection moves.
         width, height = make_sprite.LARGE_CANVAS_SIZE
+        picture = ttk.Frame(head)
+        picture.grid(row=0, column=0, sticky="nw")
         self.placeholder = tk.PhotoImage(
             master=right, format="PPM",
             data=make_sprite.to_ppm(width, height, bytes((35, 42, 52)) * (width * height)))
-        self.box = ttk.Label(right, image=self.placeholder, text="", compound="center", foreground="#8291a0")
+        self.box = ttk.Label(picture, image=self.placeholder, text="", compound="center", foreground="#8291a0")
         self.box.grid(row=0, column=0, sticky="w")
-        under = ttk.Frame(right)
+        under = ttk.Frame(picture)
         under.grid(row=1, column=0, sticky="ew", pady=(6, 0))
         under.columnconfigure(0, weight=1)
-        ttk.Label(under, textvariable=self.file_name, foreground=muted, wraplength=wrap - 130,
+        ttk.Label(under, textvariable=self.file_name, foreground=muted, wraplength=width - 120,
                   justify="left").grid(row=0, column=0, sticky="w")
         self.box_button = ttk.Button(under, text="Change box…", command=self.choose_box)
-        self.box_button.grid(row=0, column=1, sticky="e")
+        self.box_button.grid(row=0, column=1, sticky="ne")
         # A picture dropped on the box, or anywhere on the panel around it,
         # is the same as choosing it; said only where it works.
         self.drop_works = enable_drop(self.box, self.dropped)
         if self.drop_works:
-            enable_drop(right, self.dropped)
-            ttk.Label(under, text="Or drop a PNG or JPEG on the box.", foreground=muted).grid(
-                row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
+            for around in (right, head, picture, under):
+                enable_drop(around, self.dropped)
+            ttk.Label(under, text="Or drop a PNG or JPEG on the box.", foreground=muted,
+                      wraplength=width, justify="left").grid(row=1, column=0, columnspan=2, sticky="w",
+                                                             pady=(2, 0))
 
         self.labels: dict[str, object] = {}
 
@@ -1090,50 +1100,57 @@ class GamesTab:
             made = ttk.Label(parent_, text=FIELD_LABELS[name])
             self.labels[name] = made
             return made
-        form = ttk.Frame(right)
-        form.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        form = ttk.Frame(head)
+        form.grid(row=0, column=1, sticky="new", padx=(14, 0))
         form.columnconfigure(1, weight=1)
-        form.columnconfigure(3, weight=1)
         label(form, "title").grid(row=0, column=0, sticky="w")
-        self.title_entry = ttk.Entry(form, textvariable=self.title)
-        self.title_entry.grid(row=0, column=1, columnspan=3, sticky="ew", padx=(6, 0))
+        self.title_entry = ttk.Entry(form, textvariable=self.title, width=12)
+        self.title_entry.grid(row=0, column=1, sticky="ew", padx=(6, 0))
         # The genres and publishers already on the card are offered;
         # anything else can be typed.
         label(form, "genre").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self.genre_box = ttk.Combobox(form, textvariable=self.genre, width=14)
+        self.genre_box = ttk.Combobox(form, textvariable=self.genre, width=12)
         self.genre_box.grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(6, 0))
-        label(form, "publisher").grid(row=1, column=2, sticky="w", padx=(10, 0), pady=(6, 0))
-        self.publisher_box = ttk.Combobox(form, textvariable=self.publisher, width=14)
-        self.publisher_box.grid(row=1, column=3, sticky="ew", padx=(6, 0), pady=(6, 0))
-        label(form, "year").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        label(form, "publisher").grid(row=2, column=0, sticky="w", pady=(6, 0))
+        self.publisher_box = ttk.Combobox(form, textvariable=self.publisher, width=12)
+        self.publisher_box.grid(row=2, column=1, sticky="ew", padx=(6, 0), pady=(6, 0))
+        label(form, "year").grid(row=3, column=0, sticky="w", pady=(6, 0))
         self.year_entry = ttk.Entry(form, textvariable=self.year, width=6)
-        self.year_entry.grid(row=2, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
-        label(form, "players").grid(row=2, column=2, sticky="w", padx=(10, 0), pady=(6, 0))
+        self.year_entry.grid(row=3, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
+        label(form, "players").grid(row=4, column=0, sticky="w", pady=(6, 0))
         self.players_box = ttk.Combobox(form, textvariable=self.players, width=3, state="readonly",
                                         values=("", "1", "2", "3", "4"))
-        self.players_box.grid(row=2, column=3, sticky="w", padx=(6, 0), pady=(6, 0))
-        region_row = ttk.Frame(right)
-        region_row.grid(row=3, column=0, sticky="w", pady=(6, 0))
-        label(region_row, "regions").pack(side="left")
+        self.players_box.grid(row=4, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
+        # The three regions take the column's whole width, under their label.
+        label(form, "regions").grid(row=5, column=0, sticky="w", pady=(6, 0))
+        region_row = ttk.Frame(form)
+        region_row.grid(row=6, column=0, columnspan=2, sticky="w", pady=(2, 0))
         self.region_checks = []
         for name in REGION_ORDER:
             check = ttk.Checkbutton(region_row, text=REGION_LABELS[name], variable=self.regions[name])
-            check.pack(side="left", padx=(8, 0))
+            check.pack(side="left", padx=(0, 8))
             self.region_checks.append(check)
-        label(right, "description").grid(row=5, column=0, sticky="w", pady=(8, 0))
-        self.text = tk.Text(right, height=5, width=20, wrap="word", font="TkDefaultFont", undo=True)
-        self.text.grid(row=6, column=0, sticky="nsew", pady=(2, 0))
+        label(right, "description").grid(row=1, column=0, sticky="w", pady=(10, 0))
+        paragraph = ttk.Frame(right)
+        paragraph.grid(row=2, column=0, sticky="nsew", pady=(2, 0))
+        paragraph.columnconfigure(0, weight=1)
+        paragraph.rowconfigure(0, weight=1)
+        self.text = tk.Text(paragraph, height=6, width=20, wrap="word", font="TkDefaultFont", undo=True)
+        self.text.grid(row=0, column=0, sticky="nsew")
+        text_scroll = ttk.Scrollbar(paragraph, orient="vertical", command=self.text.yview)
+        text_scroll.grid(row=0, column=1, sticky="ns")
+        self.text.configure(yscrollcommand=text_scroll.set)
         self.others_check = ttk.Checkbutton(right, variable=self.others)
         ttk.Label(right, textvariable=self.notes, foreground=muted, justify="left", wraplength=wrap).grid(
-            row=8, column=0, sticky="w", pady=(6, 0))
+            row=4, column=0, sticky="w", pady=(6, 0))
         buttons = ttk.Frame(right)
-        buttons.grid(row=9, column=0, sticky="e", pady=(8, 0))
+        buttons.grid(row=5, column=0, sticky="e", pady=(8, 0))
         self.undo_button = ttk.Button(buttons, text="Undo my changes", command=self.remove_edit)
         self.undo_button.pack(side="left", padx=(0, 6))
         self.save_button = ttk.Button(buttons, text="Save", command=self.save_edit, default="active")
         self.save_button.pack(side="left")
         ttk.Label(right, textvariable=self.edit_note, foreground=muted, justify="left", wraplength=wrap).grid(
-            row=10, column=0, sticky="w", pady=(4, 0))
+            row=6, column=0, sticky="w", pady=(4, 0))
         self.inputs = [self.title_entry, self.genre_box, self.publisher_box, self.year_entry,
                        *self.region_checks, self.box_button, self.save_button]
         self.show_game(None)
@@ -1334,7 +1351,7 @@ class GamesTab:
         if count > 0:
             self.others_check.configure(
                 text=f"Also change the {plural(count, 'other version')} of this game")
-            self.others_check.grid(row=7, column=0, sticky="w", pady=(6, 0))
+            self.others_check.grid(row=3, column=0, sticky="w", pady=(6, 0))
             sources = game.get("sources") or {}
             self.others.set(str(sources.get("cover", "")).startswith("yours (code")
                             or (own is not None and own.path is not None
@@ -1576,7 +1593,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     root = tk.Tk()
     root.title(TITLE)
-    root.minsize(960, 680)
+    root.minsize(1040, 680)
     root.geometry("1080x720")
     colors = palette(root, tk, ttk)
 

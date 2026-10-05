@@ -796,6 +796,48 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(root.sleekmenu_state["fields"]["where"].get(), "/ROMS")
             root.destroy()
 
+    def test_the_description_has_room_to_be_edited(self):
+        """It is the one field that is a paragraph: it gets the panel's
+        whole width under the box and the facts, all the height that is
+        left, and a scrollbar for what is longer still."""
+        from tkinter import font as tkfont
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            root = sleekmenu_gui.build(card=str(card))
+            state = root.sleekmenu_state
+            state["options"]["offline"].set(True)
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            state["notebook"].select(state["pages"]["games"])
+            games = state["catalog"]
+            games.tree.selection_set("ROMS/Wave Race 64 (USA).z64")
+            root.update()
+            line = tkfont.nametofont("TkDefaultFont").metrics("linespace")
+            heights = {}
+            for size in ("1040x680", "1080x720", "1080x900"):
+                root.geometry(size)
+                root.update()
+                heights[size] = games.text.winfo_height()
+                self.assertGreater(games.text.winfo_width(), games.detail.winfo_width() - 60, size)
+                # nothing of the panel is pushed out of the window by it
+                self.assertLessEqual(games.save_button.winfo_rooty() + games.save_button.winfo_height(),
+                                     root.winfo_rooty() + root.winfo_height(), size)
+            self.assertGreaterEqual(heights["1040x680"], 8 * line, "eight lines at the smallest window")
+            self.assertGreaterEqual(heights["1080x720"], 10 * line)
+            self.assertGreater(heights["1080x900"], heights["1080x720"] + 150, "a taller window is a taller box")
+            # the facts sit beside the box, not under it
+            self.assertGreater(games.title_entry.winfo_rootx(), games.box.winfo_rootx() + games.box.winfo_width())
+            self.assertLess(games.title_entry.winfo_rooty(), games.box.winfo_rooty() + games.box.winfo_height())
+            # and a long description scrolls
+            games.text.insert("end", "\n".join(f"line {number}" for number in range(80)))
+            root.update()
+            self.assertLess(games.text.yview()[1], 1.0)
+            self.assertTrue(str(games.text.cget("yscrollcommand")))
+            root.destroy()
+
     def test_the_window_settles_at_every_width(self):
         """The Card tab's text wraps at its column's width. When the column's
         width also came from its text, a line that filled it to the pixel
@@ -830,7 +872,7 @@ class WindowTests(unittest.TestCase):
 
             with mock.patch.object(tkinter.CallWrapper, "__call__", counted):
                 pump(0.2)
-                for width in list(range(1073, 1088)) + [961, 979, 1031, 1125, 1157]:
+                for width in list(range(1040, 1048)) + list(range(1073, 1088)) + [1125, 1157]:
                     del sized[:]
                     root.geometry(f"{width}x720")
                     pump(0.12)
