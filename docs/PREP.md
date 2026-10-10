@@ -91,7 +91,7 @@ the last column says the one thing worth knowing about a row:
 | No box, No facts | nothing was found for it: a hack of an unknown game, homebrew |
 | Changed by me | it carries a picture, text or facts of your own |
 | Edit waiting | your edit is saved but not on the card's catalog yet |
-| New | copied on since the last update: the browser lists it without a box until the next one |
+| New | copied on since the last update: the browser lists it without a box until the next one; its text and facts can be edited already |
 | Not a ROM | not listed on the console: a ROM-shaped file with no N64 header (a 64DD IPL dump, a broken download) |
 
 Search narrows the list as you type, over the title, the file name, the
@@ -111,6 +111,16 @@ Change what you like and press **Save**. Only what you changed is written:
 a field left as the card has it stays the database's or the collection's.
 Empty a field to get the original back. **Undo my changes** removes
 everything of yours for that game; the original was never touched.
+
+Every text box has **Cut**, **Copy**, **Paste** and **Select All** on a
+right-click (Control-click on a Mac, where they are in the Edit menu too),
+besides the usual keyboard shortcuts: a description can be pasted from a
+web page as it is.
+
+A **New** game, copied on since the last update, can be edited too: give
+it a title, facts or a description and press Save, and the update that
+puts the edit on the card adds the game with it. Its box is chosen once it
+is in the catalog.
 
 **Change box…** shows the boxes libretro has for the game, one per region
 it was released in, beside the one on the card; pick one, or **My own

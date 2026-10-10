@@ -13,6 +13,15 @@
   the pixels it covers, instead of dropping one column and one row in
   three.
 
+### The Game Catalog Manager
+
+- Every text box has Cut, Copy, Paste and Select All on a right-click, and
+  on a Mac in the Edit menu too: a description can be pasted from the web
+  with the mouse.
+- A game copied on since the last update can be given its title, facts and
+  description before it is in the catalog: Save adds it to the card with
+  them.
+
 ## 2.0.0
 
 **Upgrading from 1.2:** copy the new `SleekMenu64.z64` over the old one at

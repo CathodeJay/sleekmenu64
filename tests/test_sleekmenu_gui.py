@@ -577,7 +577,8 @@ class WindowTests(unittest.TestCase):
             games.fill()
             self.assertEqual(games.shown.get(), "")
             # a game copied on since, and a file the tool set aside: both
-            # rows in their folders, neither editable
+            # rows in their folders; a newcomer can be given its text and
+            # facts before it is catalogued, but not its box
             write_rom(card / "ROMS" / "New.z64", 0x55, 0x66, game_code="NW")
             (card / "ROMS" / "Tools" / "IPL.z64").parent.mkdir()
             (card / "ROMS" / "Tools" / "IPL.z64").write_bytes(bytes(64))
@@ -587,8 +588,9 @@ class WindowTests(unittest.TestCase):
             self.assertTrue(games.tree.exists("ROMS/Tools/IPL.z64"), "not updated yet: a newcomer too")
             games.tree.selection_set("ROMS/New.z64")
             root.update()
-            self.assertIn("Press Update card", games.notes.get())
-            self.assertEqual(str(games.save_button.cget("state")), "disabled")
+            self.assertIn("press Save", games.notes.get())
+            self.assertEqual(str(games.save_button.cget("state")), "normal")
+            self.assertEqual(str(games.box_button.cget("state")), "disabled")
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
             games.reload()
@@ -1133,6 +1135,121 @@ class WindowTests(unittest.TestCase):
             root = sleekmenu_gui.build(smoke=True, card=str(Path(scratch) / "nowhere"))
             root.mainloop()
             self.assertEqual(root.sleekmenu_state["last_code"], 1)
+
+    def test_every_text_box_has_cut_copy_and_paste_on_a_right_click(self):
+        """Tk gives a text box its keyboard shortcuts and no menu, and a game's
+        description could not be pasted by anyone who pastes with the mouse.
+        The menu is installed for every text box at once, and offers what can
+        be done with the box it was opened on."""
+        from tools import sleekmenu_prep
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Hacks" / "Kaizo.z64", 0x33, 0x44, game_code="WR")
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card, roms=Path("ROMS"))), 0)
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            games, menu = state["catalog"], state["edit_menu"]
+            right = "<Button-2>" if menu.aqua else "<Button-3>"
+            for name in ("Text", "TEntry", "TCombobox"):
+                self.assertIn(right, root.bind_class(name), name)
+
+            def entries():
+                return {menu.menu.entrycget(i, "label"): str(menu.menu.entrycget(i, "state"))
+                        for i in range(menu.menu.index("end") + 1) if menu.menu.type(i) == "command"}
+
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games.on_select()
+            root.update()
+            text = games.text
+            text.delete("1.0", "end")
+            text.insert("1.0", "Old words.")
+            # Paste, from the menu: what was copied elsewhere goes in at the cursor
+            root.clipboard_clear()
+            root.clipboard_append(" A hack of Wave Race with harder courses.")
+            text.mark_set("insert", "end-1c")
+            menu.fill(text)
+            self.assertEqual(entries(), {"Cut": "disabled", "Copy": "disabled", "Paste": "normal",
+                                         "Select All": "normal"}, "nothing selected yet")
+            menu.menu.invoke("Paste")
+            root.update()
+            self.assertEqual(text.get("1.0", "end-1c"), "Old words. A hack of Wave Race with harder courses.")
+            # Select All, then Copy: the whole description on the clipboard
+            menu.fill(text)
+            menu.menu.invoke("Select All")
+            menu.fill(text)
+            self.assertEqual(entries()["Copy"], "normal")
+            self.assertEqual(entries()["Cut"], "normal")
+            menu.menu.invoke("Copy")
+            root.update()
+            self.assertEqual(root.clipboard_get(), "Old words. A hack of Wave Race with harder courses.")
+            # the same in a one-line field
+            games.title_entry.delete(0, "end")
+            menu.fill(games.title_entry)
+            menu.menu.invoke("Paste")
+            self.assertEqual(games.title.get(), "Old words. A hack of Wave Race with harder courses.")
+            # a box that cannot be typed in offers Copy and Select All only
+            log = state["pages"]["log"].winfo_children()
+            logs = [widget for widget in log if widget.winfo_class() == "Text"]
+            self.assertEqual(len(logs), 1)
+            menu.fill(logs[0])
+            self.assertEqual(entries()["Paste"], "disabled")
+            self.assertEqual(entries()["Cut"], "disabled")
+            menu.fill(games.players_box)
+            self.assertEqual(entries()["Paste"], "disabled", "a pick-from-list choice")
+            # and the class binding opens it on the box that was clicked
+            seen = []
+            with mock.patch.object(menu.menu, "tk_popup", lambda *args: seen.append(args)):
+                text.event_generate(right, x=5, y=5)
+                root.update()
+            self.assertEqual(len(seen), 1)
+
+    def test_a_game_copied_on_since_the_last_update_can_be_edited_before_it_is_catalogued(self):
+        """A hack copied onto the card shows as New, and its whole form was
+        locked until the card was updated: its description could not be
+        typed or pasted. Now the form is open, and a Save puts the game on
+        the card with the edit in one update. Its box waits for that."""
+        from tools import card_catalog, sleekmenu_prep
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card, roms=Path("ROMS"))), 0)
+            write_rom(card / "ROMS" / "Hacks" / "Kaizo.z64", 0x33, 0x44, game_code="WR")
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            games = state["catalog"]
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games.on_select()
+            root.update()
+            self.assertEqual(games.selected().get("state"), sleekmenu_gui.STATE_WAITING)
+            self.assertEqual(str(games.text.cget("state")), "normal")
+            self.assertEqual(str(games.title_entry.cget("state")), "normal")
+            self.assertEqual(str(games.save_button.cget("state")), "normal")
+            self.assertEqual(str(games.box_button.cget("state")), "disabled", "the box comes with the update")
+            self.assertEqual(games.title.get(), "Kaizo", "from the file name, as the list shows it")
+            games.text.insert("1.0", "Wave Race, made cruel.")
+            games.genre.set("Racing")
+            games.save_edit()
+            self.assertEqual(state["runner"].kind, "apply")
+            text = (card / "sleekmenu" / "art" / "Kaizo.txt").read_text()
+            self.assertIn("Genre: Racing", text)
+            self.assertIn("Wave Race, made cruel.", text)
+            self.assertNotIn("Title:", text, "the title was not changed, so it is not written")
+            deadline = time.monotonic() + 60
+            while (state["runner"] is not None or "apply_pending" in state) and time.monotonic() < deadline:
+                root.update()
+            self.assertEqual(state["last_apply"], 0)
+            on_card = {game["path"]: game for game in card_catalog.load(card)["games"]}
+            self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["description"], "Wave Race, made cruel.")
+            self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["genre"], "Racing")
+            self.assertFalse(games.selected().get("state"), "catalogued now, and still the selected row")
+            self.assertEqual(str(games.box_button.cget("state")), "normal")
 
     def test_a_save_is_put_on_the_card_at_once_and_a_second_one_waits_its_turn(self):
         """The console reads only the catalog, so a Save that stopped at the

@@ -941,6 +941,124 @@ class BoxPicker:
         self.tab.picker = None
 
 
+class EditMenu:
+    """Cut, Copy, Paste and Select All on every text box, from the mouse.
+
+    Tk gives a text box its keyboard shortcuts and nothing else: no menu on
+    a right-click, and on a Mac no Edit menu in the menu bar. Most people
+    copy and paste with the mouse, and to them the window simply did not
+    do it. The right-click menu is installed for every text box of the
+    window at once, by class, and says what can be done with this one now:
+    a box that cannot be typed in (the Log, a pick-from-list choice) offers
+    Copy and Select All only. On a Mac the same four also go in the menu
+    bar, for the box that has the keyboard."""
+
+    #: The right button, by windowing system: a Mac's Tk 8.6 calls it button
+    #: 2 (Tk 9 calls it 3 everywhere), and Control-click is a right-click
+    #: there too.
+    RIGHT_CLICK = {"aqua": ("<Button-2>", "<Button-3>", "<Control-Button-1>")}
+    CLASSES = ("Text", "Entry", "TEntry", "TCombobox")
+
+    def __init__(self, root) -> None:
+        import tkinter as tk
+        self.tk = tk
+        self.root = root
+        self.system = str(root.tk.call("tk", "windowingsystem"))
+        self.aqua = self.system == "aqua"
+        self.menu = tk.Menu(root, tearoff=False)
+        for name in self.CLASSES:
+            for sequence in self.RIGHT_CLICK.get("aqua" if self.aqua else "", ("<Button-3>",)):
+                root.bind_class(name, sequence, self.popup, add="+")
+        if self.aqua:
+            # No accelerators: Tk on a Mac turns them into key equivalents
+            # of its own, and the box's own shortcut would then act twice.
+            bar = tk.Menu(root)
+            self.bar_menu = tk.Menu(bar, tearoff=False)
+            for label, event in (("Cut", "<<Cut>>"), ("Copy", "<<Copy>>"), ("Paste", "<<Paste>>")):
+                self.bar_menu.add_command(label=label, command=lambda e=event: self.on_focus(e))
+            self.bar_menu.add_separator()
+            self.bar_menu.add_command(label="Select All", command=lambda: self.on_focus(None))
+            bar.add_cascade(label="Edit", menu=self.bar_menu)
+            root.configure(menu=bar)
+
+    def is_text(self, widget) -> bool:
+        from tkinter import ttk
+        return isinstance(widget, (self.tk.Text, self.tk.Entry, ttk.Entry))
+
+    def writable(self, widget) -> bool:
+        if isinstance(widget, self.tk.Text):
+            return str(widget.cget("state")) == "normal"
+        try:
+            return bool(widget.instate(["!disabled", "!readonly"]))
+        except (AttributeError, self.tk.TclError):
+            return str(widget.cget("state")) == "normal"
+
+    def selected(self, widget) -> bool:
+        try:
+            if isinstance(widget, self.tk.Text):
+                return bool(widget.tag_ranges("sel"))
+            return bool(widget.selection_present())
+        except self.tk.TclError:
+            return False
+
+    def clipboard(self) -> bool:
+        try:
+            return bool(self.root.clipboard_get())
+        except self.tk.TclError:
+            return False
+
+    def select_all(self, widget) -> None:
+        if isinstance(widget, self.tk.Text):
+            widget.tag_add("sel", "1.0", "end-1c")
+            widget.mark_set("insert", "end-1c")
+        else:
+            widget.select_range(0, "end")
+            widget.icursor("end")
+
+    def fill(self, widget) -> None:
+        """The menu for one box, as it stands."""
+        writable, selected = self.writable(widget), self.selected(widget)
+        # Tk's own keys for these, as each system has them: Select All is
+        # Ctrl+/ under X11, where Ctrl+A goes to the start of the line.
+        keys = {} if self.aqua else {"Cut": "Ctrl+X", "Copy": "Ctrl+C", "Paste": "Ctrl+V",
+                                     "Select All": "Ctrl+A" if self.system == "win32" else "Ctrl+/"}
+        self.menu.delete(0, "end")
+        for label, event, usable in (("Cut", "<<Cut>>", writable and selected),
+                                     ("Copy", "<<Copy>>", selected),
+                                     ("Paste", "<<Paste>>", writable and self.clipboard())):
+            self.menu.add_command(label=label, accelerator=keys.get(label, ""),
+                                  state="normal" if usable else "disabled",
+                                  command=lambda e=event: widget.event_generate(e))
+        self.menu.add_separator()
+        self.menu.add_command(label="Select All", accelerator=keys.get("Select All", ""),
+                              command=lambda: self.select_all(widget))
+
+    def popup(self, event):
+        widget = event.widget
+        if not self.is_text(widget):
+            return None
+        try:
+            widget.focus_set()
+        except self.tk.TclError:
+            pass
+        self.fill(widget)
+        try:
+            self.menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.menu.grab_release()
+        return "break"
+
+    def on_focus(self, event: str | None) -> None:
+        """The menu bar's command, for the box that has the keyboard."""
+        widget = self.root.focus_get()
+        if widget is None or not self.is_text(widget):
+            return
+        if event is None:
+            self.select_all(widget)
+        else:
+            widget.event_generate(event)
+
+
 class GamesTab:
     """The card's games as the browser will show them, from
     sleekmenu/catalog.json, and the one place to change one.
@@ -1302,6 +1420,10 @@ class GamesTab:
         self.shown_path = str(game.get("path", "")) if game is not None else None
         state = str((game or {}).get("state") or "")
         catalogued = game is not None and not state
+        # A game copied on since the last update can be given its text and
+        # facts before it is in the catalog: the Save is applied by an
+        # update, which adds the game with them. Its box waits for that.
+        editable = catalogued or state == STATE_WAITING
         # A reload shows no game for a moment; only another game's being
         # shown ends the note.
         path = str((game or {}).get("path", ""))
@@ -1311,11 +1433,18 @@ class GamesTab:
         self._set_fields(game if catalogued else None)
         if not catalogued and game is not None:
             self.title.set(str(game.get("title", "")))
+        if state == STATE_WAITING:
+            # Saved before and not on the card yet: the form shows the file.
+            own = self.own_text(game)
+            if own is not None:
+                self._set_fields(dict(game, **own.facts, title=own.title or str(game.get("title", "")),
+                                      description=own.description))
         self.file_name.set(PurePosixPath(path).name if game is not None else "")
         for widget in self.inputs:
-            widget.configure(state="normal" if catalogued else "disabled")
-        self.players_box.configure(state="readonly" if catalogued else "disabled")
-        self.text.configure(state="normal" if catalogued else "disabled")
+            widget.configure(state="normal" if editable else "disabled")
+        self.box_button.configure(state="normal" if catalogued else "disabled")
+        self.players_box.configure(state="readonly" if editable else "disabled")
+        self.text.configure(state="normal" if editable else "disabled")
         self.undo_button.configure(state="disabled")
         self.others_check.grid_remove()
         for name, made in self.labels.items():
@@ -1330,9 +1459,10 @@ class GamesTab:
             # happens next, and nothing to edit until it is catalogued.
             self.photo = None
             if state == STATE_WAITING:
+                self.others.set(False)
                 self.notes.set("Not in the catalog yet: the browser lists it in its folder, without a "
-                               "box, and plays it. Press Update card on the Card tab to add its box and "
-                               "facts.")
+                               "box, and plays it. Give it a title, facts or a description and press "
+                               "Save, and the card is updated with them; its box comes with that update.")
                 self.box.configure(image=self.placeholder, text="NOT YET", compound="center",
                                    foreground="#8291a0")
             else:
@@ -1456,7 +1586,7 @@ class GamesTab:
 
     def save_edit(self) -> None:
         game, card = self.selected(), self.card_of()
-        if game is None or card is None or game.get("state"):
+        if game is None or card is None or game.get("state") not in (None, "", STATE_WAITING):
             return
         values, problems = self.form()
         if problems:
@@ -1603,6 +1733,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     root.minsize(1040, 680)
     root.geometry("1080x720")
     colors = palette(root, tk, ttk)
+    edit_menu = EditMenu(root)
 
     state: dict = {"runner": None, "steps": Steps(), "status": card_status(None), "walk": None}
     card_var = tk.StringVar()
@@ -2204,6 +2335,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                         "cheats": cheats_check}
     state["notebook"] = notebook
     state["header"] = header
+    state["edit_menu"] = edit_menu
     state["picker"] = card_box
     state["pages"] = {"card": page, "games": catalog_page, "log": log_page}
     state["columns"] = {"card": body, "options": options}
