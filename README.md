@@ -137,6 +137,10 @@ always started from the EverDrive menu. More in
   pull the card: that is when the stock menu writes the save out.
 - **Hacks** that black-screen on a console because of a stale header
   checksum are fixed as they launch.
+- **Hacks, translations and homebrew** are told apart from retail games by
+  their name, their folder and the database, and tagged HACK, TL or HB on
+  their row; Z filters by kind. A wrong guess is corrected in the Game
+  Catalog Manager.
 - **Cheats** come from the EverDrive-64 Pro's cheat pack in `ED64/CHEATS/`,
   or from libretro when you tick **Fetch cheat codes** on the Game Catalog
   Manager's Card tab, and need an Expansion Pak.

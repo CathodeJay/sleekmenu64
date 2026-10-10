@@ -26,7 +26,8 @@ class CardTests(unittest.TestCase):
         cls.temporary = tempfile.TemporaryDirectory()
         cls.card = Path(cls.temporary.name) / "CARD"
         card = cls.card
-        write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+        # the real dump's checksum pair, so the database knows it by CRC
+        write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x7DE11F53, 0x74872F9D, game_code="WR")
         write_rom(card / "ROMS" / "Hacks" / "Wave Race Kaizo.z64", 0x33, 0x44, game_code="WR")
         write_rom(card / "ROMS" / "Homebrew" / "Flappy.z64", 3, 4, game_code="\0\0", country="\0")
         write_rom(card / "ROMS" / "Zelda (Europe).z64", 0x55, 0x66, game_code="ZL", country="P")
@@ -65,7 +66,13 @@ class CardTests(unittest.TestCase):
         self.assertFalse(provenance.edited(retail))
         homebrew = self.games["ROMS/Homebrew/Flappy.z64"]
         self.assertEqual(homebrew["identified"], "")
-        self.assertEqual(set(homebrew["sources"].values()), {provenance.NONE, provenance.TITLE_FILE_NAME})
+        self.assertEqual(set(homebrew["sources"].values()),
+                         {provenance.NONE, provenance.TITLE_FILE_NAME, provenance.DETECTED})
+        # what each game is, read off its name, folder and the database
+        self.assertEqual(self.games["ROMS/Wave Race 64 (USA).z64"]["kind"], "retail")
+        self.assertEqual(hack["kind"], "hack")
+        self.assertEqual(homebrew["kind"], "homebrew")
+        self.assertEqual(hack["sources"]["kind"], provenance.DETECTED)
         pal = self.games["ROMS/Zelda (Europe).z64"]
         self.assertEqual(pal["sources"]["cover"], provenance.COVER_COLLECTION_REGION)
 

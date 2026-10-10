@@ -40,6 +40,10 @@ COLLECTION = "collection"
 #: A per-game corrections file (tools/build_metadata.py --overrides).
 OVERRIDE = "override"
 
+# -- the kind ----------------------------------------------------------------
+#: Read off the file's name, its folder and the database (tools/kinds.py).
+DETECTED = "detected"
+
 NONE = "none"
 
 FIELDS = ("cover", "title", "description", "genre", "publisher", "year", "players")

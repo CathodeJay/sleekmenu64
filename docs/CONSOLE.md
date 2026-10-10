@@ -3,6 +3,16 @@
 What SleekMenu does once it is running. The controls are in the
 [README](../README.md#using-it).
 
+## Hacks, translations and homebrew
+
+A game that is not a retail cartridge says so: **HACK**, **TL** (a
+translation) or **HB** (homebrew) at the end of its row, and the word
+beside its genre on its details. The KIND row of the filter page shows one
+kind only. The Game Catalog Manager works out what each game is from its
+file name ("(Hack)", "[T+Eng]", "(PD)"), the folder it is in ("Hacks",
+"Translations", "Homebrew") and the database, and a wrong guess is
+corrected in its Games tab ([PREP.md](PREP.md#hacks-translations-and-homebrew)).
+
 ## Moving
 
 The D-pad and the stick move the same way. Held, a direction keeps moving,
@@ -46,8 +56,8 @@ collection's scan uncropped at its own size, or, after `--hires`, the
 512-pixel box fitted to the screen. B goes back; Start still plays.
 
 Z opens the **filter** from any view: genre (with a count for each), region,
-players, publisher, year and favourites, combined. Z again clears it, B
-applies it. The header shows how many games match. The last row of the
+players, publisher, year, favourites and kind, combined. Z again clears it,
+B applies it. The header shows how many games match. The last row of the
 page is not a filter: it is the [theme](#themes).
 
 ![The filter screen, in the Ice theme: genres with counts, then region, players, publisher, year and favourites, and the theme row under them](screenshots/filters.png)

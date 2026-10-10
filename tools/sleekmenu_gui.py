@@ -43,8 +43,8 @@ if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
 from tools import (card_catalog, card_layout, cheat_codes, coverdb, custom_art, direct_boot, fetch, genre_map,
-                   hires, library, make_sprite, metadata_repo, progress, provenance, sleekmenu_prep, themes,
-                   version)
+                   hires, kinds, library, make_sprite, metadata_repo, progress, provenance, sleekmenu_prep,
+                   themes, version)
 from tools.metadata_repo import MetadataRepo
 
 TITLE = f"Game Catalog Manager — SleekMenu 64 {version.VERSION}"
@@ -520,11 +520,13 @@ STATE_ASIDE = "aside"        # set aside by the tool: not a ROM
 STATE_PENDING = "pending"    # a catalogued game with an edit the next update will apply
 
 #: What a game is, as its owner can change it, and the blank of each.
-FIELDS = {"title": "", "genre": "", "publisher": "", "year": 0, "players": 0, "regions": [], "description": ""}
-FIELD_LABELS = {"title": "Title", "genre": "Genre", "publisher": "Publisher", "year": "Year",
+FIELDS = {"title": "", "genre": "", "publisher": "", "year": 0, "players": 0, "regions": [], "kind": "",
+          "description": ""}
+FIELD_LABELS = {"title": "Title", "genre": "Genre", "publisher": "Publisher", "year": "Year", "kind": "Kind",
                 "players": "Players", "regions": "Region", "description": "Description", "cover": "box"}
 REGION_ORDER = ("USA", "JAPAN", "EUROPE")
 REGION_LABELS = {"USA": "USA", "JAPAN": "Japan", "EUROPE": "Europe"}
+KIND_BY_NAME = {name: kind for kind, name in kinds.NAMES.items()}
 
 
 def card_rows(card: Path | None, document: dict | None) -> list[dict]:
@@ -694,7 +696,7 @@ def matches(record: dict, query: str) -> bool:
     if not words:
         return True
     haystack = " ".join(str(record.get(key) or "") for key in
-                        ("title", "path", "publisher", "genre", "year", "code")).casefold()
+                        ("title", "path", "publisher", "genre", "year", "code", "kind")).casefold()
     return all(word in haystack for word in words)
 
 
@@ -1116,6 +1118,7 @@ class GamesTab:
         self.publisher = tk.StringVar()
         self.year = tk.StringVar()
         self.players = tk.StringVar()
+        self.kind = tk.StringVar()
         self.regions = {name: tk.BooleanVar(value=False) for name in REGION_ORDER}
         self.picture = tk.StringVar()    # a new box chosen and not saved yet
         self.others = tk.BooleanVar(value=False)
@@ -1236,9 +1239,16 @@ class GamesTab:
         self.year_entry = ttk.Entry(form, textvariable=self.year, width=6)
         self.year_entry.grid(row=3, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
         label(form, "players").grid(row=4, column=0, sticky="w", pady=(6, 0))
-        self.players_box = ttk.Combobox(form, textvariable=self.players, width=3, state="readonly",
+        # Players and the kind share a row: both are picked from a short list.
+        pair = ttk.Frame(form)
+        pair.grid(row=4, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
+        self.players_box = ttk.Combobox(pair, textvariable=self.players, width=3, state="readonly",
                                         values=("", "1", "2", "3", "4"))
-        self.players_box.grid(row=4, column=1, sticky="w", padx=(6, 0), pady=(6, 0))
+        self.players_box.pack(side="left")
+        label(pair, "kind").pack(side="left", padx=(12, 6))
+        self.kind_box = ttk.Combobox(pair, textvariable=self.kind, width=11, state="readonly",
+                                     values=tuple(kinds.NAMES[kind] for kind in kinds.KINDS))
+        self.kind_box.pack(side="left")
         # The three regions take the column's whole width, under their label.
         label(form, "regions").grid(row=5, column=0, sticky="w", pady=(6, 0))
         region_row = ttk.Frame(form)
@@ -1408,6 +1418,7 @@ class GamesTab:
         self.players.set(players)
         for name, variable in self.regions.items():
             variable.set(name in (shown.get("regions") or []))
+        self.kind.set(kinds.NAMES.get(str(shown.get("kind") or ""), ""))
         self.text.configure(state="normal")
         self.text.delete("1.0", "end")
         self.text.insert("1.0", str(shown.get("description") or ""))
@@ -1444,6 +1455,7 @@ class GamesTab:
             widget.configure(state="normal" if editable else "disabled")
         self.box_button.configure(state="normal" if catalogued else "disabled")
         self.players_box.configure(state="readonly" if editable else "disabled")
+        self.kind_box.configure(state="readonly" if editable else "disabled")
         self.text.configure(state="normal" if editable else "disabled")
         self.undo_button.configure(state="disabled")
         self.others_check.grid_remove()
@@ -1544,6 +1556,7 @@ class GamesTab:
                  "year": int(year) if year.isdigit() else 0,
                  "players": int(players) if players.isdigit() else 0,
                  "regions": [name for name in REGION_ORDER if self.regions[name].get()],
+                 "kind": KIND_BY_NAME.get(self.kind.get(), ""),
                  "description": self.text.get("1.0", "end")}, problems)
 
     def scratch_file(self, name: str) -> Path:

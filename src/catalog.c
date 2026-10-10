@@ -317,6 +317,7 @@ bool catalog_matches(const sm_game_t *game, const sm_filter_t *filter) {
     if (filter->players != 0 && game->players < filter->players) return false;
     if (filter->regions != 0 && (game->regions & filter->regions) == 0) return false;
     if (filter->favorites_only && (game->flags & SM_FLAG_FAVORITE) == 0) return false;
+    if (filter->kind != 0 && (unsigned)sm_game_kind(game) + 1u != filter->kind) return false;
     return true;
 }
 

@@ -1251,6 +1251,53 @@ class WindowTests(unittest.TestCase):
             self.assertFalse(games.selected().get("state"), "catalogued now, and still the selected row")
             self.assertEqual(str(games.box_button.cget("state")), "normal")
 
+    def test_what_a_game_is_shows_in_the_panel_and_the_owner_can_correct_it(self):
+        """The kind is read off the name, the folder and the database; when
+        it is wrong, the owner picks another and Save puts it on the card as
+        their word, like any fact."""
+        from tools import card_catalog, sleekmenu_prep
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Hacks" / "Kaizo.z64", 0x33, 0x44, game_code="WR")
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x7DE11F53, 0x74872F9D, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card, roms=Path("ROMS"))), 0)
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            games = state["catalog"]
+            games.tree.selection_set("ROMS/Wave Race 64 (USA).z64")
+            games.on_select()
+            root.update()
+            self.assertEqual(games.kind.get(), "Retail")
+            self.assertEqual(str(games.kind_box.cget("state")), "readonly")
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games.on_select()
+            root.update()
+            self.assertEqual(games.kind.get(), "Hack")
+            # the search finds it by its kind
+            games.query.set("hack")
+            games.fill()
+            self.assertTrue(games.tree.exists("ROMS/Hacks/Kaizo.z64"))
+            self.assertFalse(games.tree.exists("ROMS/Wave Race 64 (USA).z64"))
+            games.query.set("")
+            games.fill()
+            games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
+            games.on_select()
+            # it is in fact a translation
+            games.kind.set("Translation")
+            games.save_edit()
+            self.assertIn("Kind: Translation", (card / "sleekmenu" / "art" / "Kaizo.txt").read_text())
+            deadline = time.monotonic() + 60
+            while (state["runner"] is not None or "apply_pending" in state) and time.monotonic() < deadline:
+                root.update()
+            on_card = {game["path"]: game for game in card_catalog.load(card)["games"]}
+            self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["kind"], "translation")
+            self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["sources"]["kind"], "yours")
+            self.assertEqual(games.kind.get(), "Translation")
+            self.assertEqual(str(games.labels["kind"].cget("text")), "Kind · yours")
+
     def test_a_save_is_put_on_the_card_at_once_and_a_second_one_waits_its_turn(self):
         """The console reads only the catalog, so a Save that stopped at the
         owner's file would change nothing there. Save runs the same run the

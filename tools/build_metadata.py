@@ -39,7 +39,8 @@ from pathlib import Path as _Path
 if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
-from tools import card_layout, coverdb, custom_art, genre_map, headers, identify, library, provenance, rom_header
+from tools import (card_layout, coverdb, custom_art, genre_map, headers, identify, kinds, library, provenance,
+                   rom_header)
 from tools.metadata_repo import MetadataRepo, RepoError
 
 DEFAULT_COVERDB = Path(__file__).resolve().parent.parent / "data" / "coverdb.csv"
@@ -176,8 +177,9 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
             if cover:
                 record["cover"] = cover
             record["identified"] = ""
+            record["kind"] = kinds.classify(str(relative), "", disk=True)
             record["sources"] = _sources(origins, rom_path, relative, cover,
-                                         title=provenance.TITLE_FILE_NAME)
+                                         title=provenance.TITLE_FILE_NAME, kind=provenance.DETECTED)
             records.append(record)
             continue
         header = read_header(path)
@@ -229,6 +231,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         # game.
         title = relative.stem
         title_source = provenance.TITLE_FILE_NAME
+        kind, facts["kind"] = kinds.classify(str(relative), matched), provenance.DETECTED
         own = custom_art.find_text(art_index, roms, rom_path, art_folder, header.product_code)
         if own is not None:
             how["own text"] += 1
@@ -249,6 +252,8 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
                 players, facts["players"] = own.facts["players"], provenance.YOURS
             if "regions" in own.facts:
                 regions, facts["regions"] = list(own.facts["regions"]), provenance.YOURS
+            if "kind" in own.facts:
+                kind, facts["kind"] = own.facts["kind"], provenance.YOURS
 
         record = {
             # The header CRC pair and game code, so a correction to
@@ -271,6 +276,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         if cover:
             record["cover"] = cover
         record["identified"] = matched
+        record["kind"] = kind
         record["sources"] = _sources(origins, rom_path, relative, cover, title=title_source,
                                      description=text_source, **facts)
         records.append(record)

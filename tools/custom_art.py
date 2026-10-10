@@ -22,6 +22,7 @@ launch card, and header lines at the top of it set the facts:
     Year: 1996
     Players: 4
     Regions: USA, JAPAN
+    Kind: Hack
 
     A hard version of the original, every course reworked.
 
@@ -45,15 +46,15 @@ import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
-from tools import build_catalog, card_layout
+from tools import build_catalog, card_layout, kinds
 
 ART_SUFFIXES = (".png", ".jpg", ".jpeg")
 TEXT_SUFFIX = ".txt"
 # A header line: one of the facts, a colon, the value.
-HEADER_LINE = re.compile(r"^\s*(title|genre|publisher|year|players|regions?)\s*:\s*(.*?)\s*$",
+HEADER_LINE = re.compile(r"^\s*(title|genre|publisher|year|players|regions?|kind)\s*:\s*(.*?)\s*$",
                          re.IGNORECASE)
 # The facts a header line can set, in the order the file writes them.
-FACTS = ("genre", "publisher", "year", "players", "regions")
+FACTS = ("genre", "publisher", "year", "players", "regions", "kind")
 REGION_NAMES = {"USA": "USA", "US": "USA", "NTSC-U": "USA",
                 "JAPAN": "JAPAN", "JPN": "JAPAN", "JP": "JAPAN", "NTSC-J": "JAPAN",
                 "EUROPE": "EUROPE", "EUR": "EUROPE", "EU": "EUROPE", "PAL": "EUROPE"}
@@ -151,6 +152,9 @@ def parse_facts(name: str, value: str) -> tuple[str, object] | None:
         names = [REGION_NAMES.get(part.strip().upper()) for part in re.split(r"[,/ ]+", value) if part.strip()]
         found = [region for region in dict.fromkeys(names) if region]
         return ("regions", found) if found else None
+    if name == "kind":
+        kind = kinds.parse(value)
+        return ("kind", kind) if kind else None
     return None
 
 
@@ -206,6 +210,8 @@ def format_text(title: str, description: str, facts: dict | None) -> str:
             continue
         if name == "regions":
             value = ", ".join(str(region) for region in value)
+        if name == "kind":
+            value = kinds.NAMES.get(str(value), str(value))
         lines.append(f"{name.capitalize()}: {value}")
     if lines and description.strip():
         lines.append("")
@@ -402,12 +408,13 @@ def pending_edits(card: Path, roms_root: Path, document: dict,
             if genres and given.get("genre"):
                 given["genre"] = genre_map.apply(genres, given["genre"])
         for name, value in given.items():
-            blank = [] if name == "regions" else ("" if name in ("genre", "publisher", "title", "description") else 0)
+            blank = [] if name == "regions" else ("" if name in ("genre", "publisher", "title", "description", "kind")
+                                                  else 0)
             if value != game.get(name, blank):
                 fields[name] = value
         # What the catalog has as the owner's that no file gives any more:
         # the next Prepare takes it back to the collection's or nothing.
-        for name in ("title", "description", "genre", "publisher", "year", "players", "regions"):
+        for name in ("title", "description", "genre", "publisher", "year", "players", "regions", "kind"):
             if sources.get(name) == provenance.YOURS and name not in given:
                 removed.append(name)
         picture = None

@@ -17,7 +17,7 @@
 
 /* The filter page's rows: the genre grid, five more filters, and under them
    the one row that is not a filter -- the theme. */
-enum { FILTER_ROWS = 7, FILTER_ROW_THEME = 6 };
+enum { FILTER_ROWS = 8, FILTER_ROW_KIND = 6, FILTER_ROW_THEME = 7 };
 
 /* Where the card keeps its art. Named rather than spelled out at the one call
    site so the host test can point the browser at a directory it can create;
@@ -1159,6 +1159,9 @@ static void change_filter(sm_ui_t *ui, sm_catalog_t *catalog, int direction) {
            folder-scoped and only marks the tab. Both directions have to land
            in the same state the strip would, or the two screens disagree
            about what is being filtered. */
+        case FILTER_ROW_KIND:
+            ui->filter.kind = (uint8_t)((ui->filter.kind + (direction > 0 ? 1 : 4)) % 5);
+            break;
         case 5:
             if (ui->filter.favorites_only) {
                 if (ui->flat) apply_strip_tab(ui, catalog, SM_STRIP_ALL);
@@ -1835,6 +1838,26 @@ static void draw_item_chip(surface_t *s, int x, int y, const sm_catalog_t *c, ui
     }
 }
 
+/* What a game is, as its row says it: nothing for a retail game, the short
+   tags the ROM-hacking world uses for the rest. The details spell it out. */
+static const char *kind_tag(sm_kind_t kind) {
+    switch (kind) {
+    case SM_KIND_HACK: return "HACK";
+    case SM_KIND_TRANSLATION: return "TL";
+    case SM_KIND_HOMEBREW: return "HB";
+    default: return NULL;
+    }
+}
+
+static const char *kind_word(sm_kind_t kind) {
+    switch (kind) {
+    case SM_KIND_HACK: return "Hack";
+    case SM_KIND_TRANSLATION: return "Translation";
+    case SM_KIND_HOMEBREW: return "Homebrew";
+    default: return NULL;
+    }
+}
+
 /* A favourite has to be visible without filtering for them, or pressing the
    button looks like it did nothing -- which is exactly how the feature felt
    before it did anything. */
@@ -1993,9 +2016,16 @@ static void draw_list(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
             : sm_colour(SM_C_TEXT_BODY), 0);
         {
             bool favorite = item_is_favorite(ui, item, &game);
+            const char *tag = (item & SM_UI_FOLDER_BIT) ? NULL : kind_tag(sm_game_kind(&game));
+            int tag_width = tag ? (int)strlen(tag) * SM_FONT_WIDTH + 3 : 0;
             int text_x = l->safe_left + ((item & SM_UI_FOLDER_BIT) ? 6 : 12);
-            int width = l->safe_left + l->list_width - text_x - 2 - (favorite ? 7 : 0);
+            int right = l->safe_left + l->list_width - 2 - (favorite ? 7 : 0);
+            int width = right - text_x - tag_width;
             draw_row_title(s, text_x, y + 1, width, title, selected, ui->marquee);
+            if (tag) {
+                graphics_set_color(selected ? sm_colour(SM_C_TEXT_SOFT) : sm_colour(SM_C_TEXT_DIM), 0);
+                graphics_draw_text(s, right - tag_width + 3, y + 1, tag);
+            }
             if (favorite)
                 draw_star(s, l->safe_left + l->list_width - 7, y + (l->row_height - 5) / 2);
         }
@@ -2479,7 +2509,9 @@ static void draw_panel(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c
 static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
     const sm_ui_t *ui) {
     static const char *LABELS[] = {"GENRE", "REGION", "PLAYERS", "PUBLISHER",
-                                   "YEAR", "FAVORITES", "THEME"};
+                                   "YEAR", "FAVORITES", "KIND", "THEME"};
+    static const char *KINDS[] = {"Any", "Retail", "Hacks", "Translations", "Homebrew"};
+    int step;
     int y = l->safe_top + SM_HEADER_HEIGHT + 6;
     int width = l->safe_right - l->safe_left;
     char value[48];
@@ -2533,6 +2565,9 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
         y += (int)((total + 2u) / 3u) * 12 + 6;
     }
 
+    /* Twelve pixels a row, closer when a card's many genres have taken the
+       room: the last row has to clear the help bar. */
+    for (step = 12; step > 9 && y + (FILTER_ROWS - 2) * step + SM_FONT_HEIGHT + 2 > l->footer_top - 2; step--) {}
     for (int row = 1; row < FILTER_ROWS; row++) {
         const char *shown = "Any";
         if (row == 1 && ui->filter.regions)
@@ -2548,6 +2583,7 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
             shown = value;
         }
         if (row == 5) shown = ui->filter.favorites_only ? "Only" : "Any";
+        if (row == FILTER_ROW_KIND) shown = KINDS[ui->filter.kind < 5u ? ui->filter.kind : 0u];
         if (row == FILTER_ROW_THEME) {
             /* Set apart from the filters, where there is room to. */
             if (y + 6 + SM_FONT_HEIGHT + 2 <= l->footer_top - 2) y += 6;
@@ -2564,7 +2600,7 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
             : sm_colour(SM_C_TEXT), 0);
         draw_truncated(s, l->safe_left + 10 * SM_FONT_WIDTH + 4, y, shown,
             (l->safe_right - l->safe_left - 10 * SM_FONT_WIDTH - 8) / SM_FONT_WIDTH);
-        y += 12;
+        y += step;
     }
 
     draw_help(s, l, c->discovery_mode ? "No catalog: only folders filter. {B}APPLY"
@@ -2701,6 +2737,15 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
             draw_chip(s, text_x, info_y + 2, game.genre);
             graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
             draw_truncated(s, text_x + 6, info_y, game.genre, text_chars - 1);
+        }
+        /* A hack, a translation or homebrew says so beside its genre. */
+        if (have && kind_word(sm_game_kind(&game))) {
+            int used = game.genre[0] ? 6 + ((int)strlen(game.genre) + 2) * SM_FONT_WIDTH : 0;
+            if (used / SM_FONT_WIDTH < text_chars - 4) {
+                graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
+                draw_truncated(s, text_x + used, info_y, kind_word(sm_game_kind(&game)),
+                    text_chars - used / SM_FONT_WIDTH);
+            }
         }
         info_y += 11;
         if (have) {

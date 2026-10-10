@@ -5,7 +5,7 @@ from pathlib import Path
 
 from tests.rom_fixtures import write_rom
 from tests.test_metadata_repo import collection
-from tools import build_metadata, coverdb
+from tools import build_metadata, coverdb, kinds
 from tools.metadata_repo import MetadataRepo
 
 
@@ -162,7 +162,8 @@ class BuildMetadataTests(unittest.TestCase):
         self.assertEqual([(g["path"], g["flags"]) for g in packed],
                          [("Demo.v64", build_catalog.FLAG_SET_ASIDE),
                           ("Dev Tools/64DD IPL (Japan).z64", build_catalog.FLAG_SET_ASIDE),
-                          ("Real Game (USA).z64", 0)])
+                          # a game no database knows: homebrew, in the kind bits
+                          ("Real Game (USA).z64", kinds.flags(kinds.HOMEBREW))])
         self.assertEqual(packed[1]["title"], "64DD IPL (Japan)")
         with self.assertRaises(build_catalog.CatalogError):
             build_catalog.normalize({"schema_version": 1, "games": document["games"],

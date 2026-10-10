@@ -262,7 +262,7 @@ folder chosen in the tool becomes where the menu opens: the tool scans only
 that folder, every path in the catalog starts with it, and the browser
 needs no setting of its own. C-left/right walk the
 genre tabs. Z opens the filter (genre, region, players, publisher, year,
-favourites, combined with AND). Two flat shortlists sit at the front of the
+favourites, kind, combined with AND). Two flat shortlists sit at the front of the
 tab strip: favourites (C-down, kept in `sleekmenu/favorites.txt`) and the
 last fifteen launches (`sleekmenu/history.txt`, written at the moment a boot
 is committed; replaying a game moves it up rather than adding it twice).

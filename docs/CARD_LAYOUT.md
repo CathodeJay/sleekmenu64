@@ -104,7 +104,9 @@ answered — `collection`, `collection (another region's box)`,
 `file name`, `yours (this ROM)`, `yours (code NSME)`, `yours`, or `none` —
 and `identified`: how the
 database knew the dump (`crc`, `serial`, `serial without region`, or
-nothing). Each game also carries `file` -- the ROM's size, its modification
+nothing), and `kind`: `retail`, `hack`, `translation` or `homebrew`
+(`tools/kinds.py`), packed into bits 2 to 4 of the record's flags in
+`catalog.ebc`. Each game also carries `file` -- the ROM's size, its modification
 time and the 64 header bytes read from it -- and `checksum`, the verdict
 of the checksum pass, so the next run opens only the files that changed;
 `sprites` names what each sprite was made from (a zip entry's CRC and
@@ -229,11 +231,11 @@ different games share a code, neither is used. The collection's
 
 Your own text wins over both: `<ROM name>.txt` beside the ROM or in
 `sleekmenu/art/`, or `<CODE>.txt` there. Header lines at the top --
-`Title:`, `Genre:`, `Publisher:`, `Year:`, `Players:`, `Regions:` -- each
-set that one field, checked the way the catalog checks it (a year in
+`Title:`, `Genre:`, `Publisher:`, `Year:`, `Players:`, `Regions:`, `Kind:` --
+each set that one field, checked the way the catalog checks it (a year in
 1970..2100, players 1..8, regions from USA, Japan and Europe under the
-usual spellings), and the first line that is not a header starts the
-description. The window's Games tab writes this same file
+usual spellings, a kind from Retail, Hack, Translation and Homebrew), and
+the first line that is not a header starts the description. The window's Games tab writes this same file
 (`tools/custom_art.py`), and reads it back to show the edit as the next
 update will catalog it.
 

@@ -53,6 +53,7 @@ bool catalog_matches(const sm_game_t *game, const sm_filter_t *filter) {
     if (filter->publisher && strcmp(game->publisher, filter->publisher)) return false;
     if (filter->year && game->year != filter->year) return false;
     if (filter->favorites_only && !(game->flags & SM_FLAG_FAVORITE)) return false;
+    if (filter->kind && (unsigned)sm_game_kind(game) + 1u != filter->kind) return false;
     return true;
 }
 
@@ -843,6 +844,53 @@ int main(void) {
         start(rows, 2u);
         assert(!strcmp(ui.root, "ROMS/N64"));
         assert(ui.item_count == 2u);         /* the folder A and the game Beta */
+    }
+
+    /* ---- what a game is: a tag on its row, a word on its card, a filter -- */
+    {
+        static const row_t rows[] = {
+            {"Mario.z64", "Mario", "Platforms", 0, "", 0, NULL},
+            {"Star Road.z64", "Star Road", "Platforms", SM_KIND_HACK << SM_KIND_SHIFT, "", 0, NULL},
+            {"Sin.z64", "Sin and Punishment", "Shooters", SM_KIND_TRANSLATION << SM_KIND_SHIFT, "", 0, NULL},
+            {"Flappy.z64", "Flappy", "", SM_KIND_HOMEBREW << SM_KIND_SHIFT, "", 0, NULL},
+        };
+        sm_game_t game;
+        start(rows, 4u);
+        assert(ui.item_count == 4u);
+        assert(catalog_get(&CATALOG, 1u, &game) && sm_game_kind(&game) == SM_KIND_HACK);
+        /* the favourite bit is its own: setting a favourite keeps the kind */
+        draw();
+        assert(sm_test_drew("HACK") && sm_test_drew("TL") && sm_test_drew("HB"));
+        /* the filter page's KIND row: right steps Retail, Hacks, ... */
+        frame(PRESS(filter));
+        assert(ui.screen == SM_SCREEN_FILTERS);
+        for (int i = 0; i < 6; i++) frame(PRESS(down));       /* down to KIND */
+        draw();
+        assert(sm_test_drew("KIND"));
+        frame(PRESS(right));
+        assert(ui.filter.kind == 1u + SM_KIND_RETAIL && ui.item_count == 1u);
+        draw();
+        assert(sm_test_drew("Retail"));
+        frame(PRESS(right));
+        assert(ui.filter.kind == 1u + SM_KIND_HACK && ui.item_count == 1u);
+        assert(catalog_get(&CATALOG, ui.items[0], &game) && !strcmp(game.title, "Star Road"));
+        frame(PRESS(right)); assert(ui.item_count == 1u);   /* translations */
+        frame(PRESS(right)); assert(ui.item_count == 1u);   /* homebrew */
+        frame(PRESS(right)); assert(ui.filter.kind == 0u && ui.item_count == 4u);   /* any again */
+        frame(PRESS(left)); assert(ui.filter.kind == 1u + SM_KIND_HOMEBREW);
+        /* Z clears it with the rest, and B applies that */
+        frame(PRESS(filter));
+        assert(ui.filter.kind == 0u);
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LIBRARY && ui.item_count == 4u);
+        /* the details say it in words */
+        ui.selected = 1u;
+        frame(NONE);
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        draw();
+        assert(sm_test_drew("Hack"));
+        frame(PRESS(back));
     }
 
     /* ---- a long hold moves several games a step ------------------------ */

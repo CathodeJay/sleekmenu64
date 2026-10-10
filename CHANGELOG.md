@@ -14,9 +14,14 @@
 - The grid's covers are sharper: each is shrunk to its tile by averaging
   the pixels it covers, instead of dropping one column and one row in
   three.
+- Hacks, translations and homebrew are tagged HACK, TL and HB on their
+  row and named on their details, and the filter page has a KIND row.
 
 ### The Game Catalog Manager
 
+- Each game's kind is worked out from its file name, its folder and the
+  database, shown in the Games tab and searchable; a wrong guess is
+  corrected there and kept on the card as a `Kind:` line.
 - Every text box has Cut, Copy, Paste and Select All on a right-click, and
   on a Mac in the Edit menu too: a description can be pasted from the web
   with the mouse.

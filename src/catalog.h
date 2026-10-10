@@ -12,6 +12,16 @@ enum { SM_REGION_USA = 1, SM_REGION_JAPAN = 2, SM_REGION_EUROPE = 4 };
    carried so the browser knows the file when it reads the folder, and
    never listed. */
 enum { SM_FLAG_FAVORITE = 1, SM_FLAG_SET_ASIDE = 2 };
+/* What the game is, in bits 2..4 of its flags: read off its name, its folder
+   and the database by tools/kinds.py, which names the same values. A
+   catalog written before kinds existed has zeros there, which is retail. */
+enum { SM_KIND_SHIFT = 2, SM_KIND_MASK = 7 << 2 };
+typedef enum {
+    SM_KIND_RETAIL = 0,
+    SM_KIND_HACK = 1,
+    SM_KIND_TRANSLATION = 2,
+    SM_KIND_HOMEBREW = 3
+} sm_kind_t;
 /* 8,192 comfortably exceeds known multi-region N64 sets while bounding RAM use. */
 enum { SM_DISCOVERY_MAX_GAMES = 8192 };
 
@@ -34,6 +44,10 @@ typedef struct {
     uint8_t regions;
     uint8_t flags;
 } sm_game_t;
+
+static inline sm_kind_t sm_game_kind(const sm_game_t *game) {
+    return (sm_kind_t)((game->flags & SM_KIND_MASK) >> SM_KIND_SHIFT);
+}
 
 /* A file or folder the card has in the folder being browsed that the
    catalog does not (src/folder_scan.c). A folder's path ends in '/', so
@@ -103,6 +117,8 @@ typedef struct {
     uint8_t players;
     uint8_t regions;
     bool favorites_only;
+    /* 0 for any kind, else the kind plus one. */
+    uint8_t kind;
 } sm_filter_t;
 
 typedef struct {

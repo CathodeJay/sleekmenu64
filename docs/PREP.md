@@ -104,8 +104,9 @@ the card again.
 
 Select a game and the right side is that game as the console shows it: its
 box, drawn exactly as the console draws it, and its title, genre,
-publisher, year, players, region and description, each in a field you can
-type in. A field marked "· yours" holds a value of your own.
+publisher, year, players, kind, region and description, each in a field
+you can type in or pick from. A field marked "· yours" holds a value of
+your own.
 
 Change what you like and press **Save**. Only what you changed is written:
 a field left as the card has it stays the database's or the collection's.
@@ -174,12 +175,14 @@ Publisher: Skelux
 Year: 2011
 Players: 1
 Regions: USA, Japan
+Kind: Hack
 
 A hack with 120 new stars.
 ```
 
 Each header wins over the database and the collection for that one field;
-the first line that is not a header starts the description. A genre the
+the first line that is not a header starts the description. `Kind:` is
+Retail, Hack, Translation or Homebrew (see below). A genre the
 card has not seen becomes its own tab on the console. Pictures and text
 are read when the tool runs, so a new one needs a re-run of the tool, like
 a new game does; Save in the window does both at once.
@@ -201,6 +204,31 @@ still wins; Stop ends it between two boxes.
 **From the window.** The Games tab writes these files for one game or one
 game code and puts them on the card as you save: see
 [Editing a game](#editing-a-game).
+
+## Hacks, translations and homebrew
+
+Each game is given a kind: Retail, Hack, Translation or Homebrew. Nothing
+in a ROM says which, so the tool reads it off what the file gives away, the
+first answer winning:
+
+- **Its name:** "(Hack)", "[h1C]" or "hack" mean a hack; "[T+Eng]",
+  "(Translated)" or "translation" a translation; "(PD)" or "homebrew"
+  homebrew. "(Beta)", "(Proto)", "(Rev 1)" and "(v1.1)" mean a real
+  release the database may not list.
+- **Its folder:** the same words in the name of any folder above it, such
+  as `Hacks/`, `ROM Hacks/`, `Translations/` or `Homebrew/`.
+- **The database:** a dump it knows by checksum is retail; one it knows
+  only by game code is built on a retail game, which almost always means a
+  hack; one whose code it knows without the region letter is usually a
+  translation; one it does not know at all is homebrew.
+
+The name goes first because a hack that never updated its header carries
+the original game's checksum, so the database takes it for retail. The
+console tags a hack HACK, a translation TL and homebrew HB on its row, and
+filters by kind. When a guess is wrong — a revision taken for a hack, a
+hack nobody named — pick the right kind in the Games tab and press Save:
+it is kept as a `Kind:` line in the game's text file, like any fact. The
+Games tab's search finds games by kind too: type "hack".
 
 ## Cheat codes
 

@@ -20,6 +20,12 @@ import unicodedata
 import zlib
 from pathlib import Path, PurePosixPath
 
+# Runnable as a script as well as importable -- see tools/__init__.py.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from tools import kinds
+
 MAGIC = b"EBC1"
 VERSION = 2
 HEADER = struct.Struct("<4sHHIIIIII")
@@ -36,6 +42,7 @@ FLAG_FAVORITE = 1
 # browser knows the file and never lists it, rather than finding it in the
 # folder and taking it for a game the catalog missed.
 FLAG_SET_ASIDE = 2
+# Bits 2..4 are the game's kind: tools/kinds.py.
 
 # Characters the font lacks that have an obvious ASCII spelling. Everything
 # else non-ASCII is decomposed and stripped of its accents; what is left
@@ -169,6 +176,11 @@ def normalize(document: object) -> list[dict[str, object]]:
         favorite = raw.get("favorite", False)
         if not isinstance(favorite, bool):
             raise CatalogError(f"{prefix}.favorite must be boolean")
+        # What the game is (tools/kinds.py); a catalog from before kinds has
+        # none, and that is retail.
+        kind = raw.get("kind") or kinds.RETAIL
+        if kind not in kinds.KINDS:
+            raise CatalogError(f"{prefix}.kind must be one of: " + ", ".join(kinds.KINDS))
         cover_value = raw.get("cover")
         cover = "" if cover_value in (None, "") else _relative_path(cover_value, f"{prefix}.cover")
 
@@ -185,7 +197,7 @@ def normalize(document: object) -> list[dict[str, object]]:
             "year": year,
             "players": players,
             "region_mask": region_mask,
-            "flags": FLAG_FAVORITE if favorite else 0,
+            "flags": (FLAG_FAVORITE if favorite else 0) | kinds.flags(kind),
         })
     aside = document.get("set_aside", [])
     if not isinstance(aside, list):
