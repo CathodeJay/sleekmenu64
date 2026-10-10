@@ -33,7 +33,7 @@ typedef enum {
     SM_C_COUNT
 } sm_colour_role_t;
 
-#define SM_THEME_COUNT 6u
+#define SM_THEME_COUNT 10u
 #define SM_THEME_ID_MAX 15u
 
 #ifdef SM_THEME_TABLE_DEFINE
@@ -201,6 +201,114 @@ static const struct {
         {255, 190,  90},  /* warn */
         {255,  96,  80},  /* error */
         { 81, 189, 211},  /* progress */
+        {200, 170,  70},  /* progress_verify */
+        {235, 245, 255},  /* progress_head */
+    } },
+    { "smoke", "Smoke", {
+        { 12,  13,  13},  /* bg */
+        { 21,  21,  22},  /* bar */
+        { 39,  39,  39},  /* well */
+        { 43,  43,  44},  /* band */
+        { 41,  41,  42},  /* tab */
+        { 30,  30,  31},  /* stripe */
+        { 69,  69,  71},  /* select */
+        { 89,  90,  91},  /* select_hi */
+        {109, 110, 111},  /* thumb */
+        {102, 102, 104},  /* folder */
+        {240, 240, 232},  /* text */
+        {255, 255, 255},  /* text_bright */
+        {189, 189, 189},  /* text_body */
+        {179, 180, 181},  /* text_soft */
+        {150, 150, 151},  /* text_muted */
+        {116, 117, 118},  /* text_dim */
+        { 60,  60,  60},  /* text_faint */
+        {214, 220, 230},  /* accent */
+        { 23,  23,  24},  /* accent_ink */
+        {250, 210,  90},  /* star */
+        {255, 190,  90},  /* warn */
+        {255,  96,  80},  /* error */
+        {120, 121, 123},  /* progress */
+        {200, 170,  70},  /* progress_verify */
+        {235, 245, 255},  /* progress_head */
+    } },
+    { "watermelon", "Watermelon", {
+        { 19,   9,  11},  /* bg */
+        { 31,  17,  20},  /* bar */
+        { 51,  36,  39},  /* well */
+        { 70,  26,  35},  /* band */
+        { 60,  32,  37},  /* tab */
+        { 47,  21,  26},  /* stripe */
+        {107,  48,  60},  /* select */
+        {127,  73,  84},  /* select_hi */
+        {152,  93, 105},  /* thumb */
+        {146,  82,  95},  /* folder */
+        {240, 240, 232},  /* text */
+        {255, 255, 255},  /* text_bright */
+        {219, 201, 205},  /* text_body */
+        {218, 182, 189},  /* text_soft */
+        {183, 152, 158},  /* text_muted */
+        {148, 112, 119},  /* text_dim */
+        { 77,  56,  60},  /* text_faint */
+        {150, 232, 120},  /* accent */
+        { 31,  21,  23},  /* accent_ink */
+        {250, 210,  90},  /* star */
+        {255, 190,  90},  /* warn */
+        {255,  96,  80},  /* error */
+        {194,  77, 100},  /* progress */
+        {200, 170,  70},  /* progress_verify */
+        {235, 245, 255},  /* progress_head */
+    } },
+    { "atomic", "Atomic Purple", {
+        { 10,   8,  20},  /* bg */
+        { 18,  16,  32},  /* bar */
+        { 37,  35,  52},  /* well */
+        { 30,  24,  72},  /* band */
+        { 34,  30,  62},  /* tab */
+        { 24,  20,  48},  /* stripe */
+        { 54,  45, 110},  /* select */
+        { 78,  70, 130},  /* select_hi */
+        { 99,  90, 155},  /* thumb */
+        { 88,  78, 150},  /* folder */
+        {240, 240, 232},  /* text */
+        {255, 255, 255},  /* text_bright */
+        {203, 200, 220},  /* text_body */
+        {185, 180, 220},  /* text_soft */
+        {155, 150, 185},  /* text_muted */
+        {115, 110, 150},  /* text_dim */
+        { 58,  55,  78},  /* text_faint */
+        {226, 212, 255},  /* accent */
+        { 22,  20,  32},  /* accent_ink */
+        {250, 210,  90},  /* star */
+        {255, 190,  90},  /* warn */
+        {255,  96,  80},  /* error */
+        { 87,  70, 200},  /* progress */
+        {200, 170,  70},  /* progress_verify */
+        {235, 245, 255},  /* progress_head */
+    } },
+    { "gold", "Gold", {
+        { 18,  15,  10},  /* bg */
+        { 30,  26,  18},  /* bar */
+        { 50,  46,  37},  /* well */
+        { 66,  54,  30},  /* band */
+        { 58,  50,  34},  /* tab */
+        { 44,  37,  24},  /* stripe */
+        {102,  86,  53},  /* select */
+        {122, 107,  78},  /* select_hi */
+        {147, 131,  98},  /* thumb */
+        {141, 123,  87},  /* folder */
+        {240, 240, 232},  /* text */
+        {255, 255, 255},  /* text_bright */
+        {218, 212, 202},  /* text_body */
+        {215, 205, 185},  /* text_soft */
+        {181, 172, 154},  /* text_muted */
+        {145, 135, 115},  /* text_dim */
+        { 75,  69,  58},  /* text_faint */
+        {255, 214,  92},  /* accent */
+        { 30,  28,  21},  /* accent_ink */
+        {250, 210,  90},  /* star */
+        {255, 190,  90},  /* warn */
+        {255,  96,  80},  /* error */
+        {184, 151,  86},  /* progress */
         {200, 170,  70},  /* progress_verify */
         {235, 245, 255},  /* progress_head */
     } },

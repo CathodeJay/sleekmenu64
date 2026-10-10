@@ -232,7 +232,7 @@ ROM, always comes first. See [Cheats](CONSOLE.md#cheats).
 
 ## Themes
 
-The browser has six sets of colours, built into `SleekMenu64.z64`:
+The browser has ten sets of colours, built into `SleekMenu64.z64`:
 
 | Theme | Looks like |
 |---|---|
@@ -242,6 +242,10 @@ The browser has six sets of colours, built into `SleekMenu64.z64`:
 | Grape | purple with a pink accent |
 | Fire | dark red with an amber accent |
 | Ice | teal with an ice-blue accent |
+| Smoke | near-black with a silver accent |
+| Watermelon | deep red with a green accent |
+| Atomic Purple | indigo with a pale lilac accent |
+| Gold | dark brown with a gold accent |
 
 Choose one under **Console** on the Card tab (`--theme jungle` on the
 command line) and press Update card: the choice is written to

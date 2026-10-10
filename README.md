@@ -58,9 +58,10 @@ its box.
 **Starting the console in SleekMenu:** an X7 can power on straight into
 it; see [below](#starting-the-console-in-sleekmenu-x7-only).
 
-**Themes:** the browser comes in six sets of colours: Midnight, Charcoal,
-Jungle, Grape, Fire and Ice. Change it on the console (Z, then the THEME
-row) or under **Console** on the Game Catalog Manager's Card tab.
+**Themes:** the browser comes in ten sets of colours: Midnight, Charcoal,
+the six Funtastic colours (Jungle, Grape, Fire, Ice, Smoke, Watermelon),
+Atomic Purple and Gold. Change it on the console (Z, then the THEME row)
+or under **Console** on the Game Catalog Manager's Card tab.
 
 The Game Catalog Manager also shows your card the way the console will, and
 lets you give any game your own picture, description or facts; see

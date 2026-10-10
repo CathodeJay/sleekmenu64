@@ -117,6 +117,11 @@ THEMES: tuple[Theme, ...] = (
     Theme("grape", "Grape", tinted(272, (255, 178, 224), saturation=0.95, lightness=1.05)),
     Theme("fire", "Fire", tinted(8, (255, 208, 96), saturation=1.05)),
     Theme("ice", "Ice", tinted(190, (190, 240, 255), saturation=1.1, lightness=1.08)),
+    # The rest of the Funtastic series, and two editions everybody remembers.
+    Theme("smoke", "Smoke", tinted(225, (214, 220, 230), saturation=0.03, lightness=0.9)),
+    Theme("watermelon", "Watermelon", tinted(348, (150, 232, 120), saturation=0.9)),
+    Theme("atomic", "Atomic Purple", tinted(248, (226, 212, 255), saturation=1.0)),
+    Theme("gold", "Gold", tinted(40, (255, 214, 92), saturation=0.75)),
 )
 DEFAULT = THEMES[0]
 #: How long an id or a name may be: the ROM reads the file into a small buffer.

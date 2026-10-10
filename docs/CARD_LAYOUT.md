@@ -70,7 +70,7 @@ everything else it reads in place. One file of the tool's lives outside
 
 `sleekmenu/theme.txt` holds the id of one of the themes built into the
 browser, as its first word: `midnight`, `charcoal`, `jungle`, `grape`,
-`fire` or `ice`. The browser reads the file once as it starts, without
+`fire`, `ice`, `smoke`, `watermelon`, `atomic` (Atomic Purple) or `gold`. The browser reads the file once as it starts, without
 regard to case, and uses Midnight when the file is missing, empty, or names
 a theme that ROM does not have, so a card prepared by a newer tool still
 starts on an older browser. The browser writes the file when the theme is

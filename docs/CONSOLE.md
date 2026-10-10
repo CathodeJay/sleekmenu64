@@ -59,8 +59,8 @@ buttons with their arrow, grey Z, L and R, and a cross for the D-pad.
 
 ## Themes
 
-The colours are a theme: Midnight, Charcoal, Jungle, Grape, Fire and Ice.
-Midnight is the default. To change it, press Z and go to the **THEME** row
+The colours are a theme: Midnight, Charcoal, Jungle, Grape, Fire, Ice,
+Smoke, Watermelon, Atomic Purple and Gold. Midnight is the default. To change it, press Z and go to the **THEME** row
 under the filters (up from the top row gets there at once): left and right
 step through the themes, and the screen takes each one as you do. B keeps
 the choice, on the card in `sleekmenu/theme.txt`, and the browser starts in

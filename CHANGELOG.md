@@ -9,6 +9,8 @@
   after six twenty. The stick leaned part of the way moves one game at a
   time at an even pace, and a worn stick no longer has to be pushed to the
   rim to move at all.
+- Four more themes, making ten: Smoke and Watermelon complete the
+  Funtastic colours, with Atomic Purple and Gold.
 - The grid's covers are sharper: each is shrunk to its tile by averaging
   the pixels it covers, instead of dropping one column and one row in
   three.
