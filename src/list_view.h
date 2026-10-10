@@ -108,14 +108,34 @@ bool sm_glide_moving(const sm_glide_t *glide, float target);
    faster the longer it is held, so a short list is walked one step at a
    time and a long one can be crossed without pressing three thousand
    times. `now_ms` is any clock in milliseconds. Returns true on the polls
-   that should move the cursor. */
+   that should move the cursor.
+
+   How hard it is held matters too. The d-pad, or the stick leaned all the
+   way, runs: quicker and quicker, and after a few seconds in strides of
+   several games (sm_repeat_stride). The stick leaned only part of the way
+   walks: it keeps the first speed and one game at a time, which is how
+   the game you meant is stopped on. Leaning further from a walk starts the
+   run from its first step. */
+typedef enum { SM_LEAN_NONE = 0, SM_LEAN_PART, SM_LEAN_FULL } sm_lean_t;
+
 typedef struct {
     bool down;
-    uint32_t since_ms;   /* when the press started */
+    bool part;           /* held part of the way at the last poll */
+    uint32_t since_ms;   /* when the press, or the run, started */
     uint32_t next_ms;    /* when it next repeats */
 } sm_repeat_t;
 
-enum { SM_REPEAT_DELAY_MS = 300 };
+enum {
+    SM_REPEAT_DELAY_MS = 300,
+    /* A run moves five games a step from here, and twenty from the next. */
+    SM_STRIDE_FIVE_MS = 3000,
+    SM_STRIDE_TWENTY_MS = 6000
+};
+bool sm_repeat_lean(sm_repeat_t *repeat, sm_lean_t lean, uint32_t now_ms);
+/* The d-pad: held is a full lean. */
 bool sm_repeat_fire(sm_repeat_t *repeat, bool down, uint32_t now_ms);
+/* How many games the step that just fired covers: one, then five, then
+   twenty, the longer a run has lasted. Always one for a walk. */
+uint32_t sm_repeat_stride(const sm_repeat_t *repeat, uint32_t now_ms);
 
 #endif

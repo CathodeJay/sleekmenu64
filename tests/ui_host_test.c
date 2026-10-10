@@ -828,6 +828,54 @@ int main(void) {
         assert(ui.item_count == 2u);         /* the folder A and the game Beta */
     }
 
+    /* ---- a long hold moves several games a step ------------------------ */
+    {
+        static row_t rows[50];
+        static char paths[50][16], titles[50][12];
+        sm_actions_t run;
+        for (int i = 0; i < 50; i++) {
+            snprintf(paths[i], sizeof(paths[i]), "s%02d.z64", i);
+            snprintf(titles[i], sizeof(titles[i]), "Game %02d", i);
+            rows[i].path = paths[i]; rows[i].title = titles[i];
+            rows[i].genre = "Racing"; rows[i].flags = 0;
+            rows[i].publisher = ""; rows[i].year = 0;
+        }
+        start(rows, 50u);
+        assert(ui.view == SM_VIEW_LIST && ui.selected == 0u);
+        /* The list: twenty at a time, and no further than its end. */
+        run = PRESS(down); run.step = 20u;
+        frame(run); assert(ui.selected == 20u);
+        frame(run); frame(run); assert(ui.selected == 49u);
+        run = PRESS(up); run.step = 5u;
+        frame(run); assert(ui.selected == 44u);
+        /* A plain press is one game, as ever. */
+        frame(PRESS(up)); assert(ui.selected == 43u);
+        run = PRESS(up); run.step = 20u;
+        frame(run); frame(run); frame(run); assert(ui.selected == 0u);
+        /* The grid: twenty games is five rows, in the same column; five is
+           one row, not five; and left and right move games, not rows. */
+        frame(PRESS(toggle_view)); assert(ui.view == SM_VIEW_GRID);
+        ui.selected = 1u;
+        run = PRESS(down); run.step = 20u;
+        frame(run); assert(ui.selected == 21u);
+        frame(run); assert(ui.selected == 41u);
+        frame(run); assert(ui.selected == 49u);   /* the last row, column two */
+        run = PRESS(up); run.step = 5u;
+        frame(run); assert(ui.selected == 45u);
+        run = PRESS(left); run.step = 20u;
+        frame(run); assert(ui.selected == 25u);
+        run = PRESS(right); run.step = 20u;
+        frame(run); frame(run); assert(ui.selected == 49u);
+        /* Coverflow: twenty along the shelf. */
+        frame(PRESS(toggle_view)); assert(ui.view == SM_VIEW_COVERFLOW);
+        ui.selected = 0u;
+        run = PRESS(right); run.step = 20u;
+        frame(run); assert(ui.selected == 20u);
+        settle();
+        draw();
+        frame(PRESS(toggle_view)); assert(ui.view == SM_VIEW_LIST);
+    }
+
     /* ---- coverflow -------------------------------------------------- */
     {
         static row_t rows[30];

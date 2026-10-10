@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.1.0
+
+### On the console
+
+- Holding a direction now crosses 3,000 games in about fifteen seconds
+  rather than two minutes: after three seconds it moves five games a step,
+  after six twenty. The stick leaned part of the way moves one game at a
+  time at an even pace, and a worn stick no longer has to be pushed to the
+  rim to move at all.
+
 ## 2.0.0
 
 **Upgrading from 1.2:** copy the new `SleekMenu64.z64` over the old one at

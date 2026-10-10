@@ -722,6 +722,14 @@ static uint32_t flow_letter_jump(const sm_ui_t *ui, const sm_catalog_t *catalog,
     return at;
 }
 
+/* `by` games back, or forward, stopping at either end of the list. */
+static uint32_t step_back(uint32_t at, uint32_t by) {
+    return at > by ? at - by : 0u;
+}
+static uint32_t step_on(uint32_t at, uint32_t by, uint32_t count) {
+    return count && at + by < count ? at + by : (count ? count - 1u : 0u);
+}
+
 /* Put the window around the selection. Used after a jump the arrow-key path
    did not make, where first_visible has no relationship to selected yet. */
 static void focus_selected(sm_ui_t *ui, const sm_layout_t *layout) {
@@ -1614,23 +1622,28 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
     if (!ui->item_count) return;
     uint32_t old = ui->selected, old_first = ui->first_visible;
     uint32_t visible = ui->view == SM_VIEW_GRID ? SM_UI_GRID_VISIBLE : (uint32_t)layout->visible_rows;
+    /* A long hold moves several games a step (input.c); a grid row is four
+       of them, so there it moves a quarter as many rows. */
+    uint32_t step = actions.step ? actions.step : 1u;
     if (ui->view == SM_VIEW_GRID) {
-        if (actions.up && ui->selected >= SM_UI_GRID_COLUMNS) ui->selected -= SM_UI_GRID_COLUMNS;
-        if (actions.down && ui->selected + SM_UI_GRID_COLUMNS < ui->item_count) ui->selected += SM_UI_GRID_COLUMNS;
+        uint32_t rows = step >= SM_UI_GRID_COLUMNS ? step / SM_UI_GRID_COLUMNS : 1u;
+        uint32_t above = ui->selected / SM_UI_GRID_COLUMNS;
+        uint32_t below = (ui->item_count - 1u - ui->selected) / SM_UI_GRID_COLUMNS;
+        if (actions.up) ui->selected -= (rows < above ? rows : above) * SM_UI_GRID_COLUMNS;
+        if (actions.down) ui->selected += (rows < below ? rows : below) * SM_UI_GRID_COLUMNS;
         /* Left and right walk the whole grid, not just the row: stopping at a
            row end makes a 4-wide grid feel like four separate lists. */
-        if (actions.left && ui->selected) ui->selected--;
-        if (actions.right && ui->selected + 1u < ui->item_count) ui->selected++;
+        if (actions.left) ui->selected = step_back(ui->selected, step);
+        if (actions.right) ui->selected = step_on(ui->selected, step, ui->item_count);
     } else if (ui->view == SM_VIEW_COVERFLOW) {
         /* The shelf runs left to right, so left and right walk it. Up and down
            do the same rather than nothing, because a d-pad in a hand does not
            know which axis a view thinks it is. */
-        if ((actions.left || actions.up) && ui->selected) ui->selected--;
-        if ((actions.right || actions.down) && ui->selected + 1u < ui->item_count)
-            ui->selected++;
+        if (actions.left || actions.up) ui->selected = step_back(ui->selected, step);
+        if (actions.right || actions.down) ui->selected = step_on(ui->selected, step, ui->item_count);
     } else {
-        if (actions.up && ui->selected > 0) ui->selected--;
-        if (actions.down && ui->selected + 1 < ui->item_count) ui->selected++;
+        if (actions.up) ui->selected = step_back(ui->selected, step);
+        if (actions.down) ui->selected = step_on(ui->selected, step, ui->item_count);
     }
     if (ui->view == SM_VIEW_COVERFLOW) {
         /* One cover at a time is fine for fifteen and hopeless for three

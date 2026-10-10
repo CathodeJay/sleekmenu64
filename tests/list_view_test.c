@@ -346,6 +346,50 @@ int main(void) {
         assert(!sm_repeat_fire(NULL, true, 0u));
     }
 
+    /* ---- leaning and striding ------------------------------------------ */
+    {
+        sm_repeat_t r = {0};
+        int fired = 0;
+        /* A run: one game a step at first, then five, then twenty. */
+        assert(sm_repeat_lean(&r, SM_LEAN_FULL, 0u));
+        assert(sm_repeat_stride(&r, 0u) == 1u);
+        assert(sm_repeat_stride(&r, SM_STRIDE_FIVE_MS - 1u) == 1u);
+        assert(sm_repeat_stride(&r, SM_STRIDE_FIVE_MS) == 5u);
+        assert(sm_repeat_stride(&r, SM_STRIDE_TWENTY_MS) == 20u);
+        /* Twenty a step at the run's top speed crosses a 3,400-game
+           library in about fifteen seconds rather than two minutes and a
+           half, polled once a frame. */
+        for (uint32_t t = 16u; t < 15000u; t += 16u)
+            if (sm_repeat_lean(&r, SM_LEAN_FULL, t)) fired += (int)sm_repeat_stride(&r, t);
+        assert(fired > 3400);
+
+        /* A walk keeps the first speed and one game a step, however long. */
+        sm_repeat_t w = {0};
+        fired = 0;
+        assert(sm_repeat_lean(&w, SM_LEAN_PART, 0u));
+        for (uint32_t t = 16u; t < 10000u; t += 16u) {
+            if (sm_repeat_lean(&w, SM_LEAN_PART, t)) {
+                fired++;
+                assert(sm_repeat_stride(&w, t) == 1u);
+            }
+        }
+        assert(fired >= 70 && fired <= 90);            /* about eight a second */
+        /* Leaning further from there starts a run from its first step: the
+           walk's ten seconds do not count towards the strides. */
+        sm_repeat_lean(&w, SM_LEAN_FULL, 10000u);
+        assert(sm_repeat_stride(&w, 10000u) == 1u);
+        assert(sm_repeat_stride(&w, 10000u + SM_STRIDE_FIVE_MS) == 5u);
+        /* Back to a walk: one a step again. */
+        sm_repeat_lean(&w, SM_LEAN_PART, 14000u);
+        assert(sm_repeat_stride(&w, 14000u) == 1u);
+        /* Letting go is a fresh press next time. */
+        assert(!sm_repeat_lean(&w, SM_LEAN_NONE, 14100u));
+        assert(sm_repeat_lean(&w, SM_LEAN_FULL, 14116u));
+        assert(sm_repeat_stride(&w, 14116u) == 1u);
+        assert(sm_repeat_stride(NULL, 0u) == 1u);
+        assert(!sm_repeat_lean(NULL, SM_LEAN_FULL, 0u));
+    }
+
     printf("list_view host checks passed\n");
     return 0;
 }

@@ -3,6 +3,16 @@
 What SleekMenu does once it is running. The controls are in the
 [README](../README.md#using-it).
 
+## Moving
+
+The D-pad and the stick move the same way. Held, a direction keeps moving,
+faster the longer it is held; after three seconds it moves five games a
+step, after six twenty, so the far end of a 3,000-game library is about
+fifteen seconds away. The stick leaned only part of the way keeps to one
+game at a time at an even pace, for stopping on the one you want; lean it
+all the way to speed up. In the grid, a long hold up or down moves whole
+rows.
+
 ## The screens
 
 C-up cycles the three views. The **list** is for a game you can name: the

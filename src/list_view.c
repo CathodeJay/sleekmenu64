@@ -166,17 +166,36 @@ static uint32_t repeat_interval(uint32_t held_ms) {
     return 40u;
 }
 
-bool sm_repeat_fire(sm_repeat_t *repeat, bool down, uint32_t now_ms) {
+bool sm_repeat_lean(sm_repeat_t *repeat, sm_lean_t lean, uint32_t now_ms) {
+    bool part = lean == SM_LEAN_PART;
     if (!repeat) return false;
-    if (!down) { repeat->down = false; return false; }
+    if (lean == SM_LEAN_NONE) { repeat->down = false; repeat->part = false; return false; }
     if (!repeat->down) {
         repeat->down = true;
+        repeat->part = part;
         repeat->since_ms = now_ms;
         repeat->next_ms = now_ms + SM_REPEAT_DELAY_MS;
         return true;
     }
+    /* From a walk to a run, the run starts at its first speed rather than
+       at whatever the walk's clock says. */
+    if (repeat->part && !part) repeat->since_ms = now_ms;
+    repeat->part = part;
     /* Unsigned differences, so a clock that wraps is still in order. */
     if ((int32_t)(now_ms - repeat->next_ms) < 0) return false;
-    repeat->next_ms = now_ms + repeat_interval(now_ms - repeat->since_ms);
+    repeat->next_ms = now_ms + repeat_interval(part ? 0u : now_ms - repeat->since_ms);
     return true;
+}
+
+bool sm_repeat_fire(sm_repeat_t *repeat, bool down, uint32_t now_ms) {
+    return sm_repeat_lean(repeat, down ? SM_LEAN_FULL : SM_LEAN_NONE, now_ms);
+}
+
+uint32_t sm_repeat_stride(const sm_repeat_t *repeat, uint32_t now_ms) {
+    uint32_t held;
+    if (!repeat || !repeat->down || repeat->part) return 1u;
+    held = now_ms - repeat->since_ms;
+    if (held < (uint32_t)SM_STRIDE_FIVE_MS) return 1u;
+    if (held < (uint32_t)SM_STRIDE_TWENTY_MS) return 5u;
+    return 20u;
 }
