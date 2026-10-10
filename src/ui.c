@@ -3,6 +3,7 @@
 #include "card_paths.h"
 #include <stdlib.h>
 #include "list_view.h"
+#include "picture.h"
 #include "launch.h"
 #include "flashcart.h"
 #include "buttons.h"
@@ -253,6 +254,8 @@ static void unload_slots(sm_ui_t *ui) {
     for (int i = 0; i < SM_UI_SLOTS_MAX; i++) {
         if (ui->slot_sprites[i]) sprite_free(ui->slot_sprites[i]);
         ui->slot_sprites[i] = NULL;
+        free(ui->slot_tiles[i]);
+        ui->slot_tiles[i] = NULL;
         ui->slot_indices[i] = UINT32_MAX;
         ui->slot_pending[i] = false;
     }
@@ -380,10 +383,10 @@ static void draw_cover(surface_t *surface, int x, int y, sprite_t *sprite) {
         y + (COVER_HEIGHT - sprite->height) / 2, sprite);
 }
 
-/* Nearest-neighbour, straight into the framebuffer. The alternative was a
-   second set of art at tile size, which would have doubled what the ROM
-   carries for a view most people pass through. Twelve tiles is about 37,000
-   pixels a frame, which is a few milliseconds of plain stores. */
+/* Nearest-neighbour, straight into the framebuffer: the grid's tile for a
+   cover whose shrunk tile is not made yet (make_tile), and the box view's
+   doubled thumbnail. Twelve tiles is about 37,000 pixels a frame, which is a
+   few milliseconds of plain stores. */
 static void draw_cover_scaled(surface_t *dst, int x, int y, sprite_t *sprite,
     int width, int height) {
     surface_t src = sprite_get_pixels(sprite);
@@ -580,6 +583,7 @@ static void load_selected_cover(sm_ui_t *ui, const sm_catalog_t *catalog) {
    eight of which are the same pictures. */
 static void sync_slots(sm_ui_t *ui, int32_t base, uint32_t count) {
     sprite_t *held[SM_UI_SLOTS_MAX];
+    uint16_t *held_tile[SM_UI_SLOTS_MAX];
     uint32_t held_index[SM_UI_SLOTS_MAX];
     bool held_pending[SM_UI_SLOTS_MAX];
     bool taken[SM_UI_SLOTS_MAX];
@@ -590,10 +594,12 @@ static void sync_slots(sm_ui_t *ui, int32_t base, uint32_t count) {
        to release the other five rather than lose them. */
     for (slot = 0; slot < SM_UI_SLOTS_MAX; slot++) {
         held[slot] = ui->slot_sprites[slot];
+        held_tile[slot] = ui->slot_tiles[slot];
         held_index[slot] = ui->slot_indices[slot];
         held_pending[slot] = ui->slot_pending[slot];
         taken[slot] = false;
         ui->slot_sprites[slot] = NULL;
+        ui->slot_tiles[slot] = NULL;
         ui->slot_indices[slot] = UINT32_MAX;
         ui->slot_pending[slot] = false;
     }
@@ -607,6 +613,7 @@ static void sync_slots(sm_ui_t *ui, int32_t base, uint32_t count) {
         for (other = 0; other < SM_UI_SLOTS_MAX; other++) {
             if (taken[other] || held_index[other] != item) continue;
             ui->slot_sprites[slot] = held[other];
+            ui->slot_tiles[slot] = held_tile[other];
             taken[other] = true;
             /* Carried as it was: a cover still waiting to be read keeps
                waiting. Marking it done because its item was already in the
@@ -616,10 +623,33 @@ static void sync_slots(sm_ui_t *ui, int32_t base, uint32_t count) {
             break;
         }
     }
-    for (other = 0; other < SM_UI_SLOTS_MAX; other++)
-        if (!taken[other] && held[other]) sprite_free(held[other]);
+    for (other = 0; other < SM_UI_SLOTS_MAX; other++) {
+        if (taken[other]) continue;
+        if (held[other]) sprite_free(held[other]);
+        free(held_tile[other]);
+    }
     ui->slot_base = base;
     ui->slot_count = count;
+}
+
+/* A slot's cover at tile size, for the grid. Nothing to make for a cover
+   already that size, or one not in the format the framebuffer is. */
+static bool make_tile(sm_ui_t *ui, uint32_t slot) {
+    sprite_t *sprite = ui->slot_sprites[slot];
+    surface_t pixels;
+    uint16_t *tile;
+    if (!sprite || ui->slot_tiles[slot]) return false;
+    if (sprite->width < SM_UI_TILE_WIDTH || sprite->height < SM_UI_TILE_HEIGHT ||
+        (sprite->width == SM_UI_TILE_WIDTH && sprite->height == SM_UI_TILE_HEIGHT))
+        return false;
+    pixels = sprite_get_pixels(sprite);
+    if (surface_get_format(&pixels) != FMT_RGBA16 || !pixels.buffer) return false;
+    tile = malloc((size_t)SM_UI_TILE_WIDTH * SM_UI_TILE_HEIGHT * sizeof(*tile));
+    if (!tile) return false;
+    sm_picture_shrink(pixels.buffer, sprite->width, sprite->height, pixels.stride / 2,
+        tile, SM_UI_TILE_WIDTH, SM_UI_TILE_HEIGHT, SM_UI_TILE_WIDTH);
+    ui->slot_tiles[slot] = tile;
+    return true;
 }
 
 /* One tile per frame. Twelve covers is about a fifth of a second of card
@@ -636,8 +666,23 @@ static void load_slot_step(sm_ui_t *ui, const sm_catalog_t *catalog) {
         if (!ui->slot_pending[slot]) continue;
         ui->slot_pending[slot] = false;
         ui->slot_sprites[slot] = load_item_cover(ui->slot_indices[slot], catalog, &ui->covers);
+        if (ui->view == SM_VIEW_GRID) make_tile(ui, slot);
         return;
     }
+    /* Everything read: covers carried over from coverflow still need their
+       tiles, one a frame like the reads. */
+    if (ui->view == SM_VIEW_GRID)
+        for (uint32_t slot = 0; slot < ui->slot_count; slot++)
+            if (make_tile(ui, slot)) return;
+}
+
+/* A tile made by make_tile, copied as it is. */
+static void draw_tile(surface_t *dst, int x, int y, const uint16_t *tile) {
+    if (surface_get_format(dst) != FMT_RGBA16) return;
+    if (x < 0 || y < 0 || x + SM_UI_TILE_WIDTH > dst->width || y + SM_UI_TILE_HEIGHT > dst->height) return;
+    for (int row = 0; row < SM_UI_TILE_HEIGHT; row++)
+        memcpy((uint8_t *)dst->buffer + (size_t)(y + row) * dst->stride + (size_t)x * 2u,
+            tile + (size_t)row * SM_UI_TILE_WIDTH, (size_t)SM_UI_TILE_WIDTH * 2u);
 }
 
 /* The first character of an item's title, folded and reduced to a bucket:
@@ -1999,7 +2044,9 @@ static void draw_grid(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
             draw_folder_tile(s, x, y, name, selected);
             continue;
         }
-        if (ui->slot_sprites[slot])
+        if (ui->slot_tiles[slot])
+            draw_tile(s, x, y, ui->slot_tiles[slot]);
+        else if (ui->slot_sprites[slot])
             draw_cover_scaled(s, x, y, ui->slot_sprites[slot],
                 SM_UI_TILE_WIDTH, SM_UI_TILE_HEIGHT);
         else {

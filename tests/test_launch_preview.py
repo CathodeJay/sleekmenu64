@@ -106,7 +106,7 @@ class HostModuleTests(unittest.TestCase):
         sources = ["tests/ui_host_test.c", "tests/stubs/libdragon_stub.c",
                    "src/ui.c", "src/theme.c", "src/buttons.c", "src/genre.c", "src/favorites.c",
                    "src/history.c",
-                   "src/list_view.c", "src/save_type.c", "src/cover_pack.c",
+                   "src/list_view.c", "src/picture.c", "src/save_type.c", "src/cover_pack.c",
                    "src/folder_scan.c", "src/rom_db.c"] + CHEATS_SOURCES
         for packed in (False, True):
             with self.subTest(covers="pack" if packed else "loose"), \
@@ -153,6 +153,10 @@ class HostModuleTests(unittest.TestCase):
     def test_host_list_view_module(self):
         build_and_run("list-view-test",
                       ["src/list_view.c", "tests/list_view_test.c"])
+
+    def test_host_picture_module(self):
+        build_and_run("picture-test",
+                      ["src/picture.c", "tests/picture_test.c"])
 
     def test_host_save_io_module(self):
         build_and_run("save-io-test",
@@ -492,8 +496,11 @@ class AssetLoadTests(unittest.TestCase):
         body = ui[start:ui.index("\n}\n", start)]
         self.assertIn("held_index[other] != item", body)
         self.assertIn("ui->slot_pending[slot] = false;", body)
-        # only sprites nothing claimed are released
-        self.assertIn("if (!taken[other] && held[other]) sprite_free(held[other]);", body)
+        # only sprites nothing claimed are released, with their tiles
+        self.assertIn("if (taken[other]) continue;", body)
+        self.assertIn("if (held[other]) sprite_free(held[other]);", body)
+        self.assertIn("free(held_tile[other]);", body)
+        self.assertIn("ui->slot_tiles[slot] = held_tile[other];", body)
         # and the fill is one tile per call, not twelve
         step = ui[ui.index("static void load_slot_step"):]
         step = step[:step.index("\n}\n")]

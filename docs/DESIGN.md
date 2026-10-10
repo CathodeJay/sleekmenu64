@@ -212,6 +212,7 @@ On the console the work is split into small modules:
 | `catalog` | bounded parsing and CRC check of the catalog |
 | `folder_scan` | the folder being browsed read off the card for what the catalog does not know; the name rules the whole-card scan shares |
 | `cover_pack` | binary-searched cover lookup in `covers.pak` |
+| `picture` | a cover shrunk by averaging, for the grid's tiles |
 | `ui` | list, grid and coverflow views, filters, the launch card, the box view, the cheats page |
 | `theme` | the colours, by what each is for; the built-in themes and the card's choice of one |
 | `buttons` | the controller's buttons as pictures, and the help bar's lines of them |
@@ -301,7 +302,10 @@ inside a ROM, so nothing is read while the cursor moves: a cover and the
 highlighted game's save type are read a tenth of a second after you stop.
 The grid keeps the covers already on screen and fills the new row one cover
 per frame; coverflow carries six of its seven covers across a step and reads
-one. A cover still waiting to be read when the window moves again keeps
+one. The grid's tiles are 64×48, the most a four-by-three grid fits in the
+safe area, and each is made once from the 96×72 cover by averaging the
+pixels it covers, kept with the cover while it stays on screen: shrinking
+by dropping pixels, every frame, lost one column and one row in three. A cover still waiting to be read when the window moves again keeps
 waiting: it is carried across as pending, not as read. Covers live in a single `covers.pak` because opening a file by name on a
 FAT card walks the folder from the start, and with long names that is over
 100 KB of reading per picture.

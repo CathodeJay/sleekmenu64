@@ -123,6 +123,12 @@ typedef struct {
        large cover for this game, and the view doubles the thumbnail. */
     sprite_t *box_sprite;
     sprite_t *slot_sprites[SM_UI_SLOTS_MAX];
+    /* The grid's tiles: each slot's cover shrunk to tile size once, by
+       averaging (picture.h), rather than every frame by dropping pixels.
+       Made when the grid loads a cover, and for covers carried over from
+       coverflow one a frame; NULL until then, and for a cover already
+       tile-sized. They travel with their sprite when the window moves. */
+    uint16_t *slot_tiles[SM_UI_SLOTS_MAX];
     uint32_t slot_indices[SM_UI_SLOTS_MAX];
     /* Which slots have not been looked up yet. A scroll keeps the sprites for
        tiles still on screen and fills the rest one per frame, rather than

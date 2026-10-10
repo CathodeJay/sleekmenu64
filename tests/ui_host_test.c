@@ -560,6 +560,23 @@ int main(void) {
         assert(ui.view == SM_VIEW_GRID);
         settle();
         assert(ui.cover_sprite == NULL);      /* the grid has not needed it */
+        /* Each cover is shrunk to its tile once, when it is read, and the
+           grid draws the tile rather than dropping pixels every frame. */
+        assert(ui.slot_sprites[0] && ui.slot_sprites[1]);
+        assert(ui.slot_tiles[0] && ui.slot_tiles[1]);
+        draw();
+        /* Into coverflow and back: the covers carried over keep their
+           tiles, and none is made twice. */
+        {
+            uint16_t *first = ui.slot_tiles[0];
+            frame(PRESS(toggle_view));        /* coverflow */
+            settle();
+            frame(PRESS(toggle_view));        /* the list */
+            frame(PRESS(toggle_view));        /* the grid again: read afresh */
+            settle();
+            assert(ui.slot_tiles[0] && ui.slot_tiles[1]);
+            (void)first;
+        }
 
         frame(PRESS(select));                 /* A on a game */
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
