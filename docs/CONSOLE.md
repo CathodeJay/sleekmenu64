@@ -45,7 +45,8 @@ jump to the next letter of the alphabet instead of paging.
 **The details**: A on a game. The box, the year, publisher, genre, region
 and players, the save type, how many cheats are on, the size and what the
 game needs (a Controller Pak, a Rumble Pak), then the description, which
-scrolls. Start plays; C-up switches between a fast and a verified load; C-down
+scrolls. A game with [screenshots](#screenshots) shows them as two small
+pictures at the right of the facts. Start plays; C-up switches between a fast and a verified load; C-down
 opens the cheats; Z shows the diagnostics.
 
 ![The details: the box on the left; the title, year, publisher, genre, region, players, save type, cheats, size and needed accessories beside it; the description below](screenshots/detail.png)
@@ -53,7 +54,8 @@ opens the cheats; Z shows the diagnostics.
 **The box**, full screen: A on a game's details. It is drawn from
 `covers-large.pak`, which the tool writes beside the small pack: the
 collection's scan uncropped at its own size, or, after `--hires`, the
-512-pixel box fitted to the screen. B goes back; Start still plays.
+512-pixel box fitted to the screen. B goes back; Start still plays. For a
+game with screenshots, left and right turn to them.
 
 Z opens the **filter** from any view: genre (with a count for each), region,
 players, publisher, year, favourites and kind, combined. Z again clears it,
@@ -66,6 +68,22 @@ The bar along the bottom of every screen says what the buttons do on that
 screen. Each button is a small picture in the colour it has on the
 controller: a blue A, a green B, a red Start with an S, the yellow C
 buttons with their arrow, grey Z, L and R, and a cross for the D-pad.
+
+## Screenshots
+
+When the Game Catalog Manager fetched them, or you gave a game your own
+([PREP.md](PREP.md#screenshots)), a game has two screenshots: its title
+screen and a moment of play. The details show both as thumbnails at the
+right of the facts, the title screen above; the facts beside them are cut
+a little shorter, and the box and the description stay where they are. In
+the box view, left and right turn from the box to the title screen and to
+the game in play, then round to the box again; the title band names the
+pictures the game has and lights the one on screen. Each picture is read
+from the card as it is turned to.
+
+A game without screenshots looks as it always did. They come from
+`shots.pak` and `shots-large.pak`; a card without them, or a SleekMenu from
+before them, simply has none.
 
 ## Themes
 

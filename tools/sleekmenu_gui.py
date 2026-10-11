@@ -43,8 +43,8 @@ if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
 from tools import (card_catalog, card_layout, cheat_codes, coverdb, custom_art, direct_boot, fetch, genre_map,
-                   hires, kinds, library, make_sprite, metadata_repo, progress, provenance, sleekmenu_prep,
-                   themes, version)
+                   hires, kinds, library, make_sprite, metadata_repo, progress, provenance, shots,
+                   sleekmenu_prep, themes, version)
 from tools.metadata_repo import MetadataRepo
 
 TITLE = f"Game Catalog Manager — SleekMenu 64 {version.VERSION}"
@@ -56,6 +56,9 @@ COFFEE_URL = "https://buymeacoffee.com/CathodeJay"
 #: nothing is downloaded.
 CHEATS_HINT = "From libretro, for the games the EverDrive's cheat pack does not cover. Needs an Expansion Pak."
 CHEATS_OFFLINE = "Not while downloads are off."
+#: Under Fetch screenshots.
+SHOTS_HINT = ("The title screen and a moment of play for each retail game, from libretro, for the details "
+              "screen and the box view. About 0.4 MB a game on the card.")
 #: The colours of a theme shown beside its name, in this order.
 SWATCH_ROLES = ("bg", "band", "select", "accent", "text")
 #: The box is 96x72 on the console; twice that on a desktop screen is
@@ -240,9 +243,10 @@ def card_status(card: Path | None, offline: bool = False, roms: list[str] | None
 STEPS = ("Read your games", "Fetch boxes and descriptions", "Build the catalog", "Write it to the card")
 #: The run's passes, by the label their progress carries, and the step each
 #: belongs to.
-STEP_OF_PASS = {"scanning": 0, "checksums": 0, "fetching": 1, "boxes": 1, "cheats": 1, "sprites": 2}
+STEP_OF_PASS = {"scanning": 0, "checksums": 0, "fetching": 1, "boxes": 1, "cheats": 1, "screenshots": 1,
+                "sprites": 2, "shots": 2}
 #: Lines of the report that start a step with no pass of its own.
-STEP_OF_LINE = (("writing:", 3), ("covers:", 2), ("hires:", 1), ("cheats:", 1),
+STEP_OF_LINE = (("writing:", 3), ("covers:", 2), ("hires:", 1), ("cheats:", 1), ("shots:    ", 1),
                 ("metadata: not on the card", 1))
 
 
@@ -281,6 +285,9 @@ class Steps:
         elif label == "cheats":
             self.notes[step] = (plural(total, "cheat file") if count >= total
                                 else f"{count:,} of {total:,} cheat files")
+        elif label == "screenshots":
+            self.notes[step] = (plural(total, "screenshot") if count >= total
+                                else f"{count:,} of {total:,} screenshots")
         elif label == "sprites":
             self.notes[step] = plural(total, "cover") if count >= total else f"{count:,} of {total:,} covers"
 
@@ -318,7 +325,8 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
                 f"and press {status.action} again.")
     unreached = [plural(count, one, many) for count, one, many in (
         (getattr(outcome, "boxes_unreached", 0), "box", "boxes"),
-        (getattr(outcome, "cheats_unreached", 0), "cheat file", None)) if count]
+        (getattr(outcome, "cheats_unreached", 0), "cheat file", None),
+        (getattr(outcome, "shots_unreached", 0), "screenshot", None)) if count]
     if unreached:
         return (f"Done, but {' and '.join(unreached)} could not be downloaded. "
                 f"Press {status.action} again when the connection is back.")
@@ -474,7 +482,8 @@ def collection_status(card: Path | None, chosen: str = "", offline: bool = False
 def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: bool = False,
                  rebuild: bool = False, offline: bool = False, remembered: bool = False,
                  cheats: bool = False, cheats_remembered: bool = False,
-                 direct_boot: bool | None = None, theme: str | None = None) -> sleekmenu_prep.Options:
+                 direct_boot: bool | None = None, theme: str | None = None,
+                 shots: bool = False, shots_remembered: bool = False) -> sleekmenu_prep.Options:
     """The window's choices as the run takes them. An empty collection
     means whatever is on the card, fetched when there is none. An empty
     games folder is the whole card, said so: the field shows what the card
@@ -487,7 +496,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
     window; --no-large-covers is the terminal's.
     Cheat codes are the owner's choice: ticked, they are asked for, or kept
     complete on a card that already asked (`cheats_remembered`); unticked,
-    the card is told to stop. `direct_boot` is the X7's start-up switch as
+    the card is told to stop. Screenshots the same way (`shots`,
+    `shots_remembered`). `direct_boot` is the X7's start-up switch as
     the tab shows it, None on a card that has no such switch. `theme` is
     the id of the colours chosen for the browser."""
     return sleekmenu_prep.Options(
@@ -498,6 +508,7 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
         no_download=bool(offline),
         hires=None if remembered and not rebuild else True,
         cheats=False if not cheats else None if cheats_remembered and not rebuild else True,
+        shots=False if not shots else None if shots_remembered and not rebuild else True,
         direct_boot=direct_boot,
         theme=theme,
         rebuild=bool(rebuild),
@@ -523,7 +534,10 @@ STATE_PENDING = "pending"    # a catalogued game with an edit the next update wi
 FIELDS = {"title": "", "genre": "", "publisher": "", "year": 0, "players": 0, "regions": [], "kind": "",
           "description": ""}
 FIELD_LABELS = {"title": "Title", "genre": "Genre", "publisher": "Publisher", "year": "Year", "kind": "Kind",
-                "players": "Players", "regions": "Region", "description": "Description", "cover": "box"}
+                "players": "Players", "regions": "Region", "description": "Description", "cover": "box",
+                "shot_title": "title screen", "shot_snap": "in-game picture"}
+#: The two screenshots (tools/shots.py), as the window names them.
+SHOT_LABELS = {"title": "Title screen", "snap": "In game"}
 REGION_ORDER = ("USA", "JAPAN", "EUROPE")
 REGION_LABELS = {"USA": "USA", "JAPAN": "Japan", "EUROPE": "Europe"}
 KIND_BY_NAME = {name: kind for kind, name in kinds.NAMES.items()}
@@ -559,8 +573,14 @@ def lacks(game: dict) -> list[str]:
     return missing
 
 
+def edited(game: dict) -> bool:
+    """Whether anything of a game's is its owner's: a field, the box, a
+    screenshot."""
+    return provenance.edited(game.get("sources") or {}) or provenance.edited(game.get("shot_sources") or {})
+
+
 def is_changed(game: dict, pending) -> bool:
-    return pending is not None or provenance.edited(game.get("sources") or {})
+    return pending is not None or edited(game)
 
 
 def status_of(record: dict, pending=None) -> str:
@@ -576,7 +596,7 @@ def status_of(record: dict, pending=None) -> str:
     missing = lacks(record)
     if missing:
         return "No " + ", no ".join(missing)
-    if provenance.edited(record.get("sources") or {}):
+    if edited(record):
         return "Changed by me"
     return ""
 
@@ -660,6 +680,7 @@ def pending_line(pending) -> str:
     changed = [FIELD_LABELS[name].lower() for name in FIELDS if name in pending.fields]
     if pending.picture is not None:
         changed.append("box")
+    changed += [FIELD_LABELS["shot_" + slot] for slot in getattr(pending, "shots", ())]
     if changed:
         parts.append("Changed here, not on the card yet: " + ", ".join(changed) + ".")
     if pending.removed:
@@ -943,6 +964,180 @@ class BoxPicker:
         self.tab.picker = None
 
 
+class ShotsWindow:
+    """A game's two screenshots, the title screen and the game in play
+    (tools/shots.py): what the card has, as the box view draws it, and the
+    owner's own put in or taken out. A picture chosen here is copied into
+    sleekmenu/art/ at once, under the ROM's name, the way Save writes a
+    box; closing the window puts the change on the card."""
+
+    def __init__(self, tab, game: dict):
+        tk, ttk = tab.tk, tab.ttk
+        self.tab, self.game = tab, game
+        self.changed: set[str] = set()
+        self.photos: dict[str, object] = {}
+        self.pictures: dict[str, object] = {}
+        self.sources: dict[str, object] = {}
+        self.removers: dict[str, object] = {}
+        self.note = tk.StringVar()
+        window = self.window = tk.Toplevel(tab.frame)
+        window.title("Screenshots")
+        window.transient(tab.frame.winfo_toplevel())
+        window.resizable(False, False)
+        window.protocol("WM_DELETE_WINDOW", self.close)
+        frame = ttk.Frame(window, padding=16)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text=str(game.get("title", "")), font=tab.strong).grid(row=0, column=0, columnspan=2,
+                                                                                sticky="w")
+        width, height = shots.CANVAS
+        self.blank = tk.PhotoImage(master=window, format="PPM",
+                                   data=make_sprite.to_ppm(width, height, bytes((35, 42, 52)) * (width * height)))
+        for column, slot in enumerate(shots.SLOTS):
+            pane = ttk.Frame(frame)
+            pane.grid(row=1, column=column, sticky="nw", padx=(0 if not column else 14, 0), pady=(12, 0))
+            ttk.Label(pane, text=SHOT_LABELS[slot]).grid(row=0, column=0, columnspan=2, sticky="w")
+            picture = ttk.Label(pane, image=self.blank, text="", compound="center", foreground="#8291a0")
+            picture.grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            self.pictures[slot] = picture
+            source = tk.StringVar()
+            self.sources[slot] = source
+            ttk.Label(pane, textvariable=source, foreground=tab.colors["muted"], wraplength=width,
+                      justify="left").grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
+            ttk.Button(pane, text="Choose…", command=lambda slot=slot: self.choose(slot)).grid(
+                row=3, column=0, sticky="w", pady=(6, 0))
+            remover = ttk.Button(pane, text="Remove mine", command=lambda slot=slot: self.remove(slot))
+            remover.grid(row=3, column=1, sticky="e", pady=(6, 0))
+            self.removers[slot] = remover
+            if tab.drop_works:
+                for target in (pane, picture):
+                    enable_drop(target, lambda files, slot=slot: self.dropped(slot, files))
+        ttk.Label(frame, textvariable=self.note, foreground=tab.colors["muted"], wraplength=2 * width + 14,
+                  justify="left").grid(row=2, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        if not self.note.get():
+            self.note.set("A PNG or JPEG of your own, any size" + (", chosen or dropped on its side" if
+                                                                  tab.drop_works else "")
+                          + ". Downloads never replace it.")
+        ttk.Button(frame, text="Close", command=self.close, default="active").grid(row=3, column=1, sticky="e",
+                                                                                 pady=(14, 0))
+        self.refresh()
+        try:
+            window.grab_set()
+        except tk.TclError:
+            pass
+
+    def fitted(self, image):
+        from PIL import Image
+        width, height = shots.CANVAS
+        image = image.convert("RGB")
+        image.thumbnail((width, height))
+        canvas = Image.new("RGB", (width, height), (35, 42, 52))
+        canvas.paste(image, ((width - image.width) // 2, (height - image.height) // 2))
+        return self.tab.tk.PhotoImage(master=self.window, format="PPM",
+                                      data=make_sprite.to_ppm(width, height, canvas.tobytes()))
+
+    def own_photo(self, path: Path):
+        try:
+            from PIL import Image
+            with Image.open(path) as image:
+                return self.fitted(image)
+        except (ImportError, OSError, ValueError):
+            return None
+
+    def refresh(self) -> None:
+        """Each side as it stands: the owner's picture when it is not on
+        the card yet, else what the card has, else nothing."""
+        card = self.tab.card_of()
+        if card is None:
+            return
+        own = custom_art.own_shots(card, self.game)
+        pending = self.tab.pending.get(str(self.game.get("path", "")))
+        waiting = set(getattr(pending, "shots", ())) | self.changed
+        sources = self.game.get("shot_sources") or {}
+        for slot in shots.SLOTS:
+            mine = own.get(slot)
+            photo, words, text = None, "", ""
+            if mine is not None and slot in waiting:
+                photo = self.own_photo(mine)
+                words = "Yours, not on the card yet: it is put there when this window closes."
+            else:
+                pixels = self.tab.shots.pixels(self.game, slot) if self.tab.shots is not None else None
+                if pixels is not None:
+                    width, height, rgb = pixels
+                    photo = self.tab.tk.PhotoImage(master=self.window, format="PPM",
+                                                   data=make_sprite.to_ppm(width, height, rgb))
+                    label = str(sources.get(slot, ""))
+                    words = ("Yours." if provenance.is_yours(label) else
+                             "From libretro, changed since it was fetched." if label == provenance.COVER_LIBRETRO_MODIFIED
+                             else "From libretro.")
+                else:
+                    text = "NONE"
+                    words = ("None. Hacks, translations and homebrew get only their owner's."
+                             if (self.game.get("kind") or kinds.RETAIL) != kinds.RETAIL else
+                             "None. Fetch screenshots on the Card tab, or choose one.")
+            if mine is not None and mine.parent != custom_art.art_dir(card):
+                words += " Yours sits beside the ROM; to remove it, delete that file yourself."
+            self.photos[slot] = photo
+            self.pictures[slot].configure(image=photo or self.blank, text=text)
+            self.sources[slot].set(words)
+            self.removers[slot].configure(state="normal" if mine is not None and mine.parent ==
+                                          custom_art.art_dir(card) else "disabled")
+
+    def take(self, slot: str, path: Path) -> bool:
+        card = self.tab.card_of()
+        if card is None:
+            return False
+        try:
+            custom_art.save_shot(card, self.game, slot, path)
+        except (custom_art.EditError, OSError) as error:
+            self.note.set(f"Not saved: {error}")
+            return False
+        self.changed.add(slot)
+        self.note.set(f"{SHOT_LABELS[slot]}: saved.")
+        self.refresh()
+        return True
+
+    def choose(self, slot: str) -> None:
+        from tkinter import filedialog
+        chosen = filedialog.askopenfilename(
+            parent=self.window, title=SHOT_LABELS[slot],
+            filetypes=[("PNG or JPEG", "*.png *.jpg *.jpeg"), ("All files", "*")])
+        if chosen:
+            self.take(slot, Path(chosen))
+
+    def dropped(self, slot: str, files: list[str]) -> None:
+        if not files:
+            return
+        chosen = Path(files[0])
+        if chosen.suffix.casefold() not in custom_art.ART_SUFFIXES:
+            self.note.set(f"{chosen.name} is not a PNG or JPEG.")
+            return
+        self.take(slot, chosen)
+
+    def remove(self, slot: str) -> None:
+        card = self.tab.card_of()
+        if card is None:
+            return
+        try:
+            removed = custom_art.remove_shot(card, self.game, slot)
+        except OSError as error:
+            self.note.set(f"Not removed: {error}")
+            return
+        if removed:
+            self.changed.add(slot)
+            self.note.set(f"{SHOT_LABELS[slot]}: yours is removed; what the card had before comes back.")
+        self.refresh()
+
+    def close(self) -> None:
+        try:
+            self.window.grab_release()
+        except Exception:  # noqa: BLE001 -- a window already gone has no grab
+            pass
+        self.window.destroy()
+        self.tab.shots_window = None
+        if self.changed:
+            self.tab.shots_saved(str(self.game.get("path", "")))
+
+
 class EditMenu:
     """Cut, Copy, Paste and Select All on every text box, from the mouse.
 
@@ -1105,6 +1300,8 @@ class GamesTab:
         self.pending: dict[str, custom_art.Pending] = {}
         self.photo = None
         self.picker = None
+        self.shots = None                     # the card's shots-large.pak, for the screenshots window
+        self.shots_window = None
         self.shown_path: str | None = None    # the game in the panel
         self._scratch = None
         self.show = tk.StringVar(value=SHOW_ALL)
@@ -1205,6 +1402,8 @@ class GamesTab:
                   justify="left").grid(row=0, column=0, sticky="w")
         self.box_button = ttk.Button(under, text="Change box…", command=self.choose_box)
         self.box_button.grid(row=0, column=1, sticky="ne")
+        self.shots_button = ttk.Button(under, text="Screenshots…", command=self.open_shots)
+        self.shots_button.grid(row=1, column=1, sticky="ne", pady=(4, 0))
         # A picture dropped on the box, or anywhere on the panel around it,
         # is the same as choosing it; said only where it works.
         self.drop_works = enable_drop(self.box, self.dropped)
@@ -1212,7 +1411,7 @@ class GamesTab:
             for around in (right, head, picture, under):
                 enable_drop(around, self.dropped)
             ttk.Label(under, text="Or drop a PNG or JPEG on the box.", foreground=muted,
-                      wraplength=width, justify="left").grid(row=1, column=0, columnspan=2, sticky="w",
+                      wraplength=width, justify="left").grid(row=2, column=0, columnspan=2, sticky="w",
                                                              pady=(2, 0))
 
         self.labels: dict[str, object] = {}
@@ -1288,7 +1487,7 @@ class GamesTab:
     def reload(self) -> None:
         """Read catalog.json and covers.pak off the card again."""
         card = self.card_of()
-        self.document, self.covers, self.games = None, None, {}
+        self.document, self.covers, self.shots, self.games = None, None, None, {}
         if card is None:
             self.note.set("No card picked.")
         else:
@@ -1301,6 +1500,7 @@ class GamesTab:
                 self.note.set(broken or card_catalog.why_missing(card))
             else:
                 self.covers = card_catalog.Covers.open(card)
+                self.shots = card_catalog.Shots.open(card)
                 self.games = {str(game["path"]): game for game in self.document["games"]}
                 self.note.set("")
         self.rows = card_rows(card, self.document)
@@ -1454,6 +1654,7 @@ class GamesTab:
         for widget in self.inputs:
             widget.configure(state="normal" if editable else "disabled")
         self.box_button.configure(state="normal" if catalogued else "disabled")
+        self.shots_button.configure(state="normal" if catalogued else "disabled")
         self.players_box.configure(state="readonly" if editable else "disabled")
         self.kind_box.configure(state="readonly" if editable else "disabled")
         self.text.configure(state="normal" if editable else "disabled")
@@ -1570,6 +1771,18 @@ class GamesTab:
         if game is None or game.get("state") or self.picker is not None:
             return
         self.picker = BoxPicker(self, game, self.current_pixels(game))
+
+    def open_shots(self) -> None:
+        game = self.selected()
+        if game is None or game.get("state") or self.shots_window is not None:
+            return
+        self.shots_window = ShotsWindow(self, game)
+
+    def shots_saved(self, path: str) -> None:
+        """The screenshots window closed with a change: on the card it
+        goes, as a Save's does."""
+        self.note_for = (path, "Saved. " + self.put_on_card(path))
+        self.redraw(path)
 
     def set_picture(self, path: str) -> None:
         """A new box for the selected game, shown in the panel until Save
@@ -1760,6 +1973,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     offline_var = tk.BooleanVar(value=smoke or fetch.offline_by_request())
     cheats_var = tk.BooleanVar(value=False)
     cheats_note = tk.StringVar(value=CHEATS_HINT)
+    shots_var = tk.BooleanVar(value=False)
+    shots_note = tk.StringVar(value=SHOTS_HINT)
     boot_var = tk.BooleanVar(value=False)
     boot_note = tk.StringVar()
     theme_var = tk.StringVar(value=themes.DEFAULT.name)
@@ -1901,27 +2116,28 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     # a collection already at hand is the way to do without the network.
     group(3, "Downloads")
     cheats_check = option(4, cheats_var, "Fetch cheat codes", cheats_note)
-    option(6, offline_var, "Do not download anything", "Uses only what is already on the card.")
+    shots_check = option(6, shots_var, "Fetch screenshots", shots_note)
+    option(8, offline_var, "Do not download anything", "Uses only what is already on the card.")
     pack_row = ttk.Frame(options)
-    pack_row.grid(row=8, column=0, sticky="ew", pady=(10, 0))
+    pack_row.grid(row=10, column=0, sticky="ew", pady=(10, 0))
     pack_row.columnconfigure(0, weight=1)
     ttk.Label(pack_row, text="Boxes and descriptions").grid(row=0, column=0, sticky="w")
     choose_pack = ttk.Button(pack_row, text="Use a zip you have…")
     choose_pack.grid(row=0, column=1, padx=(6, 0))
     forget_pack = ttk.Button(pack_row, text="Use the card's")
-    note = hint(9, metadata_note, cursor="hand2")
+    note = hint(11, metadata_note, cursor="hand2")
 
-    group(10, "Repairs")
-    option(11, fix_var, "Repair hacks that show a black screen on a console",
+    group(12, "Repairs")
+    option(13, fix_var, "Repair hacks that show a black screen on a console",
            "Rewrites the checksum inside those files.")
-    option(13, rebuild_var, "Rebuild everything from scratch",
+    option(15, rebuild_var, "Rebuild everything from scratch",
            "Slower. For a card whose boxes or names look wrong.")
 
     # What the console does with the card: the browser's colours, and on an
     # X7 card the start-up switch, a row that is there only for one.
-    group(15, "Console")
+    group(17, "Console")
     theme_row = ttk.Frame(options)
-    theme_row.grid(row=16, column=0, sticky="w", pady=(6, 0))
+    theme_row.grid(row=18, column=0, sticky="w", pady=(6, 0))
     ttk.Label(theme_row, text="Theme").grid(row=0, column=0, sticky="w")
     theme_box = ttk.Combobox(theme_row, textvariable=theme_var, state="readonly", width=12,
                              values=[theme.name for theme in themes.THEMES])
@@ -2079,7 +2295,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         boot = direct_boot.state(chosen) if chosen is not None else direct_boot.State()
         state["boot"] = boot
         if boot.cart == direct_boot.X7:
-            boot_row.grid(row=17, column=0, sticky="ew")
+            boot_row.grid(row=19, column=0, sticky="ew")
             boot_check.configure(state="normal" if boot.available else "disabled")
             boot_note.set("EverDrive-64 X7. A reset inside a game returns to the EverDrive menu; "
                           "untick to start in the EverDrive menu again." if boot.available else boot.why)
@@ -2091,6 +2307,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         offline = offline_var.get()
         cheats_check.configure(state="disabled" if offline else "normal")
         cheats_note.set(CHEATS_OFFLINE if offline else CHEATS_HINT)
+        shots_check.configure(state="disabled" if offline else "normal")
+        shots_note.set(CHEATS_OFFLINE if offline else SHOTS_HINT)
         update_buttons()
 
     def read_choices() -> None:
@@ -2098,6 +2316,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         another card is chosen, and after a run has changed it."""
         chosen = current_card()
         cheats_var.set(cheat_codes.remembered(chosen))
+        shots_var.set(shots.remembered(chosen))
         boot_var.set(chosen is not None and direct_boot.state(chosen).on)
         read_theme()
 
@@ -2278,6 +2497,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                                   rebuild_var.get(), offline_var.get(),
                                   hires.remembered(custom_art.art_dir(chosen)),
                                   cheats=cheats_var.get(), cheats_remembered=cheat_codes.remembered(chosen),
+                                  shots=shots_var.get(), shots_remembered=shots.remembered(chosen),
                                   direct_boot=boot_var.get() if state["boot"].available else None,
                                   theme=picked_theme())))
 
@@ -2336,16 +2556,17 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state["fields"] = {"card": card_var, "roms": roms_var, "where": roms_shown, "metadata": metadata_var}
     state["where_box"] = roms_box
     state["options"] = {"fix": fix_var, "rebuild": rebuild_var, "offline": offline_var,
-                        "cheats": cheats_var, "boot": boot_var, "theme": theme_var}
+                        "cheats": cheats_var, "shots": shots_var, "boot": boot_var, "theme": theme_var}
     state["swatch"] = swatch
     state["boot_row"] = boot_row
     state["boot_note"] = boot_note
     state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var,
-                      "result": result_var, "last": last_var, "pack": metadata_note, "cheats": cheats_note}
+                      "result": result_var, "last": last_var, "pack": metadata_note, "cheats": cheats_note,
+                      "shots": shots_note}
     state["start"] = start
     state["stop"] = ask_stop
     state["buttons"] = {"action": action, "stop": stop, "coffee": coffee, "boot": boot_check,
-                        "cheats": cheats_check}
+                        "cheats": cheats_check, "shots": shots_check}
     state["notebook"] = notebook
     state["header"] = header
     state["edit_menu"] = edit_menu

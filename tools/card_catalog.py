@@ -17,6 +17,7 @@ card by hand.
 from __future__ import annotations
 
 import json
+import struct
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
@@ -160,4 +161,57 @@ class Covers:
         try:
             return make_sprite.decode(blob[entry.offset:entry.offset + entry.length])
         except make_sprite.SpriteError:
+            return None
+
+
+class Shots:
+    """A game's screenshots exactly as the box view will draw them, out of
+    shots-large.pak: only the index is read when the pack is opened, and
+    one picture at a time after that, since the pack runs to a hundred
+    megabytes on a big card."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        with path.open("rb") as handle:
+            header = handle.read(cover_pack.HEADER_SIZE)
+            if len(header) < cover_pack.HEADER_SIZE:
+                raise cover_pack.CoverPackError("screenshot pack is too small to contain a header")
+            magic, version, count, index_offset, _names, _length, payload_offset, _ = \
+                struct.unpack_from(">4sIIIIIII", header, 0)
+            if magic != cover_pack.MAGIC or version != cover_pack.VERSION:
+                raise cover_pack.CoverPackError("not a screenshot pack")
+            handle.seek(index_offset)
+            raw = handle.read(cover_pack.ENTRY_SIZE * count)
+        if len(raw) != cover_pack.ENTRY_SIZE * count:
+            raise cover_pack.CoverPackError("screenshot pack index runs past the end of the file")
+        self.entries = {}
+        for number in range(count):
+            name_hash, offset, length = struct.unpack_from(">QII", raw, cover_pack.ENTRY_SIZE * number)
+            if offset >= payload_offset:
+                self.entries[name_hash] = (offset, length)
+
+    @classmethod
+    def open(cls, card: Path) -> "Shots | None":
+        """None when the card has no screenshots, or a pack that will not read."""
+        try:
+            return cls(card / card_layout.CARD_FOLDER / card_layout.SHOT_PACK_LARGE_NAME)
+        except (OSError, cover_pack.CoverPackError, struct.error):
+            return None
+
+    def pixels(self, game: dict, slot: str) -> tuple[int, int, bytes] | None:
+        """Width, height and packed RGB rows of one of the game's
+        screenshots, or None when it has none there."""
+        number = int(game.get("shots") or 0)
+        if not number:
+            return None
+        entry = self.entries.get(cover_pack.cover_hash(f"{number}.{slot}"))
+        if entry is None:
+            return None
+        offset, length = entry
+        try:
+            with self.path.open("rb") as handle:
+                handle.seek(offset)
+                data = handle.read(length)
+            return make_sprite.decode(data)
+        except (OSError, make_sprite.SpriteError):
             return None

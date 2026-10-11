@@ -31,6 +31,13 @@ COVER_PACK_NAME = "covers.pak"
 #: the first. Optional: a card without it still browses.
 COVER_PACK_LARGE_NAME = "covers-large.pak"
 COVERS_LARGE_FOLDER = "covers-large"
+#: Screenshots, two per set (tools/shots.py): the details screen's
+#: thumbnails at 48x36, and the box view's pictures at 224x168, in the
+#: same container as the covers. src/card_paths.h has the same names.
+SHOT_PACK_NAME = "shots.pak"
+SHOT_PACK_LARGE_NAME = "shots-large.pak"
+#: Under ART_FOLDER: the screenshots the tool fetched, by game code.
+SHOTS_FOLDER = "shots"
 CATALOG_NAME = "catalog.ebc"
 #: Under CARD_FOLDER: the catalog as the tool built it, with where every
 #: field came from (tools/card_catalog.py). Read by the tool's window and by

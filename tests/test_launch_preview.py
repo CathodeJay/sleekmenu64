@@ -8,7 +8,7 @@ import unittest
 
 from PIL import Image
 
-from tools import cover_pack, make_sprite
+from tools import cover_pack, make_sprite, shots
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
@@ -120,6 +120,19 @@ class HostModuleTests(unittest.TestCase):
                     large.write_bytes(cover_pack.build(
                         {"cover.sprite": make_sprite.encode(
                             Image.new("RGBA", make_sprite.LARGE_CANVAS_SIZE, (40, 80, 120, 255)))}))
+                # Screenshots in both runs: set 1 both pictures, set 2 the
+                # game in play only, set 3 a title screen whose large picture
+                # is the wrong size.
+                shots_small = pathlib.Path(scratch) / "shots.pak"
+                shots_large = pathlib.Path(scratch) / "shots-large.pak"
+
+                def sprite(size):
+                    return make_sprite.encode(Image.new("RGBA", size, (200, 60, 40, 255)))
+                shots_small.write_bytes(cover_pack.build(
+                    {name: sprite(shots.THUMB) for name in ("1.title", "1.snap", "2.snap", "3.title")}))
+                shots_large.write_bytes(cover_pack.build(
+                    {"1.title": sprite(shots.CANVAS), "1.snap": sprite(shots.CANVAS),
+                     "2.snap": sprite(shots.CANVAS), "3.title": sprite((100, 100))}))
                 build_and_run(
                     "ui-test", sources,
                     ["-Itests/stubs"] + CHEATS_FLAGS +
@@ -127,7 +140,9 @@ class HostModuleTests(unittest.TestCase):
                      f'-DSM_THEME_PATH="{scratch}/theme.txt"',
                      f'-DSM_COVERS_DIR="{scratch}/covers"',
                      f'-DSM_COVER_PACK_PATH="{pack}"',
-                     f'-DSM_COVER_PACK_LARGE_PATH="{large}"'],
+                     f'-DSM_COVER_PACK_LARGE_PATH="{large}"',
+                     f'-DSM_SHOT_PACK_PATH="{shots_small}"',
+                     f'-DSM_SHOT_PACK_LARGE_PATH="{shots_large}"'],
                 )
 
     def test_host_theme_module(self):

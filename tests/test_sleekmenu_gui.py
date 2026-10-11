@@ -23,7 +23,7 @@ from unittest import mock
 from tests.rom_fixtures import write_rom
 from tests.test_custom_art import picture
 from tests.test_sleekmenu_prep import stay_offline, write_collection
-from tools import fetch, hires, sleekmenu_gui, sleekmenu_prep
+from tools import custom_art, fetch, hires, sleekmenu_gui, sleekmenu_prep
 
 
 class VolumeTests(unittest.TestCase):
@@ -67,9 +67,9 @@ class FieldTests(unittest.TestCase):
     def test_the_choices_become_the_runs_options(self):
         options = sleekmenu_gui.options_from("/Volumes/CARD")
         self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD"), roms=sleekmenu_prep.WHOLE_CARD,
-                                                         hires=True, cheats=False),
+                                                         hires=True, cheats=False, shots=False),
                          "an empty games folder is the whole card, said so -- never 'as remembered' -- "
-                         "the boxes are asked for, and cheats are not unless ticked")
+                         "the boxes are asked for, and cheats and screenshots are not unless ticked")
         options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", " ROMS/ ", fix_checksums=True,
                                              offline=True, remembered=True)
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
@@ -111,6 +111,11 @@ class FieldTests(unittest.TestCase):
                       "from scratch asks again")
         self.assertIs(from_window("/c", cheats=False, cheats_remembered=True).cheats, False,
                       "unticked: the card is told to stop")
+        self.assertIs(from_window("/c").shots, False, "screenshots are off unless ticked")
+        self.assertIs(from_window("/c", shots=True).shots, True)
+        self.assertIsNone(from_window("/c", shots=True, shots_remembered=True).shots)
+        self.assertIs(from_window("/c", shots=True, shots_remembered=True, rebuild=True).shots, True)
+        self.assertIs(from_window("/c", shots=False, shots_remembered=True).shots, False)
         self.assertIsNone(from_window("/c").direct_boot, "a card with no start-up switch is told nothing")
         self.assertIs(from_window("/c", direct_boot=True).direct_boot, True)
         self.assertIs(from_window("/c", direct_boot=False).direct_boot, False)
@@ -989,6 +994,78 @@ class WindowTests(unittest.TestCase):
                         root.update()
                     self.assertFalse(cheat_codes.remembered(card), "unticked: told to stop")
                     self.assertTrue((cheat_codes.folder(card) / f"{mario.crc}.cht").is_file(), "the files stay")
+                    root.destroy()
+
+    def test_screenshots_are_fetched_once_ticked_and_shown_and_changed_from_the_games_tab(self):
+        from tests.test_fetch import Server
+        from tests.test_shots import route, shot_png
+        from tools import shots
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            mario = next(entry for entry in hires.coverdb.load(sleekmenu_prep.data_file("coverdb.csv", Path(scratch)))
+                         .values() if entry.name == "Super Mario 64 (USA)")
+            write_rom(card / "ROMS" / "Super Mario 64 (USA).z64",
+                      int(mario.crc[:8], 16), int(mario.crc[8:], 16), game_code="SM")
+            write_collection(card / "release-metadata.zip", "NSME", zipped=True)
+            routes = {route("title", "Super Mario 64 (USA)"): (200, shot_png((200, 30, 30, 255))),
+                      route("snap", "Super Mario 64 (USA)"): (200, shot_png((30, 30, 200, 255)))}
+            with mock.patch.dict(os.environ):
+                os.environ.pop(fetch.OFFLINE_VARIABLE, None)
+                with Server(routes) as server, mock.patch.object(shots, "ROOT_URL", server.url("/")), \
+                     mock.patch.object(hires, "BASE_URL", server.url("/Named_Boxarts/")):
+                    root = sleekmenu_gui.build(card=str(card))
+                    root.update()
+                    state = root.sleekmenu_state
+                    self.assertFalse(state["options"]["shots"].get(), "off by default")
+                    self.assertIn("0.4 MB a game", state["words"]["shots"].get())
+                    state["options"]["offline"].set(True)
+                    root.update()
+                    self.assertEqual(str(state["buttons"]["shots"].cget("state")), "disabled")
+                    state["options"]["offline"].set(False)
+                    root.update()
+                    state["options"]["shots"].set(True)
+                    state["start"]()
+                    while state["runner"] is not None:
+                        root.update()
+                    self.assertEqual(state["last_code"], 0)
+                    self.assertTrue((shots.folder(card) / "NSME.snap.png").is_file())
+                    self.assertTrue(shots.remembered(card))
+
+                    # The Games tab: the window shows the card's two pictures.
+                    games = state["catalog"]
+                    path = "ROMS/Super Mario 64 (USA).z64"
+                    games.tree.selection_set(path)
+                    root.update()
+                    self.assertEqual(str(games.shots_button.cget("state")), "normal")
+                    applied = []
+                    games.apply = lambda chosen: applied.append(chosen) or "queued"
+                    games.open_shots()
+                    window = games.shots_window
+                    self.assertIsNotNone(window)
+                    self.assertEqual(window.photos["snap"].width(), shots.CANVAS[0])
+                    self.assertEqual(window.sources["title"].get(), "From libretro.")
+                    self.assertEqual(str(window.removers["title"].cget("state")), "disabled")
+                    # one of the owner's: written at once, under the ROM's name
+                    mine = picture(Path(scratch) / "mine.jpg", color=(240, 240, 20, 255))
+                    self.assertTrue(window.take("title", mine))
+                    own = custom_art.art_dir(card) / "Super Mario 64 (USA).title.jpg"
+                    self.assertTrue(own.is_file())
+                    self.assertIn("not on the card yet", window.sources["title"].get())
+                    self.assertEqual(str(window.removers["title"].cget("state")), "normal")
+                    self.assertFalse(window.take("snap", Path(scratch) / "missing.png"))
+                    self.assertIn("Not saved", window.note.get())
+                    window.close()
+                    root.update()
+                    self.assertIsNone(games.shots_window)
+                    self.assertEqual(applied, [path], "closing puts it on the card")
+                    self.assertIn("title screen", games.notes.get(), "and the panel says it is waiting")
+                    # taken out again from the same window
+                    games.open_shots()
+                    games.shots_window.remove("title")
+                    self.assertFalse(own.exists())
+                    games.shots_window.close()
+                    root.update()
+                    self.assertEqual(applied, [path, path])
                     root.destroy()
 
     def test_the_start_up_switch_is_there_for_an_x7_card_only_and_does_what_it_says(self):

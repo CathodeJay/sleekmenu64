@@ -256,19 +256,7 @@ def save(card: Path, game: dict, picture: Path | None, title: str, description: 
     facts = {name: value for name, value in (facts or {}).items()
              if name in FACTS and value not in (None, "", 0, [])}
     if picture is not None:
-        suffix = picture.suffix.casefold()
-        if suffix == ".jpeg":
-            suffix = ".jpg"
-        if suffix not in (".png", ".jpg"):
-            raise EditError(f"not a PNG or JPEG: {picture.name}")
-        try:
-            from PIL import Image
-            with Image.open(picture) as image:
-                image.verify()
-        except ImportError:
-            pass
-        except (OSError, ValueError) as error:
-            raise EditError(f"cannot read {picture.name}: {error}") from error
+        suffix = _checked_picture(picture)
         folder.mkdir(parents=True, exist_ok=True)
         index = Index()
         for other in ART_SUFFIXES:
@@ -303,6 +291,73 @@ def save(card: Path, game: dict, picture: Path | None, title: str, description: 
     return touched
 
 
+def _checked_picture(picture: Path) -> str:
+    """A picture's suffix as it is stored, ".png" or ".jpg", once it is
+    known to be one that opens; EditError otherwise."""
+    suffix = picture.suffix.casefold()
+    if suffix == ".jpeg":
+        suffix = ".jpg"
+    if suffix not in (".png", ".jpg"):
+        raise EditError(f"not a PNG or JPEG: {picture.name}")
+    try:
+        from PIL import Image
+        with Image.open(picture) as image:
+            image.verify()
+    except ImportError:
+        pass
+    except (OSError, ValueError) as error:
+        raise EditError(f"cannot read {picture.name}: {error}") from error
+    return suffix
+
+
+def save_shot(card: Path, game: dict, slot: str, picture: Path) -> list[Path]:
+    """One of the owner's screenshots for a game (tools/shots.py): the
+    picture copied as it is into sleekmenu/art/ as `<ROM name>.<slot>.png`
+    or `.jpg`, replacing one of the other suffix. Returns the files written
+    or removed."""
+    from tools import shots
+    if slot not in shots.SLOTS:
+        raise EditError(f"no such screenshot: {slot}")
+    suffix = _checked_picture(picture)
+    folder = art_dir(card)
+    folder.mkdir(parents=True, exist_ok=True)
+    stem = f"{PurePosixPath(str(game['path'])).stem}.{slot}"
+    touched: list[Path] = []
+    index = Index()
+    for other in ART_SUFFIXES:
+        stale = index.lookup(folder, stem + other)
+        if stale is not None and stale.suffix.casefold() != suffix:
+            stale.unlink()
+            touched.append(stale)
+    target = folder / (stem + suffix)
+    target.write_bytes(picture.read_bytes())
+    touched.append(target)
+    return touched
+
+
+def own_shots(card: Path, game: dict, index: Index | None = None) -> dict[str, Path]:
+    """The owner's screenshots of a game, by slot, wherever they are.
+    `index` is the listings to look them up in, kept across games."""
+    from tools import shots
+    index = index or Index()
+    out = {}
+    for slot in shots.SLOTS:
+        found = shots.find_own(index, card, str(game.get("path", "")), slot)
+        if found is not None:
+            out[slot] = found
+    return out
+
+
+def remove_shot(card: Path, game: dict, slot: str) -> list[Path]:
+    """Delete the owner's screenshot for one slot from sleekmenu/art/; one
+    beside the ROM is left alone. Returns what was deleted."""
+    found = own_shots(card, game).get(slot)
+    if found is None or found.parent != art_dir(card):
+        return []
+    found.unlink()
+    return [found]
+
+
 def edits_of(card: Path, roms_root: Path, game: dict) -> tuple[list[Path], list[Path]]:
     """The owner's files this game currently uses: those in sleekmenu/art/,
     which the window may remove, and those beside the ROM, which it only
@@ -316,6 +371,8 @@ def edits_of(card: Path, roms_root: Path, game: dict) -> tuple[list[Path], list[
     art = find_art(index, roms_root, rom_path, folder, code)
     if art is not None:
         (removable if art.path.parent == folder else beside).append(art.path)
+    for shot in own_shots(card, game, index).values():
+        (removable if shot.parent == folder else beside).append(shot)
     stem = PurePosixPath(rom_path).stem
     text = (index.lookup((roms_root / rom_path).parent, stem + TEXT_SUFFIX)
             or index.lookup(folder, stem + TEXT_SUFFIX)
@@ -355,6 +412,9 @@ class Pending:
     fields: dict
     picture: Path | None
     removed: tuple
+    #: Screenshot slots (tools/shots.py) whose picture of the owner's is
+    #: not the one the catalog's was made from.
+    shots: tuple = ()
 
 
 def _built_epoch(document: dict) -> float:
@@ -380,8 +440,9 @@ def pending_edits(card: Path, roms_root: Path, document: dict,
     named after. `genres` is the genre map, when the caller has it: a
     genre the owner wrote as libretro spells it is the catalog's
     consolidated one, not a change."""
-    from tools import genre_map, metadata_repo, provenance
+    from tools import genre_map, metadata_repo, provenance, shots
     folder = art_dir(card)
+    shot_sprites = document.get("shot_sprites") if isinstance(document.get("shot_sprites"), dict) else {}
     index = Index()
     built = _built_epoch(document)
     sprites = document.get("sprites") if isinstance(document.get("sprites"), dict) else None
@@ -433,6 +494,20 @@ def pending_edits(card: Path, roms_root: Path, document: dict,
                 picture = art.path
         elif provenance.is_yours(str(sources.get("cover", ""))):
             removed.append("cover")
-        if fields or picture is not None or removed:
-            out[rom_path] = Pending(fields, picture, tuple(removed))
+        # The screenshots the same way: by what the catalog says each was
+        # made from.
+        shot_sources = game.get("shot_sources") or {}
+        number = int(game.get("shots") or 0)
+        pending_shots = []
+        mine = own_shots(card, game, index)
+        for slot, own in mine.items():
+            recorded = str(shot_sprites.get(shots.sprite_name(number, slot), "")) if number else ""
+            if (recorded.split("|", 1)[-1] != metadata_repo.file_identity(own)
+                    or not provenance.is_yours(str(shot_sources.get(slot, "")))):
+                pending_shots.append(slot)
+        for slot in shots.SLOTS:
+            if provenance.is_yours(str(shot_sources.get(slot, ""))) and slot not in mine:
+                removed.append("shot_" + slot)
+        if fields or picture is not None or removed or pending_shots:
+            out[rom_path] = Pending(fields, picture, tuple(removed), tuple(pending_shots))
     return out

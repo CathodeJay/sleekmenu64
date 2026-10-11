@@ -34,7 +34,8 @@ right.
   everything: read the games, fetch what the card lacks, build the catalog
   and the covers, write them. What it fetches is the collection, once
   (about 52 MB), a 512-pixel box for each game the database knows
-  (about 400 KB each) and, if you ticked them, cheat codes. The four steps
+  (about 400 KB each) and, if you ticked them, screenshots and cheat
+  codes. The four steps
   show where it is. Stop ends it; what was fetched is kept, and the next
   run carries on from there. A download that fails does not stop the run:
   the card gets its catalog, and the tab says what is missing and to press
@@ -53,9 +54,13 @@ only that. The card remembers the choice.
   the database knows, for the games the EverDrive's cheat pack does not
   cover; see [Cheat codes](#cheat-codes). Off until you tick it; the card
   remembers that too.
+- **Fetch screenshots** fetches the title screen and a moment of play for
+  every retail game the database knows, for the details screen and the box
+  view; see [Screenshots](#screenshots). Off until you tick it, about
+  0.4 MB a game on the card; the card remembers it.
 - **Do not download anything** uses only what is already on the card. No
-  cheat codes are fetched either, so that box is greyed while this one is
-  ticked.
+  cheat codes or screenshots are fetched either, so those boxes are greyed
+  while this one is ticked.
 - **Boxes and descriptions**: **Use a zip you have…** takes a
   `release-metadata.zip` you already have in place of the download; the
   line under it says which collection a run will read.
@@ -131,6 +136,14 @@ carry what that needs, and from a checkout it is `pip install
 tkinterdnd2`. The choice shows in the panel and goes on the card with Save,
 as a picture of your own: no later download replaces it.
 
+**Screenshots…** opens the game's two screenshots, the title screen and
+the game in play, as the box view draws them, with where each came from.
+**Choose…** takes a PNG or JPEG of yours for either one, or drop it on its
+side; **Remove mine** takes yours out again and brings back what was there
+before. They are written into `sleekmenu/art/` straight away, and closing
+the window puts them on the card the way Save does. A hack, a translation
+or homebrew has only the screenshots you give it.
+
 When the card holds other versions of the game — its revisions, and hacks
 built on it, which carry the same game code — **Also change the other
 versions of this game** saves the edit for all of them at once.
@@ -204,6 +217,43 @@ still wins; Stop ends it between two boxes.
 **From the window.** The Games tab writes these files for one game or one
 game code and puts them on the card as you save: see
 [Editing a game](#editing-a-game).
+
+## Screenshots
+
+Tick **Fetch screenshots** on the Card tab (`--shots` on the command line)
+and the next run fetches two pictures from
+[libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
+for every retail game on the card that the database knows: the title
+screen (`Named_Titles`) and a moment of play (`Named_Snaps`), filed under
+the same names as the boxes, about 100 KB each. They go into
+`sleekmenu/art/shots/`, one pair per game code (`NSME.title.png`,
+`NSME.snap.png`), so every copy of a game shares them. libretro has both
+for nearly every retail cartridge.
+
+On the console they show on a game's details, as two thumbnails beside the
+facts, and in the box view, where left and right turn from the box to the
+title screen and the game in play ([CONSOLE.md](CONSOLE.md#screenshots)).
+The tool makes them into two packs beside the covers, about 160 KB a game
+together; with the pictures fetched, the card holds about 0.4 MB a game.
+
+A hack, a translation or homebrew gets none: the screens of the game it was
+built on would show another game. Give it your own, named after the ROM
+file, beside it or in `sleekmenu/art/`:
+
+```text
+ROMS/Hacks/SM64 Star Road.title.png    the title screen
+ROMS/Hacks/SM64 Star Road.snap.png     the game in play
+```
+
+PNG or JPEG, any size, fitted without being stretched. Yours win over the
+fetched ones, for any game, and no download replaces them; the window's
+**Screenshots…** button writes the same files. A card that asked keeps its
+screenshots complete: every later run fetches those of the games added
+since, and a picture libretro does not have is noted and not asked about
+again unless you rebuild from scratch. Untick the box (`--no-shots`) and
+nothing more is fetched; the pictures already on the card stay, and the
+console goes on showing them. To take them off the card, delete
+`sleekmenu/art/shots/` and update.
 
 ## Hacks, translations and homebrew
 
@@ -330,7 +380,8 @@ card and run the tool again. The options mirror the window's:
 - `--hires` fetches the high-resolution boxes; `--rebuild` starts from
   nothing; `--fix-checksums` rewrites a hack's stale header checksum, and
   `--no-checksums` skips the check.
-- `--cheats` fetches the cheat codes and `--no-cheats` stops;
+- `--shots` fetches the screenshots and `--no-shots` stops; `--cheats`
+  fetches the cheat codes and `--no-cheats` stops;
   `--direct-boot on` and `--direct-boot off` set an X7's start-up switch;
   `--theme` takes a theme's name in lower case (`--theme grape`).
 - `--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps
@@ -356,6 +407,9 @@ What the tool writes, and what it leaves alone:
 /sleekmenu/covers.pak      every cover in one file
 /sleekmenu/covers-large.pak the same covers at 256×180, for the box view
 /sleekmenu/art/hires/      the 512-pixel boxes, one per game code
+/sleekmenu/art/shots/      screenshots, two per game code, when asked for
+/sleekmenu/shots.pak       the screenshots at 48×36, for the details screen
+/sleekmenu/shots-large.pak the same at 224×168, for the box view
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump, when asked for
 /sleekmenu/theme.txt       the browser's theme, when you chose one
 /ED64/autoexec.v64         a copy of SleekMenu64.z64, when an X7 starts in it
@@ -369,7 +423,8 @@ Both the catalog and the covers are optional: with no catalog the browser
 scans the card and shows filenames, with no covers it draws a placeholder.
 The tool never moves, renames or deletes anything on the card, apart from
 two things it put there itself: a picture or text of your own in
-`sleekmenu/art/` when you press Undo my changes in the window, and
+`sleekmenu/art/` when you press Undo my changes or Remove mine in the
+window, and
 `ED64/autoexec.v64` when you untick Start the console in SleekMenu.
 
 Every file, who writes it and how a game is matched to its box is in

@@ -15,7 +15,7 @@ ships here at all.**
 | `third_party/ed64pro/` | MIT | krikzz (ed64-pro-pub), vendored unmodified |
 | `third_party/spleen/` | BSD-2-Clause | Frederic Cambus (Spleen 5x8), vendored unmodified |
 | `data/coverdb.csv`, `data/genres.csv` | CC BY-SA 4.0 | libretro-database, plus corrections |
-| box art | not distributed | the respective publishers |
+| box art, screenshots | not distributed | the respective publishers |
 | cheat codes | not distributed | libretro-database (CC BY-SA 4.0), fetched onto the user's card |
 
 ## The downloadable window
@@ -103,10 +103,12 @@ from that project's own releases page, by the user's machine, onto the
 user's card: the same download the collection's page offers, made for them.
 It does the same with the 512-pixel boxes of
 [libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64),
-fetched one by one from that repository onto the user's card and recorded
-there with their address. That is the line this project holds: it never
-hosts box art for use, never ships any, and never claims a licence over any. The
-collection's dedication covers its own contribution; the scans themselves,
-there and at libretro, remain the publishers'. A card prepared with the
+and, when the user asks, with the title screens and in-game screenshots
+filed beside them there, fetched one by one from that repository onto the
+user's card and recorded there with their address. That is the line this
+project holds: it never hosts box art or screenshots for use, never ships
+any, and never claims a licence over any. The collection's dedication
+covers its own contribution; the scans and screens themselves, there and at
+libretro, remain the publishers'. A card prepared with the
 tool carries them the way a card prepared for either of those menus, or for
 RetroArch, does; passing that card on is the user's act, not ours.

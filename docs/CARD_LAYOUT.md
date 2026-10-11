@@ -17,10 +17,13 @@ this is the reference.
 
 /sleekmenu/art/...          your own pictures and text         yours, or the window's
 /sleekmenu/art/hires/...    512-pixel boxes, one per game code  fetched by the tool (--hires)
+/sleekmenu/art/shots/...    screenshots, two per game code      fetched by the tool (--shots)
 /sleekmenu/catalog.ebc      titles, genre, publisher, year     written by the tool
 /sleekmenu/catalog.json     the same, with every field's source  written by the tool
 /sleekmenu/covers.pak       every cover, one file              written by the tool
 /sleekmenu/covers-large.pak the same covers at 256x180             written by the tool
+/sleekmenu/shots.pak        screenshots at 48x36, by set        written by the tool
+/sleekmenu/shots-large.pak  the same at 224x168                 written by the tool
 /sleekmenu/favorites.txt    one ROM path per line              written by the browser
 /sleekmenu/history.txt      the last fifteen launches          written by the browser
 /sleekmenu/cheats.txt       which cheats are on, per game      written by the browser
@@ -106,7 +109,11 @@ and `identified`: how the
 database knew the dump (`crc`, `serial`, `serial without region`, or
 nothing), and `kind`: `retail`, `hack`, `translation` or `homebrew`
 (`tools/kinds.py`), packed into bits 2 to 4 of the record's flags in
-`catalog.ebc`. Each game also carries `file` -- the ROM's size, its modification
+`catalog.ebc`. A game with screenshots has `shots`, its set number, which
+`catalog.ebc` carries in the last two bytes of the record (byte 29 is
+reserved and zero), and `shot_sources`, where each of its two pictures
+came from, in the cover's words; `shot_sprites` names what each picture in
+the two packs was made from, as `sprites` does for covers. Each game also carries `file` -- the ROM's size, its modification
 time and the 64 header bytes read from it -- and `checksum`, the verdict
 of the checksum pass, so the next run opens only the files that changed;
 `sprites` names what each sprite was made from (a zip entry's CRC and
@@ -288,6 +295,38 @@ covers are 64 MB; `--no-large-covers` skips it, and the browser then doubles
 the thumbnail in the view and says so. The browser opens the pack beside
 the first at startup and reads one sprite when the view opens, freed when
 it closes.
+
+## Screenshots
+
+`--shots`, or Fetch screenshots in the window, fetches
+`Named_Titles/<No-Intro name>.png` and `Named_Snaps/<No-Intro name>.png`
+from libretro-thumbnails for every retail game on the card the database
+knows, into `sleekmenu/art/shots/<CODE>.title.png` and `<CODE>.snap.png`,
+skipping what is there. Names are tried and links followed exactly as for
+the high-resolution boxes, and `sleekmenu/art/shots/downloads.json` keeps
+what was fetched (address, date, SHA-256), what libretro does not have
+(`missing`), and whether the card still wants them (`enabled`); `--no-shots`
+sets that false and leaves the pictures (`tools/shots.py`).
+
+Each game's pictures, per slot, the first that exists:
+
+```text
+Hacks/Star Road.title.png            yours: beside the ROM, by its name
+sleekmenu/art/Star Road.title.png    yours: in sleekmenu/art/
+sleekmenu/art/shots/NSME.title.png   fetched: only for a game catalogued as retail
+```
+
+and the same with `.snap` for the game in play; PNG or JPEG. The kind is
+the catalog's, the owner's `Kind:` line included, so a hack never shows
+its parent's screens. Games whose pictures are the same files share a
+set; sets are numbered from 1 in a fixed order, at most 4,096 of them,
+and each becomes `<set>.title` and `<set>.snap` in two packs of the covers'
+format: `shots.pak` at 48x36 for the details screen and `shots-large.pak`
+at 224x168 for the box view, fitted the way covers are. The browser opens
+both at startup, reads the two thumbnails when a game's details open and
+one large picture as the box view turns to it. A card without the packs,
+or a browser older than them, shows no screenshots and nothing else
+changes.
 
 ## Step by step, from a checkout
 

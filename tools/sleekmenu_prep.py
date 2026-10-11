@@ -54,7 +54,7 @@ from pathlib import Path
 
 from tools import (build_catalog, card_catalog, card_layout, cheat_codes, cover_pack, coverdb, custom_art,
                    direct_boot, fetch, headers, hires, library, make_sprite, metadata_repo, n64_checksum,
-                   pack_covers, prepare_card, progress, themes, version)
+                   pack_covers, prepare_card, progress, shots, themes, version)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 
@@ -320,6 +320,8 @@ class Options:
                                     # is as the card remembers (it has some: keep them complete)
     cheats: bool | None = None      # fetch cheat codes: True asks, False stops, None is as the
                                     # card remembers (it asked before: keep them complete)
+    shots: bool | None = None       # fetch screenshots: True asks, False stops, None is as the
+                                    # card remembers (it asked before: keep them complete)
     direct_boot: bool | None = None  # an X7 starts in SleekMenu: True, False, or None to leave
                                      # the card as it is and keep the copy in step
     theme: str | None = None        # the browser's colours, by a theme's id; None leaves the card's
@@ -336,6 +338,7 @@ class Outcome:
     collection_failed: bool = False     # the collection was wanted and no address delivered it
     boxes_unreached: int = 0            # high-resolution boxes the network would not give
     cheats_unreached: int = 0           # cheat files the network would not give
+    shots_unreached: int = 0            # screenshots the network would not give
 
 
 def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None,
@@ -469,6 +472,18 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
                 cheats = cheat_codes.fetch_for_card(roms, rom_paths, database_path, card,
                                                     progress_factory, cancel, log, asked=bool(options.cheats))
                 outcome.cheats_unreached = len(cheats.failed)
+        wants_shots = options.shots if options.shots is not None else shots.remembered(card)
+        if options.shots is False and not options.dry_run and shots.forget(card):
+            log("shots:    no longer fetched; the screenshots already on the card stay")
+        if wants_shots and not options.dry_run:
+            # A title screen and a snap per retail game code, into
+            # sleekmenu/art/shots/, skipping what is there.
+            if offline:
+                log("shots:    not fetched; downloads are off")
+            else:
+                pictures = shots.fetch_for_card(roms, rom_paths, database_path, card,
+                                                progress_factory, cancel, log, asked=bool(options.shots))
+                outcome.shots_unreached = len(pictures.failed)
         if source is None:
             log("metadata: no collection on the card; the card gets a catalog and no covers")
             log(f"          download {metadata_repo.RELEASE_ZIP_NAME} from "
@@ -544,6 +559,13 @@ def main(argv: list[str] | None = None) -> int:
                              "complete on every later run")
     parser.add_argument("--no-cheats", action="store_true",
                         help="stop fetching cheat codes for this card; the files already there stay")
+    parser.add_argument("--shots", action="store_true",
+                        help="fetch the title screen and a picture in play from libretro-thumbnails for "
+                             "every retail game the database knows, once (about 0.4 MB a game on the "
+                             "card), for the details screen and the box view; a card that has asked "
+                             "keeps them complete on every later run")
+    parser.add_argument("--no-shots", action="store_true",
+                        help="stop fetching screenshots for this card; the pictures already there stay")
     parser.add_argument("--direct-boot", choices=("on", "off"), default=None,
                         help="EverDrive-64 X7: start the console in SleekMenu (on copies the card's "
                              f"{card_layout.BROWSER_ROM} to {direct_boot.AUTOEXEC_SHOWN}, off removes it)")
@@ -572,6 +594,7 @@ def main(argv: list[str] | None = None) -> int:
                            no_checksums=args.no_checksums, no_download=args.no_download,
                            hires=True if args.hires else None,
                            cheats=False if args.no_cheats else True if args.cheats else None,
+                           shots=False if args.no_shots else True if args.shots else None,
                            direct_boot=None if args.direct_boot is None else args.direct_boot == "on",
                            theme=args.theme,
                            no_large_covers=args.no_large_covers, rebuild=args.rebuild),

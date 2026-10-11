@@ -33,7 +33,21 @@ class CatalogBuilderTests(unittest.TestCase):
         self.assertEqual(strings_at + strings_size, len(data))
         self.assertEqual(crc, zlib.crc32(data[header_size:]))
         record = build_catalog.RECORD.unpack_from(data, records_at)
-        self.assertEqual(record[6:], (2026, 1, 1, 1))
+        self.assertEqual(record[6:], (2026, 1, 1, 1, 0))
+
+    def test_the_screenshot_set_closes_the_record_where_padding_was(self):
+        """Bytes 29 to 31 were padding, which a browser from before
+        screenshots skips: byte 29 stays zero, the set is the last two."""
+        games = build_catalog.normalize({"schema_version": 1, "games": [game(shots=0x0102)]})
+        data = build_catalog.encode(games)
+        record = data[32:32 + build_catalog.RECORD.size]
+        self.assertEqual(len(record), 32)
+        self.assertEqual(record[29], 0)
+        self.assertEqual(struct.unpack_from("<H", record, 30)[0], 0x0102)
+        self.assertEqual(build_catalog.normalize({"schema_version": 1, "games": [game()]})[0]["shots"], 0)
+        for bad in (-1, 65536, "3", True, 1.5):
+            with self.subTest(shots=bad), self.assertRaises(build_catalog.CatalogError):
+                build_catalog.normalize({"schema_version": 1, "games": [game(shots=bad)]})
 
     def test_output_is_deterministic_and_sorted_by_path(self):
         document = {"schema_version": 1, "games": [game("Z/Game.z64"), game("a/Game.z64")]}
@@ -147,7 +161,7 @@ class ConsoleReaderTests(unittest.TestCase):
                 {"title": "GoldenEye 007 (USA)", "path": "ROMS/GoldenEye 007 (USA).z64",
                  "cover": "NGEE.sprite", "publisher": "Nintendo\u2122", "genre": "Shooters",
                  "year": 1997, "players": 4, "regions": ["USA"], "favorite": True,
-                 "description": "You are Bond. James Bond."},
+                 "description": "You are Bond. James Bond.", "shots": 513},
                 {"title": "Homebrew", "path": "ROMS/Homebrew.z64", "regions": []},
             ], "set_aside": [{"path": "ROMS/Tools/IPL.z64", "why": "not a ROM: no N64 header"}]}),
                 encoding="utf-8")

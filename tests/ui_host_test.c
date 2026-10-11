@@ -30,6 +30,8 @@ typedef struct {
 } row_t;
 static const row_t *ROWS;
 static uint32_t ROW_COUNT;
+/* Each row's screenshot set, when a test gives them; none otherwise. */
+static const uint16_t *ROW_SHOTS;
 static sm_catalog_t CATALOG;
 
 bool catalog_get(const sm_catalog_t *catalog, uint32_t index, sm_game_t *game) {
@@ -45,6 +47,7 @@ bool catalog_get(const sm_catalog_t *catalog, uint32_t index, sm_game_t *game) {
     game->description = ROWS[index].description ? ROWS[index].description : "";
     game->year = ROWS[index].year;
     game->flags = ROWS[index].flags;
+    game->shots = ROW_SHOTS ? ROW_SHOTS[index] : 0u;
     return true;
 }
 
@@ -188,6 +191,13 @@ static int count_pixels(uint16_t colour) {
     return found;
 }
 static void draw_clean(void);
+/* How many lines drawn since the last reset say exactly this. */
+static int drew_line(const char *text) {
+    int found = 0;
+    for (int i = 0; i < sm_test_text_count && i < SM_TEST_TEXT_MAX; i++)
+        if (!strcmp(sm_test_text[i], text)) found++;
+    return found;
+}
 
 static void draw(void) {
     memset(&screen, 0, sizeof(screen));
@@ -221,6 +231,7 @@ static void start(const row_t *rows, uint32_t count) {
     ui_close(&ui);
     memset(&ui, 0, sizeof(ui));
     ROWS = rows; ROW_COUNT = count;
+    ROW_SHOTS = NULL;
     memset(&CATALOG, 0, sizeof(CATALOG));
     CATALOG.count = count;
     CATALOG.discovery_mode = start_discovered;
@@ -2058,6 +2069,102 @@ int main(void) {
         assert(sm_test_drew("ACTION-ADVENTURE  /"));
         frame(PRESS(toggle_view));
         while (ui.filter.genre || ui.flat) frame(PRESS(genre_next));
+    }
+
+    /* ---- screenshots: two thumbnails on the card, pages in the box view - */
+    {
+        /* The packs the test wrote (tests/test_launch_preview.py): set 1
+           has both pictures, set 2 the game in play only, set 3 a title
+           screen whose large picture is the wrong size. */
+        static const row_t rows[] = {
+            {"a.z64", "Alpha Racer Turbo Championship", "Racing", 0, "", 0, NULL},
+            {"b.z64", "Beta", "Racing", 0, "", 0, NULL},
+            {"c.z64", "Gamma", "Racing", 0, "", 0, NULL},
+            {"d.z64", "Delta", "Racing", 0, "", 0, NULL},
+        };
+        static const uint16_t sets[] = {1u, 2u, 0u, 3u};
+        int well = 0;
+        start(rows, 4u);
+        ROW_SHOTS = sets;
+        settle();
+
+        /* Both: read as the card opens, framed at the right of the facts,
+           and the title beside them is cut to the room they leave -- the
+           band still has all of it. */
+        frame(PRESS(select)); settle();
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        assert(ui.shot_thumbs[0] && ui.shot_thumbs[1]);
+        assert(ui.shot_thumbs[0]->width == SM_SHOT_THUMB_WIDTH &&
+               ui.shot_thumbs[0]->height == SM_SHOT_THUMB_HEIGHT);
+        draw();
+        assert(drew_line("Alpha Racer Turbo Championship") == 1);
+        assert(drew_line("Alpha Racer Turbo C...") == 1);
+        well = boxes_in(sm_theme_current(), SM_C_WELL);
+        assert(well >= 2);
+
+        /* The box view: the band names the pages, left and right turn
+           them, round from the last to the box, each picture read as it
+           is turned to and freed as it is turned from. */
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_BOX && ui.box_page == 0 && !ui.shot_sprite);
+        draw();
+        assert(drew_line("BOX") && drew_line("TITLE") && drew_line("IN GAME") && sm_test_drew("PICTURES"));
+        frame(PRESS(right));
+        assert(ui.box_page == 1 && ui.shot_sprite);
+        assert(ui.shot_sprite->width == SM_SHOT_WIDTH && ui.shot_sprite->height == SM_SHOT_HEIGHT);
+        frame(PRESS(right));
+        assert(ui.box_page == 2 && ui.shot_sprite);
+        sm_test_reset();
+        frame(PRESS(right));
+        assert(ui.box_page == 0 && !ui.shot_sprite && sm_test_sprite_frees == 1);
+        frame(PRESS(left));
+        assert(ui.box_page == 2 && ui.shot_sprite);
+        /* Back to the card puts the box view's picture away; back to the
+           list, the thumbnails. */
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !ui.shot_sprite && ui.box_page == 0);
+        assert(ui.shot_thumbs[0] && ui.shot_thumbs[1]);
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LIBRARY && !ui.shot_thumbs[0] && !ui.shot_thumbs[1]);
+
+        /* The game in play only: one thumbnail, and two pages. */
+        frame(PRESS(down)); settle();
+        frame(PRESS(select)); settle();
+        assert(!ui.shot_thumbs[0] && ui.shot_thumbs[1]);
+        frame(PRESS(select));
+        draw();
+        assert(drew_line("IN GAME") && !drew_line("TITLE"));
+        frame(PRESS(right));
+        assert(ui.box_page == 2);
+        frame(PRESS(right));
+        assert(ui.box_page == 0);
+        frame(PRESS(back)); frame(PRESS(back));
+
+        /* None: the card and the box view as they always were. */
+        frame(PRESS(down)); settle();
+        frame(PRESS(select)); settle();
+        assert(!ui.shot_thumbs[0] && !ui.shot_thumbs[1]);
+        draw();
+        assert(drew_line("Gamma") == 2);
+        frame(PRESS(select));
+        frame(PRESS(right));
+        assert(ui.box_page == 0);
+        draw();
+        assert(!drew_line("IN GAME") && !sm_test_drew("PICTURES"));
+        frame(PRESS(back)); frame(PRESS(back));
+
+        /* A picture of the wrong size is refused, and the page says so
+           rather than drawing it. */
+        frame(PRESS(down)); settle();
+        frame(PRESS(select)); settle();
+        assert(ui.shot_thumbs[0] && !ui.shot_thumbs[1]);
+        frame(PRESS(select));
+        frame(PRESS(right));
+        assert(ui.box_page == 1 && !ui.shot_sprite);
+        draw();
+        assert(sm_test_drew("NO PICTURE"));
+        frame(PRESS(back)); frame(PRESS(back));
+        ROW_SHOTS = NULL;
     }
 
     /* ---- the start screen names the release ------------------------------ */

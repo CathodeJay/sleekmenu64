@@ -22,8 +22,9 @@ genre, publisher, year, players; CC BY-SA 4.0), which holds no images. The
 tool that prepares the card fetches three things, each once and each onto
 the card: the box-art collection, from its own releases page, when the
 card lacks it (`tools/fetch.py`); high-resolution boxes from
-libretro-thumbnails (`tools/hires.py`); and, only when asked, cheat codes
-from libretro-database (`tools/cheat_codes.py`). The collection's zip
+libretro-thumbnails (`tools/hires.py`); and, only when asked, screenshots
+from libretro-thumbnails (`tools/shots.py`) and cheat codes from
+libretro-database (`tools/cheat_codes.py`). The collection's zip
 lands through a `.part` file and is kept only once it opens as a collection
 with boxes in it, so an interrupted download never passes for one; three
 addresses are tried, since GitHub's `releases/latest/download/` answers only
@@ -184,6 +185,17 @@ only into `hires/` and keep their own manifest; the owner's edits write
 only outside it; so neither can overwrite the other and the manifest can
 say whether a fetched file is still what was fetched.
 
+Screenshots follow the same rules (`tools/shots.py`): fetched on request
+into `sleekmenu/art/shots/`, a title screen and a snap per game code, by
+the same names and links as the boxes; the owner's own by the ROM's name,
+first. Only a game catalogued as retail gets fetched ones -- its kind as
+the catalog has it, the owner's correction included, since a hack's parent
+showed in play is another game. Games with the same pictures share a
+numbered set; the set number rides in the two bytes that close the catalog
+record, which were padding, so an older browser reads the record as it
+always did. Two packs carry the sets, as the covers' two do: 48×36 for the
+details screen, 224×168 for the box view.
+
 Text comes from `data/coverdb.csv`, keyed by the CRC pair in the ROM header —
 what the dump *is*, not what it is named. The game code is used only as a
 fallback, because two characters of game id collide for eleven known pairs of
@@ -211,9 +223,9 @@ On the console the work is split into small modules:
 | `input` | controller state mapped to actions |
 | `catalog` | bounded parsing and CRC check of the catalog |
 | `folder_scan` | the folder being browsed read off the card for what the catalog does not know; the name rules the whole-card scan shares |
-| `cover_pack` | binary-searched cover lookup in `covers.pak` |
+| `cover_pack` | binary-searched picture lookup in `covers.pak`, and the same in the screenshots' packs |
 | `picture` | a cover shrunk by averaging, for the grid's tiles |
-| `ui` | list, grid and coverflow views, filters, the launch card, the box view, the cheats page |
+| `ui` | list, grid and coverflow views, filters, the launch card and its screenshots, the box view, the cheats page |
 | `theme` | the colours, by what each is for; the built-in themes and the card's choice of one |
 | `buttons` | the controller's buttons as pictures, and the help bar's lines of them |
 | `launch_policy` | suffix, magic, size and boot-code checks before anything boots |
@@ -317,7 +329,11 @@ area with both bands kept. The sprite is read when the view opens (92 KB,
 one seek) and freed when it closes; nothing is cached. Without the pack the
 view doubles the thumbnail nearest-neighbour and says why. The large sprite
 is drawn by the same software blit as everything else, 46K pixels a frame
-against the grid's 37K.
+against the grid's 37K. Left and right turn to the game's screenshots: each
+is read from `shots-large.pak` as it is turned to (74 KB) and freed as it
+is turned from, while the box stays loaded; which pictures a game has is
+known from the pack's index, held in RAM, without a read. The details
+screen reads its two thumbnails, 3.5 KB each, when the card opens.
 
 **The box back.** The description on the launch card is rendered whole,
 once, into a surface of its own when the card opens, and the card shows a

@@ -122,6 +122,16 @@ typedef struct {
        screen and no longer. NULL with the view open means the card has no
        large cover for this game, and the view doubles the thumbnail. */
     sprite_t *box_sprite;
+    /* Screenshots (tools/shots.py). The details screen's two thumbnails,
+       read from shots.pak when the card opens and freed when it closes,
+       NULL for a picture the game does not have; and the box view's
+       picture, read from shots-large.pak when left or right turns to it,
+       one at a time, while the box stays loaded to turn back to. */
+    sprite_t *shot_thumbs[2];
+    sprite_t *shot_sprite;
+    /* Which picture the box view shows: 0 the box, 1 the title screen,
+       2 the game in play. Only the pages the game has are reached. */
+    uint8_t box_page;
     sprite_t *slot_sprites[SM_UI_SLOTS_MAX];
     /* The grid's tiles: each slot's cover shrunk to tile size once, by
        averaging (picture.h), rather than every frame by dropping pixels.
@@ -210,6 +220,10 @@ typedef struct {
        cover. A card without it is a card without the view's large art, not
        an error. */
     sm_cover_pack_t covers_large;
+    /* The screenshots' two packs, opened beside the covers' and as
+       optional: an index of 16 bytes a picture each. */
+    sm_cover_pack_t shots;
+    sm_cover_pack_t shots_large;
     /* The folder being browsed, read off the card for what the catalog
        does not know: a game copied on since the card was prepared is
        listed and playable, with its box and facts to follow once the Game

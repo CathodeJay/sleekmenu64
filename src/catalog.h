@@ -43,6 +43,10 @@ typedef struct {
     uint8_t players;
     uint8_t regions;
     uint8_t flags;
+    /* The game's screenshots: a set number in shots.pak and shots-large.pak,
+       whose pictures are named "<set>.title" and "<set>.snap"; 0 for none.
+       tools/shots.py numbers the sets. */
+    uint16_t shots;
 } sm_game_t;
 
 static inline sm_kind_t sm_game_kind(const sm_game_t *game) {
@@ -106,6 +110,7 @@ static inline bool sm_extras_get(const sm_extras_t *extras, uint32_t index, sm_g
     game->players = 0;
     game->regions = 0;
     game->flags = 0;
+    game->shots = 0;
     return game->title != NULL && game->path != NULL;
 }
 

@@ -10,9 +10,11 @@
 #include <libdragon.h>
 
 /* Format 2: tools/build_catalog.py. A record is six string offsets, the
-   year, and three bytes; format 1 had no description and 28-byte records,
-   and is refused rather than misread -- a card built by an older tool
-   simply gets rebuilt. */
+   year, three bytes, a reserved byte and the screenshot set; format 1 had
+   no description and 28-byte records, and is refused rather than misread --
+   a card built by an older tool simply gets rebuilt. The set number came
+   later, in what had been padding: a catalog from before it reads 0 there,
+   which is no screenshots. */
 #define SM_HEADER_SIZE 32u
 #define SM_FORMAT_VERSION 2u
 #define SM_RECORD_SIZE 32u
@@ -118,6 +120,7 @@ bool catalog_get(const sm_catalog_t *catalog, uint32_t index, sm_game_t *game) {
         game->players = 0;
         game->regions = 0;
         game->flags = 0;
+        game->shots = 0;
         return game->title != NULL && game->path != NULL;
     }
     if (catalog->data == NULL) return false;
@@ -132,6 +135,7 @@ bool catalog_get(const sm_catalog_t *catalog, uint32_t index, sm_game_t *game) {
     game->players = record[26];
     game->regions = record[27];
     game->flags = record[28];
+    game->shots = read_u16(record + 30);
     return game->title && game->path && game->cover && game->publisher && game->genre &&
         game->description;
 }

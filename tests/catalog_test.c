@@ -32,6 +32,10 @@ int main(int argc, char **argv) {
     assert(game.players == 4);
     assert(game.regions == SM_REGION_USA);
     assert(game.flags == SM_FLAG_FAVORITE);
+    /* The screenshot set, in the two bytes that close the record: 513 is
+       two bytes that are not the same, so an order swapped on either side
+       reads as 258. */
+    assert(game.shots == 513u);
 
     /* A game with nothing to say has an empty description, not a NULL one:
        the launch card tests description[0] and nothing else. */
@@ -40,6 +44,7 @@ int main(int argc, char **argv) {
     assert(game.description != NULL && game.description[0] == '\0');
     assert(game.cover[0] == '\0');
     assert(game.year == 0 && game.regions == 0);
+    assert(game.shots == 0u);
     /* What the tool set aside travels as a record the browser knows and
        never lists: its name, its path, and the flag that says so. */
     assert(catalog_get(&catalog, 2, &game));

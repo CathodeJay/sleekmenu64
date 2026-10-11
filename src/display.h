@@ -39,6 +39,13 @@ enum {
        footer at a box's proportions. tools/make_sprite.py writes this size. */
     SM_COVER_LARGE_WIDTH = 256,
     SM_COVER_LARGE_HEIGHT = 180,
+    /* Screenshots (tools/shots.py writes both sizes): 4:3 in the box view,
+       as large as fits between the title band and the footer, and the
+       details screen's thumbnails, two stacked beside the facts. */
+    SM_SHOT_WIDTH = 224,
+    SM_SHOT_HEIGHT = 168,
+    SM_SHOT_THUMB_WIDTH = 48,
+    SM_SHOT_THUMB_HEIGHT = 36,
     SM_FONT_WIDTH = 5,
     SM_FONT_HEIGHT = 8
 };

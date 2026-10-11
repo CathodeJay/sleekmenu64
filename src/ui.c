@@ -250,6 +250,20 @@ static void unload_box(sm_ui_t *ui) {
     ui->box_sprite = NULL;
 }
 
+/* The box view's screenshot, and which page it is on: back to the box. */
+static void unload_shot(sm_ui_t *ui) {
+    if (ui->shot_sprite) sprite_free(ui->shot_sprite);
+    ui->shot_sprite = NULL;
+    ui->box_page = 0;
+}
+
+static void unload_shot_thumbs(sm_ui_t *ui) {
+    for (int i = 0; i < 2; i++) {
+        if (ui->shot_thumbs[i]) sprite_free(ui->shot_thumbs[i]);
+        ui->shot_thumbs[i] = NULL;
+    }
+}
+
 static void unload_slots(sm_ui_t *ui) {
     for (int i = 0; i < SM_UI_SLOTS_MAX; i++) {
         if (ui->slot_sprites[i]) sprite_free(ui->slot_sprites[i]);
@@ -337,6 +351,77 @@ static sprite_t *load_large_cover(uint32_t item, const sm_catalog_t *catalog, sm
         return NULL;
     }
     return sprite;
+}
+
+/* A game's screenshots: set `set` in the two packs, pictures named
+   "<set>.title" and "<set>.snap" (tools/shots.py). Slot 0 is the title
+   screen, slot 1 the game in play. */
+static const char *const SHOT_SLOTS[2] = {"title", "snap"};
+static const char *const BOX_PAGES[3] = {"BOX", "TITLE", "IN GAME"};
+
+static bool shot_name(uint16_t set, unsigned slot, char *out, size_t size) {
+    return set && slot < 2u && snprintf(out, size, "%u.%s", (unsigned)set, SHOT_SLOTS[slot]) < (int)size;
+}
+
+/* Whether a pack has the picture, from its index alone: no read. */
+static bool shot_listed(const sm_cover_pack_t *pack, uint16_t set, unsigned slot) {
+    char name[24];
+    if (!sm_cover_pack_ready(pack) || !shot_name(set, slot, name, sizeof(name))) return false;
+    return sm_cover_pack_find(pack->entries, pack->count, sm_cover_hash(name)) >= 0;
+}
+
+/* One screenshot out of a pack, at the size that pack holds: anything
+   else is refused rather than drawn wrong. */
+static sprite_t *load_shot(sm_cover_pack_t *pack, uint16_t set, unsigned slot, int width, int height) {
+    char name[24];
+    sprite_t *sprite;
+    if (!sm_cover_pack_ready(pack) || !sm_cart_image_intact() || !shot_name(set, slot, name, sizeof(name)))
+        return NULL;
+    sprite = load_pack_cover(pack, name);
+    if (sprite && (sprite->width != width || sprite->height != height)) {
+        sprite_free(sprite);
+        return NULL;
+    }
+    return sprite;
+}
+
+/* The details screen's thumbnails for a game, both read when its card
+   opens: two reads of 3.5 KB. */
+static void load_shot_thumbs(sm_ui_t *ui, const sm_game_t *game) {
+    unload_shot_thumbs(ui);
+    if (!game || !game->shots) return;
+    for (unsigned slot = 0; slot < 2u; slot++)
+        ui->shot_thumbs[slot] = load_shot(&ui->shots, game->shots, slot,
+            SM_SHOT_THUMB_WIDTH, SM_SHOT_THUMB_HEIGHT);
+}
+
+/* The pages the box view can show for a game: the box always, and each
+   screenshot the large pack has. */
+static unsigned box_pages(const sm_ui_t *ui, const sm_game_t *game, bool has[3]) {
+    unsigned count = 1u;
+    has[0] = true;
+    for (unsigned slot = 0; slot < 2u; slot++) {
+        has[slot + 1u] = game && shot_listed(&ui->shots_large, game->shots, slot);
+        if (has[slot + 1u]) count++;
+    }
+    return count;
+}
+
+/* Left or right in the box view: the next page the game has, round from
+   the last to the box. The screenshot is read as it is turned to. */
+static void turn_box_page(sm_ui_t *ui, const sm_catalog_t *catalog, int direction) {
+    sm_game_t game;
+    bool has[3];
+    unsigned page;
+    if (!ui->item_count || (ui->items[ui->selected] & SM_UI_FOLDER_BIT)) return;
+    if (!catalog_get(catalog, ui->items[ui->selected], &game)) return;
+    if (box_pages(ui, &game, has) < 2u) return;
+    page = ui->box_page;
+    do page = (page + (direction < 0 ? 2u : 1u)) % 3u; while (!has[page]);
+    unload_shot(ui);
+    ui->box_page = (uint8_t)page;
+    if (page) ui->shot_sprite = load_shot(&ui->shots_large, game.shots, page - 1u,
+        SM_SHOT_WIDTH, SM_SHOT_HEIGHT);
 }
 
 static sprite_t *load_item_cover(uint32_t item, const sm_catalog_t *catalog,
@@ -1266,6 +1351,11 @@ static void desc_window(const sm_ui_t *ui, const sm_layout_t *l, int *top, int *
     if (launch_cheats_available()) info_y += 11;
     if (ui->selected_features) info_y += 11;
     *top = (info_y > y + SM_COVER_HEIGHT ? info_y : y + SM_COVER_HEIGHT) + 6;
+    /* Two screenshots stand a little lower than the cover: the text starts
+       below their frames. */
+    if (ui->shot_thumbs[0] && ui->shot_thumbs[1] &&
+        *top < y + 2 * SM_SHOT_THUMB_HEIGHT + 3 + 1 + 2)
+        *top = y + 2 * SM_SHOT_THUMB_HEIGHT + 3 + 1 + 2;
     *height = (l->footer_top - 26 - 4) - *top;
     if (*height < 0) *height = 0;
 }
@@ -1461,6 +1551,7 @@ static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_
         load_selected_cover(ui, catalog);
     if (!ui->selected_details_loaded)
         load_selected_details(ui, catalog);
+    load_shot_thumbs(ui, game);
     ui->screen = SM_SCREEN_LAUNCH_DETAILS;
 }
 
@@ -1504,6 +1595,8 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
            rather than a walk through a directory of 745 long filenames. */
         sm_cover_pack_open(&ui->covers, SM_COVER_PACK_PATH);
         sm_cover_pack_open(&ui->covers_large, SM_COVER_PACK_LARGE_PATH);
+        sm_cover_pack_open(&ui->shots, SM_SHOT_PACK_PATH);
+        sm_cover_pack_open(&ui->shots_large, SM_SHOT_PACK_LARGE_PATH);
         sm_favorites_load(&ui->favorites, SM_FAVORITES_PATH);
         sm_history_load(&ui->history, SM_HISTORY_PATH);
         /* The launcher writes the entry itself, at the point of no return. */
@@ -1538,6 +1631,7 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
         if (actions.back) {
             if (ui->diagnostics) { ui->diagnostics = false; return; }
             launch_cancel(); ui->screen = SM_SCREEN_LIBRARY;
+            unload_shot_thumbs(ui);
             ui->status = launch_status_message();
             return;
         }
@@ -1566,6 +1660,7 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
             /* Look closer, once more: A opened this card from the list, and
                A opens the box from the card. The read happens here, once. */
             unload_box(ui);
+            unload_shot(ui);
             ui->box_sprite = load_large_cover(ui->items[ui->selected] & ~SM_UI_FOLDER_BIT,
                 catalog, &ui->covers_large);
             ui->screen = SM_SCREEN_BOX;
@@ -1577,6 +1672,7 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
     if (ui->screen == SM_SCREEN_BOX) {
         if (actions.back || actions.select) {
             unload_box(ui);
+            unload_shot(ui);
             ui->screen = SM_SCREEN_LAUNCH_DETAILS;
             return;
         }
@@ -1584,9 +1680,12 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
             /* The load draws its bar on the card; the box goes first, and
                its 92 KB with it. */
             unload_box(ui);
+            unload_shot(ui);
             ui->screen = SM_SCREEN_LAUNCH_DETAILS;
             launch_from_card(ui, catalog, layout);
+            return;
         }
+        if (actions.left || actions.right) turn_box_page(ui, catalog, actions.left ? -1 : 1);
         return;
     }
     if (ui->screen == SM_SCREEN_CHEATS) {
@@ -2660,6 +2759,24 @@ static void draw_load_bar(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui)
     draw_truncated(s, x, y - 10, line, (width) / SM_FONT_WIDTH);
 }
 
+/* The card's screenshots, from the top of the cover down along the right
+   edge: whichever of the two the game has, the title screen first. Returns
+   the row below the last frame, or `top` when there are none, which is
+   where the facts beside them may be full width again. */
+static int draw_shot_thumbs(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui, int top) {
+    int x = l->safe_right - 1 - SM_SHOT_THUMB_WIDTH;
+    int y = top;
+    for (int slot = 0; slot < 2; slot++) {
+        sprite_t *thumb = ui->shot_thumbs[slot];
+        if (!thumb) continue;
+        graphics_draw_box(s, x - 1, y - 1, SM_SHOT_THUMB_WIDTH + 2, SM_SHOT_THUMB_HEIGHT + 2,
+            sm_colour(SM_C_WELL));
+        graphics_draw_sprite_trans(s, x, y, thumb);
+        y += SM_SHOT_THUMB_HEIGHT + 3;
+    }
+    return y == top ? top : y - 2;
+}
+
 static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
     const sm_ui_t *ui) {
     sm_game_t game;
@@ -2721,8 +2838,14 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
 
     {
         int info_y = y;
+        /* The screenshots, when the game has them: stacked at the right of
+           the facts, the title screen above the game in play, each in a
+           one-pixel frame. The rows beside them are cut to the room left. */
+        int shots_bottom = draw_shot_thumbs(s, l, ui, y);
+        int narrow = (l->safe_right - 1 - SM_SHOT_THUMB_WIDTH - 4 - text_x) / SM_FONT_WIDTH;
+#define ROW_CHARS(row_y) ((row_y) < shots_bottom ? narrow : text_chars)
         graphics_set_color(sm_colour(SM_C_TEXT), 0);
-        if (have) draw_truncated(s, text_x, info_y, game.title, text_chars);
+        if (have) draw_truncated(s, text_x, info_y, game.title, ROW_CHARS(info_y));
         info_y += 12;
         if (have && (game.year || game.publisher[0])) {
             if (game.year && game.publisher[0])
@@ -2730,21 +2853,21 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
             else if (game.year) snprintf(line, sizeof(line), "%u", (unsigned)game.year);
             else snprintf(line, sizeof(line), "%s", game.publisher);
             graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
-            draw_truncated(s, text_x, info_y, line, text_chars);
+            draw_truncated(s, text_x, info_y, line, ROW_CHARS(info_y));
         }
         info_y += 11;
         if (have && game.genre[0]) {
             draw_chip(s, text_x, info_y + 2, game.genre);
             graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
-            draw_truncated(s, text_x + 6, info_y, game.genre, text_chars - 1);
+            draw_truncated(s, text_x + 6, info_y, game.genre, ROW_CHARS(info_y) - 1);
         }
         /* A hack, a translation or homebrew says so beside its genre. */
         if (have && kind_word(sm_game_kind(&game))) {
             int used = game.genre[0] ? 6 + ((int)strlen(game.genre) + 2) * SM_FONT_WIDTH : 0;
-            if (used / SM_FONT_WIDTH < text_chars - 4) {
+            if (used / SM_FONT_WIDTH < ROW_CHARS(info_y) - 4) {
                 graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
                 draw_truncated(s, text_x + used, info_y, kind_word(sm_game_kind(&game)),
-                    text_chars - used / SM_FONT_WIDTH);
+                    ROW_CHARS(info_y) - used / SM_FONT_WIDTH);
             }
         }
         info_y += 11;
@@ -2758,7 +2881,7 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
                 snprintf(line + used, sizeof(line) - used, "%uP", (unsigned)game.players);
             }
             graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
-            draw_truncated(s, text_x, info_y, line[0] ? line : "-", text_chars);
+            draw_truncated(s, text_x, info_y, line[0] ? line : "-", ROW_CHARS(info_y));
         }
         info_y += 15;
 
@@ -2771,7 +2894,7 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
         graphics_set_color(sm_colour(SM_C_ACCENT), 0);
         draw_truncated(s, text_x + LABEL_COLUMN, info_y,
             launch_selected_is_disk() ? "ON THE 64DD DISK" : sm_save_type_name(launch_save_type()),
-            text_chars - 6);
+            ROW_CHARS(info_y) - 6);
         info_y += 11;
         if (launch_sibling_disk()[0]) {
             /* The expansion disk found beside the ROM, by its file name. */
@@ -2779,7 +2902,8 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
             graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
             graphics_draw_text(s, text_x, info_y, "64DD");
             graphics_set_color(sm_colour(SM_C_TEXT), 0);
-            draw_truncated(s, text_x + LABEL_COLUMN, info_y, name ? name + 1 : launch_sibling_disk(), text_chars - 6);
+            draw_truncated(s, text_x + LABEL_COLUMN, info_y, name ? name + 1 : launch_sibling_disk(),
+                ROW_CHARS(info_y) - 6);
             info_y += 11;
         }
         if (launch_cheats_available()) {
@@ -2788,23 +2912,26 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
             graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
             graphics_draw_text(s, text_x, info_y, "CHEATS");
             if (on && cheat_warning()) {
-                /* The column beside the cover is nineteen characters wide;
-                   the reason is on the cheats page, one press away. */
-                snprintf(line, sizeof(line), "%lu on, WILL NOT RUN", (unsigned long)on);
+                /* The column beside the cover is nineteen characters wide,
+                   fourteen beside screenshots; the reason is on the cheats
+                   page, one press away. */
+                snprintf(line, sizeof(line), ROW_CHARS(info_y) < text_chars ? "%lu on, BLOCKED"
+                                                                              : "%lu on, WILL NOT RUN",
+                    (unsigned long)on);
                 graphics_set_color(sm_colour(SM_C_ERROR), 0);
             } else {
                 snprintf(line, sizeof(line), "%lu of %lu on", (unsigned long)on, (unsigned long)set->count);
                 graphics_set_color(on ? sm_colour(SM_C_ACCENT)
                                       : sm_colour(SM_C_TEXT), 0);
             }
-            draw_truncated(s, text_x + LABEL_COLUMN_WIDE, info_y, line, text_chars - 8);
+            draw_truncated(s, text_x + LABEL_COLUMN_WIDE, info_y, line, ROW_CHARS(info_y) - 8);
             info_y += 11;
         }
         graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, text_x, info_y, "SIZE");
         sm_format_rom_size(ui->selected_size, line, sizeof(line));
         graphics_set_color(sm_colour(SM_C_TEXT), 0);
-        draw_truncated(s, text_x + LABEL_COLUMN, info_y, line, text_chars - 6);
+        draw_truncated(s, text_x + LABEL_COLUMN, info_y, line, ROW_CHARS(info_y) - 6);
         info_y += 11;
         if (ui->selected_features) {
             graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
@@ -2814,9 +2941,10 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
                 (ui->selected_features & SM_FEAT_RPAK) ? "RUMBLE " : "",
                 (ui->selected_features & SM_FEAT_TPAK) ? "TRANSFER" : "");
             graphics_set_color(sm_colour(SM_C_TEXT), 0);
-            draw_truncated(s, text_x + LABEL_COLUMN, info_y, line, text_chars - 6);
+            draw_truncated(s, text_x + LABEL_COLUMN, info_y, line, ROW_CHARS(info_y) - 6);
             info_y += 11;
         }
+#undef ROW_CHARS
 
         /* The box back, under the cover and the facts, in the space that was
            empty. It stops short of the prompts; NTSC shows five or six lines
@@ -2849,7 +2977,8 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
 /* The box view: the game's cover as large as the screen allows, centred
    between the title band and the footer. From covers-large.pak when the card
    has it; otherwise the thumbnail doubled, nearest-neighbour, with a line
-   saying why it is soft. */
+   saying why it is soft. A game with screenshots turns to them with left
+   and right, and the band says which picture is up. */
 static void draw_box_view(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm_ui_t *ui) {
     sm_game_t game;
     bool have = ui->item_count &&
@@ -2859,11 +2988,50 @@ static void draw_box_view(surface_t *s, const sm_layout_t *l, const sm_catalog_t
     int top = l->safe_top + SM_HEADER_HEIGHT + 4;
     int bottom = l->footer_top - 4;
     int box_w, box_h, x, y;
+    int title_chars = chars;
+    bool has[3] = {true, false, false};
+    unsigned pages = have ? box_pages(ui, &game, has) : 1u;
 
     graphics_draw_box(s, l->safe_left, l->safe_top, width, SM_HEADER_HEIGHT,
         sm_colour(SM_C_BAND));
+    if (pages > 1u) {
+        /* The pages the game has, at the right of the band, the one on
+           screen lit the way the genre strip lights its tab. */
+        int labels = 0;
+        for (unsigned page = 0; page < 3u; page++)
+            if (has[page]) labels += ((int)strlen(BOX_PAGES[page]) + 2) * SM_FONT_WIDTH;
+        x = l->safe_right - 3 - labels + 2 * SM_FONT_WIDTH;
+        title_chars -= labels / SM_FONT_WIDTH;
+        for (unsigned page = 0; page < 3u; page++) {
+            int label = (int)strlen(BOX_PAGES[page]) * SM_FONT_WIDTH;
+            if (!has[page]) continue;
+            if (page == ui->box_page)
+                graphics_draw_box(s, x - 2, l->safe_top + 1, label + 3, SM_HEADER_HEIGHT - 2,
+                    sm_colour(SM_C_SELECT));
+            graphics_set_color(page == ui->box_page ? sm_colour(SM_C_TEXT_BRIGHT)
+                                                    : sm_colour(SM_C_TEXT_MUTED), 0);
+            graphics_draw_text(s, x, l->safe_top + 3, BOX_PAGES[page]);
+            x += label + 2 * SM_FONT_WIDTH;
+        }
+    }
     graphics_set_color(sm_colour(SM_C_ACCENT), 0);
-    draw_truncated(s, l->safe_left + 3, l->safe_top + 3, have ? game.title : "BOX", chars);
+    draw_truncated(s, l->safe_left + 3, l->safe_top + 3, have ? game.title : "BOX", title_chars);
+
+    if (ui->box_page) {
+        x = l->safe_left + (width - SM_SHOT_WIDTH) / 2;
+        y = top + (bottom - top - SM_SHOT_HEIGHT) / 2;
+        if (ui->shot_sprite) {
+            graphics_draw_sprite_trans(s, x, y, ui->shot_sprite);
+        } else {
+            /* Listed in the index and would not read: a damaged pack. */
+            graphics_draw_box(s, x, y, SM_SHOT_WIDTH, SM_SHOT_HEIGHT, sm_colour(SM_C_WELL));
+            graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
+            graphics_draw_text(s, x + (SM_SHOT_WIDTH - 10 * SM_FONT_WIDTH) / 2,
+                y + SM_SHOT_HEIGHT / 2 - 4, "NO PICTURE");
+        }
+        draw_help(s, l, "{S}PLAY {B}BACK {-}PICTURES");
+        return;
+    }
 
     if (ui->box_sprite) {
         box_w = ui->box_sprite->width;
@@ -2899,7 +3067,7 @@ static void draw_box_view(surface_t *s, const sm_layout_t *l, const sm_catalog_t
             "Not in the catalog yet: run Game Catalog Manager", chars);
     }
 
-    draw_help(s, l, "{S}PLAY {B}BACK");
+    draw_help(s, l, pages > 1u ? "{S}PLAY {B}BACK {-}PICTURES" : "{S}PLAY {B}BACK");
 }
 
 /* The cheats page: every entry the game's file holds, on or off, one per
@@ -3055,10 +3223,14 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
 void ui_close(sm_ui_t *ui) {
     unload_cover(ui);
     unload_box(ui);
+    unload_shot(ui);
+    unload_shot_thumbs(ui);
     unload_slots(ui);
     sm_folder_scan_close(&ui->scan, NULL);
     sm_cover_pack_close(&ui->covers);
     sm_cover_pack_close(&ui->covers_large);
+    sm_cover_pack_close(&ui->shots);
+    sm_cover_pack_close(&ui->shots_large);
     if (ui->desc_surface.buffer) surface_free(&ui->desc_surface);
     ui->desc_lines = 0;
 }

@@ -30,8 +30,11 @@ MAGIC = b"EBC1"
 VERSION = 2
 HEADER = struct.Struct("<4sHHIIIIII")
 # title, path, cover, publisher, genre, description offsets; year; players,
-# regions, flags; padding to 32 bytes. src/catalog.c reads exactly this.
-RECORD = struct.Struct("<IIIIIIHBBB3x")
+# regions, flags; a reserved byte; the screenshot set (tools/shots.py, 0 for
+# none). src/catalog.c reads exactly this. The set number sits in what was
+# padding, so a browser from before screenshots reads the record as it
+# always did.
+RECORD = struct.Struct("<IIIIIIHBBBxH")
 REGIONS = {"USA": 1, "JAPAN": 2, "EUROPE": 4}
 # Cartridge dumps and 64DD disk images; src/catalog.c lists the same set.
 ROM_SUFFIXES = {".z64", ".v64", ".n64", ".ndd"}
@@ -43,6 +46,7 @@ FLAG_FAVORITE = 1
 # folder and taking it for a game the catalog missed.
 FLAG_SET_ASIDE = 2
 # Bits 2..4 are the game's kind: tools/kinds.py.
+MAX_SHOT_SET = 0xFFFF
 
 # Characters the font lacks that have an obvious ASCII spelling. Everything
 # else non-ASCII is decomposed and stripped of its accents; what is left
@@ -183,6 +187,9 @@ def normalize(document: object) -> list[dict[str, object]]:
             raise CatalogError(f"{prefix}.kind must be one of: " + ", ".join(kinds.KINDS))
         cover_value = raw.get("cover")
         cover = "" if cover_value in (None, "") else _relative_path(cover_value, f"{prefix}.cover")
+        shots = raw.get("shots", 0) or 0
+        if not isinstance(shots, int) or isinstance(shots, bool) or not 0 <= shots <= MAX_SHOT_SET:
+            raise CatalogError(f"{prefix}.shots must be an integer from 0 to {MAX_SHOT_SET}")
 
         result.append({
             "title": console_text(_text(raw.get("title"), f"{prefix}.title")) or "?",
@@ -198,6 +205,7 @@ def normalize(document: object) -> list[dict[str, object]]:
             "players": players,
             "region_mask": region_mask,
             "flags": (FLAG_FAVORITE if favorite else 0) | kinds.flags(kind),
+            "shots": shots,
         })
     aside = document.get("set_aside", [])
     if not isinstance(aside, list):
@@ -222,6 +230,7 @@ def normalize(document: object) -> list[dict[str, object]]:
             "players": 0,
             "region_mask": 0,
             "flags": FLAG_SET_ASIDE,
+            "shots": 0,
         })
     return sorted(result, key=lambda game: (str(game["path"]).casefold(), str(game["title"]).casefold()))
 
@@ -243,7 +252,7 @@ def encode(games: list[dict[str, object]]) -> bytes:
             intern(game["title"]), intern(game["path"]), intern(game["cover"]),
             intern(game["publisher"]), intern(game["genre"]), intern(game["description"]),
             int(game["year"]), int(game["players"]), int(game["region_mask"]),
-            int(game["flags"]),
+            int(game["flags"]), int(game.get("shots", 0)),
         ))
     records_offset = HEADER.size
     strings_offset = records_offset + len(records)

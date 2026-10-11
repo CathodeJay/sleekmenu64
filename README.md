@@ -72,8 +72,8 @@ lets you give any game your own picture, description or facts; see
 Descriptions come from the
 community-maintained
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata)
-collection, boxes from
-[libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
+collection, boxes and, when you ask for them, screenshots from
+[libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64),
 and, when you ask for them, cheat codes from
 [libretro-database](https://github.com/libretro/libretro-database);
 SleekMenu ships none of them.
@@ -83,7 +83,7 @@ SleekMenu ships none of them.
 | Control | Browsing | A game's details |
 |---|---|---|
 | D-pad / stick | Move; hold to keep moving, faster and then several games at a time the longer you hold. The stick leaned part way moves one game at a time | Scroll the description |
-| A | Open a folder, or a game's details | The box, full screen |
+| A | Open a folder, or a game's details | The box, full screen; left and right turn to the screenshots |
 | B | Parent folder | Back to the list |
 | Start | Play | Play |
 | C-left / C-right | Previous / next genre tab | — |
@@ -141,6 +141,10 @@ always started from the EverDrive menu. More in
   their name, their folder and the database, and tagged HACK, TL or HB on
   their row; Z filters by kind. A wrong guess is corrected in the Game
   Catalog Manager.
+- **Screenshots:** tick **Fetch screenshots** on the Game Catalog Manager's
+  Card tab and each retail game gets its title screen and a moment of play:
+  two thumbnails beside the facts on its details, and full size in the box
+  view, after the box. Add your own for a hack from the Games tab.
 - **Cheats** come from the EverDrive-64 Pro's cheat pack in `ED64/CHEATS/`,
   or from libretro when you tick **Fetch cheat codes** on the Game Catalog
   Manager's Card tab, and need an Expansion Pak.
@@ -152,7 +156,8 @@ cheats in detail — is in [docs/CONSOLE.md](docs/CONSOLE.md).
 ## More
 
 - [docs/PREP.md](docs/PREP.md) — the Game Catalog Manager in full, your own
-  art and text, high-resolution boxes, cheat codes, and the command line
+  art and text, high-resolution boxes, screenshots, cheat codes, and the
+  command line
 - [docs/CONSOLE.md](docs/CONSOLE.md) — using SleekMenu on the console
 - [docs/CARD_LAYOUT.md](docs/CARD_LAYOUT.md) — every file on the card
 - [docs/DESIGN.md](docs/DESIGN.md) — how it is put together and why

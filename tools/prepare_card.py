@@ -38,12 +38,12 @@ if __package__ in (None, ""):
 import hashlib
 
 from tools import (build_catalog, build_metadata, card_catalog, cover_pack, coverdb, custom_art,
-                   headers, library, make_sprite, pack_covers)
+                   headers, library, make_sprite, pack_covers, shots)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 from tools.card_layout import (  # noqa: F401  (re-exported for callers)
     CARD_FOLDER, COVERS_FOLDER, COVERS_LARGE_FOLDER, COVER_PACK_NAME, COVER_PACK_LARGE_NAME,
-    CATALOG_NAME, CATALOG_JSON_NAME)
+    CATALOG_NAME, CATALOG_JSON_NAME, SHOT_PACK_NAME, SHOT_PACK_LARGE_NAME)
 
 
 class PrepareError(ValueError):
@@ -119,6 +119,41 @@ def reusable_sprites(card: Path, previous: dict | None, planned, repo,
             entry = large_index[cover_pack.cover_hash(name)]
             bytes_large = large[entry.offset:entry.offset + entry.length]
         out[name] = (bytes_small, bytes_large)
+    return out
+
+
+def reusable_shots(card: Path, previous: dict | None,
+                   identities: dict[str, str]) -> dict[str, tuple[bytes, bytes]]:
+    """The screenshots the last run made from pictures that have not
+    changed, read out of the two packs on the card, under the names this
+    run gives them: a set's number can change when games come and go, the
+    picture it was made from is what counts."""
+    if previous is None:
+        return {}
+    known = previous.get("shot_sprites")
+    if not isinstance(known, dict) or not known:
+        return {}
+    folder = card / CARD_FOLDER
+    try:
+        small = (folder / SHOT_PACK_NAME).read_bytes()
+        large = (folder / SHOT_PACK_LARGE_NAME).read_bytes()
+        small_index = {entry.hash: entry for entry in cover_pack.read_index(small)}
+        large_index = {entry.hash: entry for entry in cover_pack.read_index(large)}
+    except (OSError, cover_pack.CoverPackError):
+        return {}
+    by_identity = {identity: name for name, identity in known.items()
+                   if isinstance(identity, str) and identity}
+    out: dict[str, tuple[bytes, bytes]] = {}
+    for name, identity in identities.items():
+        old = by_identity.get(identity)
+        if old is None:
+            continue
+        small_entry = small_index.get(cover_pack.cover_hash(old))
+        large_entry = large_index.get(cover_pack.cover_hash(old))
+        if small_entry is None or large_entry is None:
+            continue
+        out[name] = (small[small_entry.offset:small_entry.offset + small_entry.length],
+                     large[large_entry.offset:large_entry.offset + large_entry.length])
     return out
 
 
@@ -253,6 +288,49 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
     summary["with_description"] = with_text
     log(f"metadata: {len(document['games'])} games, {with_meta} with genre/publisher/year/players, "
         f"{with_text} with a description")
+    # Screenshots: the owner's, and those fetched for retail games
+    # (tools/shots.py). Planned from the catalog's records, so a kind the
+    # owner corrected decides it as well.
+    shot_plan = shots.plan_sets(card, document["games"])
+    shot_identities = shot_plan.identities()
+    for game in document["games"]:
+        number = shot_plan.numbers.get(str(game["path"]))
+        if number:
+            game["shots"] = number
+            game["shot_sources"] = shot_plan.origins[str(game["path"])]
+    summary["shots"] = len(shot_plan.numbers)
+    if shot_plan.sets:
+        log(f"shots:    {len(shot_plan.numbers)} games have screenshots"
+            + (f" ({shot_plan.own} with your own)" if shot_plan.own else "")
+            + f", {len(shot_plan.sets)} different sets")
+        if shot_plan.dropped:
+            log(f"          {shot_plan.dropped} more left without: the console reads "
+                f"{shots.MAX_SETS} sets at most")
+        if not dry_run:
+            pictures = sum(len(pictures) for pictures in shot_plan.sets.values())
+            progress = None
+            if progress_factory is not None:
+                progress = progress_factory(pictures, "shots")
+            elif log is print and progress_stream is not False:
+                progress = Progress(pictures, "shots",
+                                    stream=None if progress_stream is None else progress_stream)
+            reuse = reusable_shots(card, previous, shot_identities)
+            small, large, converted, unreadable = shots.build(shot_plan, reuse, progress)
+            line = (f"shots:    {len(small)} pictures at both sizes, {converted} converted"
+                    + (f", {len(small) - converted} kept from the last run" if len(small) > converted else ""))
+            if progress is not None:
+                progress.done(line)
+            else:
+                log(line)
+            for path in unreadable[:10]:
+                log(f"          will not read, left out: {path}")
+            if small:
+                (work / SHOT_PACK_NAME).write_bytes(cover_pack.build(small))
+                (work / SHOT_PACK_LARGE_NAME).write_bytes(cover_pack.build(large))
+                size = (work / SHOT_PACK_NAME).stat().st_size + (work / SHOT_PACK_LARGE_NAME).stat().st_size
+                summary["shot_pack_bytes"] = size
+                log(f"          {size / 1048576:.1f} MB in {SHOT_PACK_NAME} and {SHOT_PACK_LARGE_NAME}")
+
     aside = document.get("set_aside", [])
     summary["set_aside"] = len(aside)
     if aside:
@@ -277,8 +355,9 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
         if checksums and relative in checksums:
             entry["checksum"] = checksums[relative]
     document["sprites"] = {name: identity for name, identity in identities.items() if identity}
+    document["shot_sprites"] = shot_identities
     document["packs"] = {}
-    for name in (COVER_PACK_NAME, COVER_PACK_LARGE_NAME):
+    for name in (COVER_PACK_NAME, COVER_PACK_LARGE_NAME, SHOT_PACK_NAME, SHOT_PACK_LARGE_NAME):
         built = work / name
         if built.is_file():
             data = built.read_bytes()
@@ -316,6 +395,16 @@ def prepare(roms: Path, card: Path, database_path: Path, repo: MetadataRepo | No
                         continue
                     shutil.copy2(built, destination / name)
                     written.append(f"{CARD_FOLDER}/{name} ({summary['sprites']} covers)")
+        for name in (SHOT_PACK_NAME, SHOT_PACK_LARGE_NAME):
+            built = work / name
+            if not built.is_file():
+                continue
+            if _pack_unchanged(previous, name, built.read_bytes(), destination / name):
+                log(f"pack:     {name} is what the card has; not written again")
+                summary.setdefault("packs_kept", []).append(name)
+                continue
+            shutil.copy2(built, destination / name)
+            written.append(f"{CARD_FOLDER}/{name} ({summary['shots']} games)")
         if rom_image is not None:
             if not rom_image.is_file():
                 raise PrepareError(f"ROM image not found: {rom_image}")

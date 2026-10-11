@@ -2,8 +2,16 @@
 
 ## 2.1.0
 
+**Upgrading from 2.0:** copy the new `SleekMenu64.z64` over the old one,
+download the new Game Catalog Manager, and press **Update card** once. To
+have screenshots, tick **Fetch screenshots** first.
+
 ### On the console
 
+- Screenshots: a game's title screen and a moment of play, as two
+  thumbnails beside the facts on its details, and full size in the box
+  view, where left and right turn from the box to them. A game without
+  them looks as before.
 - Holding a direction now crosses 3,000 games in about fifteen seconds
   rather than two minutes: after three seconds it moves five games a step,
   after six twenty. The stick leaned part of the way moves one game at a
@@ -19,6 +27,13 @@
 
 ### The Game Catalog Manager
 
+- **Fetch screenshots**, on the Card tab: the title screen and a moment of
+  play from libretro for every retail game, about 0.4 MB a game on the
+  card. Off until you tick it; the card remembers. On the command line,
+  `--shots` and `--no-shots`.
+- **Screenshots…**, in the Games tab: a game's two screenshots as the
+  console shows them, and your own for either one, which no download
+  replaces. Hacks, translations and homebrew get only yours.
 - Each game's kind is worked out from its file name, its folder and the
   database, shown in the Games tab and searchable; a wrong guess is
   corrected there and kept on the card as a `Kind:` line.

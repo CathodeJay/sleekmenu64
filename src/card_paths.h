@@ -30,6 +30,15 @@
 #ifndef SM_COVER_PACK_LARGE_PATH
 #define SM_COVER_PACK_LARGE_PATH SM_CARD_DIR "/covers-large.pak"
 #endif
+/* Screenshots: the details screen's thumbnails and the box view's
+   pictures, by set number (tools/shots.py). Optional, like the large
+   covers: a card without them shows what it always did. */
+#ifndef SM_SHOT_PACK_PATH
+#define SM_SHOT_PACK_PATH SM_CARD_DIR "/shots.pak"
+#endif
+#ifndef SM_SHOT_PACK_LARGE_PATH
+#define SM_SHOT_PACK_LARGE_PATH SM_CARD_DIR "/shots-large.pak"
+#endif
 #ifndef SM_COVERS_DIR
 #define SM_COVERS_DIR SM_CARD_DIR "/covers"
 #endif
