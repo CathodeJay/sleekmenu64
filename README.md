@@ -22,9 +22,8 @@ You need an EverDrive-64 X7 (OS 3.11) or Pro with your ROMs on the card, in
 any folders you like, and a Mac, a Windows PC or a Linux computer. Nothing
 to install.
 
-**1. Download two files** from the
-[releases page](https://github.com/CathodeJay/sleekmenu64/releases/latest):
-`SleekMenu64.z64` and the Game Catalog Manager for your computer.
+**1. Download the Game Catalog Manager for your computer** from the
+[releases page](https://github.com/CathodeJay/sleekmenu64/releases/latest).
 
 | Your computer | The Game Catalog Manager |
 |---|---|
@@ -33,20 +32,21 @@ to install.
 | Windows | `SleekMenu-Catalog-Manager-windows.exe` |
 | Linux | `SleekMenu-Catalog-Manager-linux` |
 
-**2. Copy `SleekMenu64.z64` to the root of the card.**
+**2. Open it.** On a Mac, unzip it first. It is not code-signed, so the
+first launch warns. On macOS 15 and later, open it once, then press Open
+Anyway in System Settings → Privacy & Security (earlier macOS: right-click
+→ Open). On Windows: More info → Run anyway. On Linux: `chmod +x
+SleekMenu-Catalog-Manager-linux` first.
 
-**3. Open the Game Catalog Manager.** On a Mac, unzip it first. It is not
-code-signed, so the first launch warns. On macOS 15 and later, open it
-once, then press Open Anyway in System Settings → Privacy & Security
-(earlier macOS: right-click → Open). On Windows: More info → Run anyway. On
-Linux: `chmod +x SleekMenu-Catalog-Manager-linux` first.
+**3. Set up the card.** It is picked for you when it is the only removable
+disk. Press **Set up card**: it puts `SleekMenu64.z64` at the root of the
+card, fetches a box and a description for each of your games, then writes
+the catalog. Up to about 330 MB for a complete library, once; you can stop
+and carry on later. (On a computer without internet, download
+`SleekMenu64.z64` from the same page and copy it to the root of the card
+yourself.)
 
-**4. Set up the card.** It is picked for you when it is the only removable
-disk. Press **Set up card**: it fetches a box and a description for each of
-your games onto the card, then writes the catalog. Up to about 330 MB for a
-complete library, once; you can stop and carry on later.
-
-**5. Put the card back in the cart and start `SleekMenu64.z64` from the
+**4. Put the card back in the cart and start `SleekMenu64.z64` from the
 EverDrive menu.** Start plays a game,
 A shows its details; reset the console to get back to the EverDrive menu.
 
@@ -54,6 +54,12 @@ A shows its details; reset the console to get back to the EverDrive menu.
 **Update card**. Only what changed is read and only the new games' boxes
 are fetched. Until then a new game still shows up and plays, just without
 its box.
+
+**A new release:** the Game Catalog Manager says when one is out, with the
+download for your computer. Open the new one and press **Update card**: it
+puts the SleekMenu of the same release on the card. The two always go
+together, so a card is never left with a SleekMenu its catalog does not
+suit.
 
 **Starting the console in SleekMenu:** an X7 can power on straight into
 it; see [below](#starting-the-console-in-sleekmenu-x7-only).

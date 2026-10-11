@@ -33,6 +33,18 @@ and the card gets a catalog without covers; `--no-download` and
 `SLEEKMENU_NO_DOWNLOAD=1` forbid the fetch, and the test suite sets the
 latter so no test reaches GitHub.
 
+**One release, both halves.** SleekMenu and the Game Catalog Manager are
+released together under one number, and the catalog between them has a
+format that moves with the releases. The tool therefore puts on a card the
+SleekMenu of its own release -- fetched from that release's page, checked
+by the number the ROM's header carries since 2.1 -- and never the newest
+one, which might want a catalog the tool cannot write; a newer SleekMenu,
+or one built by the owner, is left alone. Newer releases start with the
+tool: the window says when one is out and links to the file for the
+computer it runs on, and does not replace itself, since a program that
+installs what it downloads is a worse thing to trust than its owner
+fetching it (`tools/releases.py`).
+
 **No dependence on one collection.** `tests/test_portability.py` builds a
 card from a library in which not one game appears in the shipped database and
 checks the result still works, boxes included.

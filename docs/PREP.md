@@ -40,6 +40,12 @@ right.
   run carries on from there. A download that fails does not stop the run:
   the card gets its catalog, and the tab says what is missing and to press
   the button again.
+- **Keep SleekMenu on the card up to date**, under the button, puts the
+  `SleekMenu64.z64` of this release at the root of the card when the card
+  has an older one, or none; the line under it says which the card has.
+  See [Versions](#versions).
+- When a newer Game Catalog Manager is out, the tab says so under that,
+  with a link to the file for your computer.
 
 The right side is what most people never change. It applies the next time
 you press the button.
@@ -348,6 +354,31 @@ theme changes colours only: every screen is laid out the same, a warning is
 still amber and an error red, and the buttons on the help bar keep the
 colours they have on the controller.
 
+## Versions
+
+SleekMenu and the Game Catalog Manager are released together, under one
+number, and are meant to be used together: the catalog one writes is the
+catalog the other reads, and its format moves with the releases. So the
+SleekMenu a card gets is the one released with the Game Catalog Manager
+preparing it, never simply the newest.
+
+- **Keep SleekMenu on the card up to date** (on unless you untick it;
+  `--keep-browser` on the command line leaves the card's alone) makes
+  every update put this release's `SleekMenu64.z64` at the root of the
+  card when the card has an older one, or none. It is fetched from this
+  release's page on GitHub, checked to be that SleekMenu, and written by
+  way of a temporary file, so a card pulled out halfway still has the old
+  one. On an X7 that starts in SleekMenu, the copy in `ED64/` follows.
+- A SleekMenu newer than the Game Catalog Manager is left alone, and the
+  tab says to get the newer Game Catalog Manager. So is one of your own
+  build, and a file of that name that is not SleekMenu at all.
+- Which release a card has is read off the file itself: since 2.1 its
+  header carries the number ("SleekMenu 64 2.1.0"), and the releases
+  before it are known by their contents.
+- When a newer Game Catalog Manager is out, the window says so and links
+  to the download for your computer. It does not replace itself: download
+  it, open it, and press Update card, which brings SleekMenu along.
+
 ## Starting the console in SleekMenu
 
 On an EverDrive-64 X7 the stock OS starts the file `ED64/autoexec.v64` by
@@ -396,6 +427,8 @@ card and run the tool again. The options mirror the window's:
   fetches the cheat codes and `--no-cheats` stops;
   `--direct-boot on` and `--direct-boot off` set an X7's start-up switch;
   `--theme` takes a theme's name in lower case (`--theme grape`).
+- `--keep-browser` leaves `SleekMenu64.z64` on the card as it is; by
+  default an older one, or none, is replaced by this release's.
 - `--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps
   the tool off the network altogether; `--dry-run` writes nothing.
 - `--gui` opens the window; `--version` says which release it is; `--help`
@@ -413,6 +446,7 @@ place from then on.
 What the tool writes, and what it leaves alone:
 
 ```text
+/SleekMenu64.z64           the browser of this release, when the card had an older one or none
 /release-metadata.zip      the box-art collection, fetched once and read in place
 /sleekmenu/catalog.ebc     titles, genre, publisher, year, descriptions
 /sleekmenu/catalog.json    the same, readable, with where every field came from
@@ -434,10 +468,11 @@ What the tool writes, and what it leaves alone:
 Both the catalog and the covers are optional: with no catalog the browser
 scans the card and shows filenames, with no covers it draws a placeholder.
 The tool never moves, renames or deletes anything on the card, apart from
-two things it put there itself: a picture or text of your own in
-`sleekmenu/art/` when you press Undo my changes or Remove mine in the
-window, and
-`ED64/autoexec.v64` when you untick Start the console in SleekMenu.
+three things: an older `SleekMenu64.z64`, replaced by this release's unless
+you untick Keep SleekMenu on the card up to date; a picture or text of your
+own in `sleekmenu/art/` when you press Undo my changes or Remove mine in
+the window; and `ED64/autoexec.v64` when you untick Start the console in
+SleekMenu.
 
 Every file, who writes it and how a game is matched to its box is in
 [CARD_LAYOUT.md](CARD_LAYOUT.md).

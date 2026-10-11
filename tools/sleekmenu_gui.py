@@ -43,8 +43,8 @@ if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
 from tools import (card_catalog, card_layout, cheat_codes, coverdb, custom_art, direct_boot, fetch, genre_map,
-                   hires, kinds, library, make_sprite, metadata_repo, progress, provenance, shots,
-                   sleekmenu_prep, themes, version)
+                   hires, kinds, library, make_sprite, metadata_repo, progress, provenance, releases,
+                   shots, sleekmenu_prep, themes, version)
 from tools.metadata_repo import MetadataRepo
 
 TITLE = f"Game Catalog Manager — SleekMenu 64 {version.VERSION}"
@@ -57,8 +57,7 @@ COFFEE_URL = "https://buymeacoffee.com/CathodeJay"
 CHEATS_HINT = "From libretro, for the games the EverDrive's cheat pack does not cover. Needs an Expansion Pak."
 CHEATS_OFFLINE = "Not while downloads are off."
 #: Under Fetch screenshots.
-SHOTS_HINT = ("The title screen and a moment of play for each retail game, from libretro, for the details "
-              "screen and the box view. About 0.4 MB a game on the card.")
+SHOTS_HINT = "Title screens and in-game pictures from libretro, for retail games: about 0.4 MB a game on the card."
 #: The colours of a theme shown beside its name, in this order.
 SWATCH_ROLES = ("bg", "band", "select", "accent", "text")
 #: The box is 96x72 on the console; twice that on a desktop screen is
@@ -183,10 +182,35 @@ def when(built: str) -> str:
     return f"{moment.day} {moment.strftime('%b %Y, %H:%M')}"
 
 
-def card_status(card: Path | None, offline: bool = False, roms: list[str] | None = None) -> CardStatus:
+def browser_line(browser: releases.Browser, keep: bool = True, offline: bool = False) -> str:
+    """The Card tab's words for the SleekMenu on the card, under the box
+    that keeps it up to date."""
+    mine = version.VERSION
+    if not keep:
+        return f"{releases.ROM_NAME} on the card is left as it is."
+    if browser.state == releases.CURRENT:
+        return f"The card has SleekMenu {mine}, the release this Game Catalog Manager goes with."
+    if browser.state == releases.NEWER:
+        return (f"The card has SleekMenu {browser.version}, newer than this Game Catalog Manager: "
+                "get the newer Game Catalog Manager.")
+    if browser.state == releases.OWN:
+        return "The card has a SleekMenu of its own build: it is left as it is."
+    if browser.state == releases.OTHER:
+        return f"{releases.ROM_NAME} on the card is not SleekMenu: it is left as it is."
+    now = (f"The card has SleekMenu {browser.version}" if browser.state == releases.OLDER and browser.version
+           else "SleekMenu is not on the card yet")
+    if offline:
+        return f"{now}. Downloads are off, so {mine} is not fetched."
+    return f"{now}; the next update puts {mine} on it."
+
+
+def card_status(card: Path | None, offline: bool = False, roms: list[str] | None = None,
+                browser: releases.Browser | None = None, keep: bool = True) -> CardStatus:
     """What the Card tab says about `card`. `roms` is the card's walk when
     the caller already has it. `offline` is the owner's choice not to
-    download: the words under the button say what that leaves out."""
+    download: the words under the button say what that leaves out.
+    `browser` is the card's SleekMenu, when the caller has read it, and
+    `keep` whether the next update brings it up to date."""
     if card is None:
         return CardStatus("Pick your card", "Plug it in and press Refresh, or choose its folder.")
     if roms is None:
@@ -219,6 +243,7 @@ def card_status(card: Path | None, offline: bool = False, roms: list[str] | None
                           ready=True)
     games = document.get("games", [])
     new = len(newcomers(document, roms))
+    behind = browser is not None and keep and not offline and browser.wants_update
     boxless = sum(1 for game in games
                   if str((game.get("sources") or {}).get("cover", provenance.NONE)) == provenance.NONE)
     parts = []
@@ -226,9 +251,13 @@ def card_status(card: Path | None, offline: bool = False, roms: list[str] | None
         parts.append(f"{new:,} added since the last update.")
     if boxless:
         parts.append(f"{boxless:,} {'has' if boxless == 1 else 'have'} no box.")
+    if behind:
+        parts.append(f"SleekMenu {version.VERSION} is ready to go on it.")
     if new:
         explain = (f"Adds the {plural(new, 'new game')} with {'its box and description' if new == 1 else 'their boxes and descriptions'}"
                    ", then rewrites the catalog.")
+    elif behind:
+        explain = f"Puts SleekMenu {version.VERSION} on the card, then rewrites the catalog."
     else:
         explain = "Nothing new on the card. Update after adding games or changing an option."
     built = when(str(document.get("built", "")))
@@ -334,6 +363,8 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
         (getattr(outcome, "boxes_unreached", 0), "box", "boxes"),
         (getattr(outcome, "cheats_unreached", 0), "cheat file", None),
         (getattr(outcome, "shots_unreached", 0), "screenshot", None)) if count]
+    if getattr(outcome, "browser_unreached", False):
+        unreached.append(f"SleekMenu {version.VERSION}")
     if unreached:
         return (f"Done, but {' and '.join(unreached)} could not be downloaded. "
                 f"Press {status.action} again when the connection is back.")
@@ -490,7 +521,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
                  rebuild: bool = False, offline: bool = False, remembered: bool = False,
                  cheats: bool = False, cheats_remembered: bool = False,
                  direct_boot: bool | None = None, theme: str | None = None,
-                 shots: bool = False, shots_remembered: bool = False) -> sleekmenu_prep.Options:
+                 shots: bool = False, shots_remembered: bool = False,
+                 browser: bool = True) -> sleekmenu_prep.Options:
     """The window's choices as the run takes them. An empty collection
     means whatever is on the card, fetched when there is none. An empty
     games folder is the whole card, said so: the field shows what the card
@@ -504,7 +536,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
     Cheat codes are the owner's choice: ticked, they are asked for, or kept
     complete on a card that already asked (`cheats_remembered`); unticked,
     the card is told to stop. Screenshots the same way (`shots`,
-    `shots_remembered`). `direct_boot` is the X7's start-up switch as
+    `shots_remembered`). `browser` puts the SleekMenu this release goes
+    with on a card that has an older one or none. `direct_boot` is the X7's start-up switch as
     the tab shows it, None on a card that has no such switch. `theme` is
     the id of the colours chosen for the browser."""
     return sleekmenu_prep.Options(
@@ -518,6 +551,7 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
         shots=False if not shots else None if shots_remembered and not rebuild else True,
         direct_boot=direct_boot,
         theme=theme,
+        browser=bool(browser),
         rebuild=bool(rebuild),
     )
 
@@ -1984,6 +2018,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     shots_note = tk.StringVar(value=SHOTS_HINT)
     boot_var = tk.BooleanVar(value=False)
     boot_note = tk.StringVar()
+    browser_var = tk.BooleanVar(value=True)
+    browser_note = tk.StringVar()
+    newer_var = tk.StringVar()
     theme_var = tk.StringVar(value=themes.DEFAULT.name)
     headline_var = tk.StringVar()
     detail_var = tk.StringVar()
@@ -2085,7 +2122,21 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
 
     ttk.Separator(body, orient="horizontal").grid(row=6, column=0, sticky="ew", pady=(18, 8))
     ttk.Label(body, textvariable=last_var, foreground=colors["muted"]).grid(row=7, column=0, sticky="w")
-    fit(body, [(headline, 0), (detail, 0), (explain, 0), (result, 0)])
+    # The SleekMenu on the card, beside what else the card has: the release
+    # this tool goes with is put there by the button, unless unticked.
+    browser_check = ttk.Checkbutton(body, text="Keep SleekMenu on the card up to date", variable=browser_var)
+    browser_check.grid(row=8, column=0, sticky="w", pady=(14, 0))
+    browser_hint = ttk.Label(body, textvariable=browser_note, foreground=colors["muted"], justify="left")
+    browser_hint.grid(row=9, column=0, sticky="w", padx=(24, 0))
+    # A newer Game Catalog Manager, when there is one, under the SleekMenu
+    # it would bring: said once, with the file for this computer a click
+    # away.
+    newer_bar = ttk.Frame(body)
+    newer_text = ttk.Label(newer_bar, textvariable=newer_var, justify="left")
+    newer_text.grid(row=0, column=0, sticky="w")
+    newer_link = ttk.Label(newer_bar, text="Download it", foreground=colors["info"], cursor="hand2")
+    newer_link.grid(row=1, column=0, sticky="w")
+    fit(body, [(headline, 0), (detail, 0), (explain, 0), (result, 0), (browser_hint, 24), (newer_text, 0)])
 
     # The choices, in groups: what each is about, not the order they came in.
     hints: list[tuple] = []
@@ -2280,7 +2331,11 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         chosen = current_card()
         roms = walk(fresh)
         typed = card_var.get().strip()
-        status = (card_status(chosen, offline_var.get(), roms) if chosen is not None and roms is not None
+        browser = releases.card_browser(chosen) if chosen is not None else releases.Browser(releases.MISSING)
+        state["browser"] = browser
+        browser_note.set(browser_line(browser, browser_var.get(), offline_var.get()))
+        status = (card_status(chosen, offline_var.get(), roms, browser, browser_var.get())
+                  if chosen is not None and roms is not None
                   else card_status(None) if not typed else
                   CardStatus("That is not a card", "Choose the card itself: the folder its games are in."))
         state["status"] = status
@@ -2505,6 +2560,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                                   hires.remembered(custom_art.art_dir(chosen)),
                                   cheats=cheats_var.get(), cheats_remembered=cheat_codes.remembered(chosen),
                                   shots=shots_var.get(), shots_remembered=shots.remembered(chosen),
+                                  browser=browser_var.get(),
                                   direct_boot=boot_var.get() if state["boot"].available else None,
                                   theme=picked_theme())))
 
@@ -2547,6 +2603,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     card_var.trace_add("write", on_card_change)
     metadata_var.trace_add("write", refresh)
     offline_var.trace_add("write", refresh)
+    browser_var.trace_add("write", refresh)
     roms_var.trace_add("write", on_roms_change)
     roms_shown.trace_add("write", on_roms_shown)
     action.configure(command=start)
@@ -2563,17 +2620,18 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state["fields"] = {"card": card_var, "roms": roms_var, "where": roms_shown, "metadata": metadata_var}
     state["where_box"] = roms_box
     state["options"] = {"fix": fix_var, "rebuild": rebuild_var, "offline": offline_var,
-                        "cheats": cheats_var, "shots": shots_var, "boot": boot_var, "theme": theme_var}
+                        "cheats": cheats_var, "shots": shots_var, "boot": boot_var, "theme": theme_var,
+                        "browser": browser_var}
     state["swatch"] = swatch
     state["boot_row"] = boot_row
     state["boot_note"] = boot_note
     state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var,
                       "result": result_var, "last": last_var, "pack": metadata_note, "cheats": cheats_note,
-                      "shots": shots_note}
+                      "shots": shots_note, "browser": browser_note, "newer": newer_var}
     state["start"] = start
     state["stop"] = ask_stop
     state["buttons"] = {"action": action, "stop": stop, "coffee": coffee, "boot": boot_check,
-                        "cheats": cheats_check, "shots": shots_check}
+                        "cheats": cheats_check, "shots": shots_check, "browser": browser_check}
     state["notebook"] = notebook
     state["header"] = header
     state["edit_menu"] = edit_menu
@@ -2581,6 +2639,29 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state["pages"] = {"card": page, "games": catalog_page, "log": log_page}
     state["columns"] = {"card": body, "options": options}
     root.sleekmenu_state = state  # type: ignore[attr-defined]
+
+    # Whether a newer Game Catalog Manager is out: asked once, off the
+    # window's thread, and only when downloads are on.
+    def look_for_newer() -> None:
+        found = releases.newer_tool()
+        state["newer"] = found or ""
+
+    def show_newer() -> None:
+        found = state.get("newer")
+        if found is None:
+            root.after(500, show_newer)
+            return
+        if found:
+            newer_var.set(f"Game Catalog Manager {found} is out (this one is {version.VERSION}).")
+            newer_link.bind("<Button-1>", lambda _event: webbrowser.open(releases.download_url(found)))
+            newer_bar.grid(row=10, column=0, sticky="w", pady=(14, 0))
+
+    state["newer_bar"] = newer_bar
+    state["show_newer"] = show_newer
+    if not smoke and not offline_var.get():
+        state["newer"] = None
+        threading.Thread(target=look_for_newer, name="sleekmenu-newer", daemon=True).start()
+        root.after(500, show_newer)
 
     if smoke and card:
         root.after(100, start)

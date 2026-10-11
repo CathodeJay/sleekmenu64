@@ -7,7 +7,7 @@ this is the reference.
 ## Layout
 
 ```text
-/SleekMenu64.z64            the browser                        you copy it
+/SleekMenu64.z64            the browser                        put there by the tool, or by you
 /sleekmenu-catalog-manager.pyz
                             the tool, for a terminal           you copy it, if you use it
 /release-metadata.zip       box art and descriptions           fetched by the tool
@@ -68,6 +68,20 @@ folder and writes `catalog.ebc` and `covers.pak` into it, and fetches
 `release-metadata.zip` to the card root when the card has no collection;
 everything else it reads in place. One file of the tool's lives outside
 `sleekmenu/`, and only when asked for: `ED64/autoexec.v64`, below.
+
+## Which SleekMenu
+
+`SleekMenu64.z64` says which release it is in its ROM header: the title at
+0x20 reads `SleekMenu 64 2.1.0`, of which the first twelve bytes are what
+any version of the tool compares to know the browser. Releases before 2.1
+carry the bare title and are known by their SHA-256 (`tools/releases.py`).
+Unless told otherwise (`--keep-browser`, or Keep SleekMenu on the card up
+to date unticked) every run puts the SleekMenu of its own release at the
+card's root when the card has an older one or none, fetched from
+`github.com/CathodeJay/sleekmenu64/releases/download/v<version>/SleekMenu64.z64`,
+checked to be that release, and written through a `.part` file; it never
+replaces a newer one, one of the owner's build, or a file of that name
+that is not SleekMenu. The X7's start-up copy is brought into step after.
 
 ## The theme
 

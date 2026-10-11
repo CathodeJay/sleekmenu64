@@ -2,9 +2,9 @@
 
 ## 2.1.0
 
-**Upgrading from 2.0:** copy the new `SleekMenu64.z64` over the old one,
-download the new Game Catalog Manager, and press **Update card** once. To
-have screenshots, tick **Fetch screenshots** first.
+**Upgrading from 2.0:** download the new Game Catalog Manager and press
+**Update card** once: it puts SleekMenu 2.1.0 on the card in place of 2.0.
+To have screenshots, tick **Fetch screenshots** first.
 
 ### On the console
 
@@ -27,6 +27,14 @@ have screenshots, tick **Fetch screenshots** first.
 
 ### The Game Catalog Manager
 
+- SleekMenu comes with it: Set up card and Update card put the
+  `SleekMenu64.z64` of the same release at the root of the card when the
+  card has an older one, or none, and keep the X7's start-up copy in step.
+  A newer one, or one of your own build, is left alone. Untick **Keep
+  SleekMenu on the card up to date** (or pass `--keep-browser`) to leave the
+  card's as it is.
+- The window says when a newer Game Catalog Manager is out, with a link to
+  the download for your computer.
 - **Fetch screenshots**, on the Card tab: the title screen and a moment of
   play from libretro for every retail game, about 0.4 MB a game on the
   card. Off until you tick it; the card remembers. On the command line,

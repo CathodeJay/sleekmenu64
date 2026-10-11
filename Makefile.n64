@@ -54,7 +54,12 @@ $(DFS_IMAGE):
 $(ROMNAME).z64: $(DFS_IMAGE)
 endif
 
-$(ROMNAME).z64: N64_ROM_TITLE = "SleekMenu 64"
+# The title carries the release, "SleekMenu 64 2.1.0", so the Game Catalog
+# Manager can tell which SleekMenu a card has without running it
+# (tools/releases.py). The first twelve bytes stay "SleekMenu 64", which is
+# all an older tool compares.
+SM_VERSION := $(shell sed -n 's/.*SM_VERSION "\([^"]*\)".*/\1/p' src/version.h)
+$(ROMNAME).z64: N64_ROM_TITLE = "SleekMenu 64 $(SM_VERSION)"
 
 clean:
 	$(RM) -r $(BUILD_DIR) $(ROMNAME).z64

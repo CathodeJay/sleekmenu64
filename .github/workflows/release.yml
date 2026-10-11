@@ -208,4 +208,5 @@ jobs:
       - name: What is left to do
         run: |
           echo "A draft release for $GITHUB_REF_NAME is on the Releases page." >> "$GITHUB_STEP_SUMMARY"
-          echo "Add SleekMenu64.z64 (make slim) to it, read the notes, then Publish." >> "$GITHUB_STEP_SUMMARY"
+          echo "Add SleekMenu64.z64 (make slim) to it, under that name, read the notes, then Publish." >> "$GITHUB_STEP_SUMMARY"
+          echo "The Game Catalog Manager of this release fetches it from there to put on cards." >> "$GITHUB_STEP_SUMMARY"

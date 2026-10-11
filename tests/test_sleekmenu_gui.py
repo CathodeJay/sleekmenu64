@@ -23,7 +23,7 @@ from unittest import mock
 from tests.rom_fixtures import write_rom
 from tests.test_custom_art import picture
 from tests.test_sleekmenu_prep import stay_offline, write_collection
-from tools import custom_art, fetch, hires, sleekmenu_gui, sleekmenu_prep
+from tools import custom_art, fetch, hires, releases, sleekmenu_gui, sleekmenu_prep, version
 
 
 class VolumeTests(unittest.TestCase):
@@ -67,9 +67,11 @@ class FieldTests(unittest.TestCase):
     def test_the_choices_become_the_runs_options(self):
         options = sleekmenu_gui.options_from("/Volumes/CARD")
         self.assertEqual(options, sleekmenu_prep.Options(card=Path("/Volumes/CARD"), roms=sleekmenu_prep.WHOLE_CARD,
-                                                         hires=True, cheats=False, shots=False),
+                                                         hires=True, cheats=False, shots=False, browser=True),
                          "an empty games folder is the whole card, said so -- never 'as remembered' -- "
-                         "the boxes are asked for, and cheats and screenshots are not unless ticked")
+                         "the boxes are asked for, and cheats and screenshots are not unless ticked; "
+                         "the card's SleekMenu is kept up to date")
+        self.assertFalse(sleekmenu_gui.options_from("/c", browser=False).browser)
         options = sleekmenu_gui.options_from("/Volumes/CARD", "  ~/art.zip ", " ROMS/ ", fix_checksums=True,
                                              offline=True, remembered=True)
         self.assertEqual(options.metadata, Path("  ~/art.zip "))
@@ -478,6 +480,21 @@ class WindowTests(unittest.TestCase):
         patch = mock.patch.object(sleekmenu_gui, "build", recording)
         patch.start()
         self.addCleanup(patch.stop)
+        # GitHub is never asked from a test: the card's SleekMenu is taken
+        # to be this release's, and no newer release is out, unless a test
+        # says otherwise.
+        self.browser_patch = mock.patch.object(
+            releases, "update_card", lambda card, log=print, offline=False, url=None:
+            releases.Updated(releases.Browser(releases.CURRENT, version.VERSION)))
+        self.browser_patch.start()
+        self.addCleanup(self.browser_patch.stop)
+        self.card_browser_patch = mock.patch.object(
+            releases, "card_browser", lambda card: releases.Browser(releases.CURRENT, version.VERSION))
+        self.card_browser_patch.start()
+        self.addCleanup(self.card_browser_patch.stop)
+        newer = mock.patch.object(releases, "newer_tool", lambda latest=None: None)
+        newer.start()
+        self.addCleanup(newer.stop)
 
     def tearDown(self):
         import tkinter
@@ -1076,6 +1093,64 @@ class WindowTests(unittest.TestCase):
                     root.update()
                     self.assertEqual(applied, [path, path])
                     root.destroy()
+
+    def test_the_card_tab_keeps_sleekmenu_in_step_and_says_when_a_newer_manager_is_out(self):
+        from tests.test_fetch import Server
+        from tests.test_releases import sleekmenu
+        self.browser_patch.stop()
+        self.card_browser_patch.stop()
+        releases._read.clear()
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
+            rom = card / "SleekMenu64.z64"
+            rom.write_bytes(sleekmenu("1.9.0"))
+            mine = sleekmenu(version.VERSION, b"release")
+            route = f"/download/v{version.VERSION}/SleekMenu64.z64"
+            with mock.patch.dict(os.environ):
+                os.environ.pop(fetch.OFFLINE_VARIABLE, None)
+                with Server({route: (200, mine)}) as server, \
+                     mock.patch.object(releases, "RELEASES_URL", server.url("")), \
+                     mock.patch.object(hires, "BASE_URL", server.url("/Named_Boxarts/")):
+                    root = sleekmenu_gui.build(card=str(card))
+                    root.update()
+                    state = root.sleekmenu_state
+                    words = state["words"]
+                    self.assertTrue(state["options"]["browser"].get(), "on unless unticked")
+                    self.assertEqual(words["browser"].get(),
+                                     f"The card has SleekMenu 1.9.0; the next update puts {version.VERSION} on it.")
+                    self.assertIn(f"SleekMenu {version.VERSION} is ready to go on it.", words["detail"].get())
+                    state["options"]["browser"].set(False)
+                    root.update()
+                    self.assertEqual(words["browser"].get(), "SleekMenu64.z64 on the card is left as it is.")
+                    self.assertNotIn("ready to go", words["detail"].get())
+                    state["options"]["browser"].set(True)
+                    state["start"]()
+                    while state["runner"] is not None:
+                        root.update()
+                    self.assertEqual(state["last_code"], 0)
+                    self.assertEqual(rom.read_bytes(), mine)
+                    self.assertTrue(words["result"].get().startswith("Done."), words["result"].get())
+                    self.assertIn("the release this Game Catalog Manager goes with", words["browser"].get())
+                    # a newer Game Catalog Manager: said above the tabs, with its file
+                    self.assertFalse(state["newer_bar"].winfo_ismapped())
+                    state["newer"] = "99.0.0"
+                    state["show_newer"]()
+                    root.update()
+                    self.assertTrue(state["newer_bar"].winfo_ismapped())
+                    self.assertIn("Game Catalog Manager 99.0.0 is out", words["newer"].get())
+                    root.destroy()
+        self.assertEqual(sleekmenu_gui.browser_line(releases.Browser(releases.NEWER, "99.0.0")),
+                         "The card has SleekMenu 99.0.0, newer than this Game Catalog Manager: "
+                         "get the newer Game Catalog Manager.")
+        self.assertIn("Downloads are off", sleekmenu_gui.browser_line(releases.Browser(releases.MISSING),
+                                                                      offline=True))
+        self.assertIn(f"SleekMenu {version.VERSION} could not be downloaded",
+                      sleekmenu_gui.finished_line(0, sleekmenu_prep.Outcome(browser_unreached=True),
+                                                  sleekmenu_gui.CardStatus("x", ready=True)))
 
     def test_the_start_up_switch_is_there_for_an_x7_card_only_and_does_what_it_says(self):
         from tests.test_direct_boot import browser, stock_os

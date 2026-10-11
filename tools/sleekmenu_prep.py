@@ -54,7 +54,7 @@ from pathlib import Path
 
 from tools import (build_catalog, card_catalog, card_layout, cheat_codes, cover_pack, coverdb, custom_art,
                    direct_boot, fetch, headers, hires, library, make_sprite, metadata_repo, n64_checksum,
-                   pack_covers, prepare_card, progress, shots, themes, version)
+                   pack_covers, prepare_card, progress, releases, shots, themes, version)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 
@@ -325,6 +325,9 @@ class Options:
     direct_boot: bool | None = None  # an X7 starts in SleekMenu: True, False, or None to leave
                                      # the card as it is and keep the copy in step
     theme: str | None = None        # the browser's colours, by a theme's id; None leaves the card's
+    browser: bool = False           # put this release's SleekMenu64.z64 on a card with an older one
+                                    # or none (the command line and the window ask for it unless told
+                                    # otherwise); False leaves the card's as it is
     no_large_covers: bool = False   # skip the box view's covers-large.pak
     rebuild: bool = False           # read every header and convert every box again, whatever
                                     # the last run remembered
@@ -339,6 +342,8 @@ class Outcome:
     boxes_unreached: int = 0            # high-resolution boxes the network would not give
     cheats_unreached: int = 0           # cheat files the network would not give
     shots_unreached: int = 0            # screenshots the network would not give
+    browser_unreached: bool = False     # this release's SleekMenu was wanted on the card and could not
+                                        # be fetched or written
 
 
 def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None,
@@ -381,6 +386,11 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
     if not options.dry_run:
         for folder in lay_out(card):
             log(f"created   {folder.relative_to(card)}/")
+        # The browser this release goes with, at the card's root, before
+        # the X7's start-up copy is brought into step with it.
+        if options.browser:
+            outcome.browser_unreached = releases.update_card(
+                card, log, offline=options.no_download or fetch.offline_by_request()).failed
         # Where the console starts is a fact about the card, not about its
         # games: it is settled before a card with no games ends the run.
         try:
@@ -569,6 +579,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--direct-boot", choices=("on", "off"), default=None,
                         help="EverDrive-64 X7: start the console in SleekMenu (on copies the card's "
                              f"{card_layout.BROWSER_ROM} to {direct_boot.AUTOEXEC_SHOWN}, off removes it)")
+    parser.add_argument("--keep-browser", action="store_true",
+                        help=f"leave {card_layout.BROWSER_ROM} on the card as it is (by default an older one, "
+                             f"or none, is replaced by SleekMenu {version.VERSION}, the release this tool "
+                             "goes with)")
     parser.add_argument("--theme", choices=[theme.id for theme in themes.THEMES], default=None,
                         help="the browser's colours on this card (the default is "
                              f"{themes.DEFAULT.id}); the card keeps the choice")
@@ -596,7 +610,7 @@ def main(argv: list[str] | None = None) -> int:
                            cheats=False if args.no_cheats else True if args.cheats else None,
                            shots=False if args.no_shots else True if args.shots else None,
                            direct_boot=None if args.direct_boot is None else args.direct_boot == "on",
-                           theme=args.theme,
+                           theme=args.theme, browser=not args.keep_browser,
                            no_large_covers=args.no_large_covers, rebuild=args.rebuild),
                    log=print, fail=lambda message: print(message, file=sys.stderr))
     except KeyboardInterrupt:
