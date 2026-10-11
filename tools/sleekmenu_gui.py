@@ -1443,8 +1443,6 @@ class GamesTab:
                   justify="left").grid(row=0, column=0, sticky="w")
         self.box_button = ttk.Button(under, text="Change box…", command=self.choose_box)
         self.box_button.grid(row=0, column=1, sticky="ne")
-        self.shots_button = ttk.Button(under, text="Screenshots…", command=self.open_shots)
-        self.shots_button.grid(row=1, column=1, sticky="ne", pady=(4, 0))
         # A picture dropped on the box, or anywhere on the panel around it,
         # is the same as choosing it; said only where it works.
         self.drop_works = enable_drop(self.box, self.dropped)
@@ -1452,7 +1450,7 @@ class GamesTab:
             for around in (right, head, picture, under):
                 enable_drop(around, self.dropped)
             ttk.Label(under, text="Or drop a PNG or JPEG on the box.", foreground=muted,
-                      wraplength=width, justify="left").grid(row=2, column=0, columnspan=2, sticky="w",
+                      wraplength=width, justify="left").grid(row=1, column=0, columnspan=2, sticky="w",
                                                              pady=(2, 0))
 
         self.labels: dict[str, object] = {}
@@ -1511,12 +1509,16 @@ class GamesTab:
         self.others_check = ttk.Checkbutton(right, variable=self.others)
         ttk.Label(right, textvariable=self.notes, foreground=muted, justify="left", wraplength=wrap).grid(
             row=4, column=0, sticky="w", pady=(6, 0))
+        # The screenshots open in a window of their own, from the row of
+        # buttons that is there anyway: the description keeps the height.
         buttons = ttk.Frame(right)
-        buttons.grid(row=5, column=0, sticky="e", pady=(8, 0))
-        self.undo_button = ttk.Button(buttons, text="Undo my changes", command=self.remove_edit)
-        self.undo_button.pack(side="left", padx=(0, 6))
+        buttons.grid(row=5, column=0, sticky="ew", pady=(8, 0))
+        self.shots_button = ttk.Button(buttons, text="Screenshots…", command=self.open_shots)
+        self.shots_button.pack(side="left")
         self.save_button = ttk.Button(buttons, text="Save", command=self.save_edit, default="active")
-        self.save_button.pack(side="left")
+        self.save_button.pack(side="right")
+        self.undo_button = ttk.Button(buttons, text="Undo my changes", command=self.remove_edit)
+        self.undo_button.pack(side="right", padx=(0, 6))
         ttk.Label(right, textvariable=self.edit_note, foreground=muted, justify="left", wraplength=wrap).grid(
             row=6, column=0, sticky="w", pady=(4, 0))
         self.inputs = [self.title_entry, self.genre_box, self.publisher_box, self.year_entry,
