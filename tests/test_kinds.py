@@ -48,13 +48,80 @@ class ClassifyTests(unittest.TestCase):
         self.assertEqual(self.kind("ROMS/Zelda (Beta).z64", "serial"), kinds.RETAIL)
         self.assertEqual(self.kind("ROMS/Mario Kart 64 (USA) (Rev 1).z64", "serial"), kinds.RETAIL)
         self.assertEqual(self.kind("ROMS/Banjo (Proto).z64", "serial"), kinds.RETAIL)
-        self.assertEqual(self.kind("ROMS/Doom 64 (v1.1).z64", "serial"), kinds.RETAIL)
+        self.assertEqual(self.kind("ROMS/1080 Snowboarding (USA) (En,Ja) (LodgeNet).z64", "serial"), kinds.RETAIL)
+        self.assertEqual(self.kind("ROMS/Turok (USA) (Demo) (Kiosk, E3 1997).z64", "serial"), kinds.RETAIL)
+
+    def test_a_version_number_says_nothing_since_hacks_carry_them_too(self):
+        self.assertEqual(self.kind("ROMS/SM64 - Last Impact (v1.2).z64", "serial"), kinds.HACK)
+        self.assertEqual(self.kind("ROMS/Hacks/Smash Remix (v2.0.1).z64", "serial"), kinds.HACK,
+                         "and a folder saying hack is not overruled by one")
+        self.assertEqual(self.kind("ROMS/Turok (U) (V1.0) [!] No Invert Only.z64", "crc"), kinds.RETAIL)
+        self.assertEqual(self.kind("ROMS/Hacks/Turok (U) (V1.0) [!] No Invert Only.z64", "crc"), kinds.HACK)
+
+    def test_names_say_it_without_any_folder(self):
+        """Names as patchers and GoodN64 write them, each in no telling
+        folder and with the database saying the opposite."""
+        for name, identified, kind in (
+                ("Densha de Go! 64 (J) T+Eng v1.01 Zoinkity.z64", "", kinds.TRANSLATION),
+                ("Sin and Punishment Spanish Dubbed (J) T-Spa v1.0b.z64", "serial", kinds.TRANSLATION),
+                ("Wonder Project J2 (J) T+Eng1.0_Ryu.z64", "serial", kinds.TRANSLATION),
+                ("Sim City 64 [English] v0.6.38 ozidual.z64", "", kinds.TRANSLATION),
+                ("SimCity 64 (part English patch 25 Feb 2016).n64", "", kinds.TRANSLATION),
+                ("F-Zero X Expansion Kit English (J) v1.1.z64", "serial", kinds.TRANSLATION),
+                ("Bomberman Hero (E) [f1] (NTSC).z64", "crc", kinds.HACK),
+                ("Ogre Battle 64 (U) Lycanthropy Patch v1 Zoinkity.z64", "crc", kinds.HACK),
+                ("Conker's Bad Fur Day (Uncensored).z64", "crc", kinds.HACK),
+                ("Majora's Mask Item Randomizer (U) 2013-10-25.z64", "", kinds.HACK),
+                ("Eleven Beat (Aleck 64) EverDrive Patched.z64", "", kinds.HACK),
+                ("Dinosaur Planet (Prototype - Dinomod Enhanced Patch, Rev 05).z64", "", kinds.HACK),
+                ("Mario Kart 64 (U) [t1].z64", "crc", kinds.HACK)):
+            with self.subTest(name=name):
+                self.assertEqual(self.kind("ROMS/" + name, identified), kind)
 
     def test_words_that_only_look_like_tags_say_nothing(self):
         self.assertEqual(self.kind("ROMS/Hackers Paradise.z64", "crc"), kinds.RETAIL)
         self.assertEqual(self.kind("ROMS/Hack and Slash/Gauntlet Legends (USA).z64", "crc"), kinds.RETAIL)
         self.assertEqual(self.kind("ROMS/Hack & Slash/Gauntlet Legends (USA).z64", "crc"), kinds.RETAIL)
         self.assertEqual(self.kind("ROMS/Shadowgate 64 (USA).z64", "crc"), kinds.RETAIL)
+
+
+class LineageTests(unittest.TestCase):
+    """What a file is built on, from the shipped database, more loosely
+    than the lookup that gives it its text."""
+
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        from tools import coverdb
+        cls.database = coverdb.load(Path(__file__).resolve().parent.parent / "data" / "coverdb.csv")
+        cls.lineage = kinds.Lineage(cls.database)
+
+    def kind(self, name, code, identified=""):
+        from types import SimpleNamespace
+        path = "ROMS/" + name
+        found = self.lineage.of(path, SimpleNamespace(product_code=code), identified)
+        return found, kinds.classify(path, identified, lineage=found)
+
+    def test_a_code_two_games_share_is_still_a_known_game(self):
+        """NHAJ is Baku Bomberman and Bomberman 64: too uncertain to give
+        the file either's text, certain enough to say it is built on one."""
+        self.assertEqual(self.kind("Bomberman 64 - Arcade Edition (J) Analog.z64", "NHAJ"),
+                         (kinds.CODE, kinds.HACK))
+
+    def test_a_japanese_game_with_another_region_letter_is_a_translation(self):
+        self.assertEqual(self.kind("J.League Live 64.z64", "NJLE"), (kinds.TRANSLATED_CODE, kinds.TRANSLATION))
+        # unless the name says it is the western release the database lacks
+        self.assertEqual(self.kind("Goldeneye (U) [!] NoInvert2P.z64", "NGEE"), (kinds.CODE, kinds.HACK))
+        # and a European code changed to a US one is no translation
+        self.assertEqual(self.kind("Michael Owens WLS 2000.z64", "NWKX"), (kinds.CODE, kinds.HACK))
+
+    def test_a_known_games_title_in_the_name_says_hack_and_a_known_dump_retail(self):
+        self.assertEqual(self.kind("Doom 64 - Merciless Edition (v1.1).z64", ""), (kinds.TITLE, kinds.HACK))
+        self.assertEqual(self.kind("Mortal Kombat Trilogy (USA) (Beta) (1996-05-13).z64", ""),
+                         (kinds.TITLE, kinds.RETAIL), "a beta the database does not list")
+        self.assertEqual(self.kind("Golden Sun 64.z64", ""), (kinds.NOTHING, kinds.HOMEBREW))
+        self.assertEqual(self.kind("Flappy Bird 64.z64", "\0\0\0\0"), (kinds.NOTHING, kinds.HOMEBREW))
+        self.assertEqual(self.kind("Super Mario 64 (USA).z64", "NSME", "crc"), (kinds.CRC, kinds.RETAIL))
 
 
 class StorageTests(unittest.TestCase):

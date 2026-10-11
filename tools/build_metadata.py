@@ -132,6 +132,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
     plan's word on each ROM's picture, keyed like `covers`."""
     database = coverdb.load(coverdb_path) if coverdb_path and coverdb_path.is_file() else {}
     index = identify.Index(database)
+    lineages = kinds.Lineage(database)
     mapping = genre_map.load(genres)
     patches = load_overrides(overrides)
     covers = {key.casefold(): value for key, value in (covers or {}).items()}
@@ -231,7 +232,8 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
         # game.
         title = relative.stem
         title_source = provenance.TITLE_FILE_NAME
-        kind, facts["kind"] = kinds.classify(str(relative), matched), provenance.DETECTED
+        kind = kinds.classify(str(relative), matched, lineage=lineages.of(str(relative), header, matched))
+        facts["kind"] = provenance.DETECTED
         own = custom_art.find_text(art_index, roms, rom_path, art_folder, header.product_code)
         if own is not None:
             how["own text"] += 1

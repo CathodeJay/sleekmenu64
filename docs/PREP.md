@@ -261,24 +261,36 @@ Each game is given a kind: Retail, Hack, Translation or Homebrew. Nothing
 in a ROM says which, so the tool reads it off what the file gives away, the
 first answer winning:
 
-- **Its name:** "(Hack)", "[h1C]" or "hack" mean a hack; "[T+Eng]",
-  "(Translated)" or "translation" a translation; "(PD)" or "homebrew"
-  homebrew. "(Beta)", "(Proto)", "(Rev 1)" and "(v1.1)" mean a real
-  release the database may not list.
+- **Its name:** the tags patchers and GoodN64 put there. "[T+Eng]",
+  "T-Spa", "(Translated)", "English", "Dubbed" or "Subtitles" mean a
+  translation; "(Hack)", "[h1C]", "hack", "[f1]" (a fixed dump), "[t1]" (a
+  trainer), "(NTSC)" on a PAL game, "Patched", "Randomizer", "Mod" or
+  "Uncensored" a hack; "(PD)" or "homebrew" homebrew. "(Beta)", "(Proto)",
+  "(Demo)", "(Kiosk)", "(LodgeNet)" and "(Rev 1)" mean a real release the
+  database may not list. A version number, "(v1.2)", says nothing: hacks
+  carry them as often as releases do.
 - **Its folder:** the same words in the name of any folder above it, such
-  as `Hacks/`, `ROM Hacks/`, `Translations/` or `Homebrew/`.
-- **The database:** a dump it knows by checksum is retail; one it knows
-  only by game code is built on a retail game, which almost always means a
-  hack; one whose code it knows without the region letter is usually a
-  translation; one it does not know at all is homebrew.
+  as `Hacks/`, `ROM Hacks/`, `Translations/` or `Homebrew/`. A hint, never
+  needed: a card with every game in one folder is told apart by the other
+  two.
+- **The database**, on what the file is built on: a dump it knows by
+  checksum is retail; a file with the game code of a game it knows, even a
+  code two games share, is built on that game, which almost always means
+  a hack; the code of a game only ever released in Japan with another
+  region letter, and no USA or European tag in the name, is a translation;
+  a file whose code it does not know but whose name carries a known game's
+  title ("Doom 64 - Merciless Edition") is a hack; anything else is
+  homebrew.
 
 The name goes first because a hack that never updated its header carries
-the original game's checksum, so the database takes it for retail. The
-console tags a hack HACK, a translation TL and homebrew HB on its row, and
-filters by kind. When a guess is wrong — a revision taken for a hack, a
-hack nobody named — pick the right kind in the Games tab and press Save:
-it is kept as a `Kind:` line in the game's text file, like any fact. The
-Games tab's search finds games by kind too: type "hack".
+the original game's checksum, so the database takes it for retail. That is
+also the one case none of this catches: a hack with its header intact, no
+word in its name and no telling folder is taken for the game it was built
+on. The console tags a hack HACK, a translation TL and homebrew HB on its
+row, and filters by kind. When a guess is wrong, pick the right kind in the
+Games tab and press Save: it is kept as a `Kind:` line in the game's text
+file, like any fact. The Games tab's search finds games by kind too: type
+"hack".
 
 ## Cheat codes
 

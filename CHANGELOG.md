@@ -34,9 +34,13 @@ have screenshots, tick **Fetch screenshots** first.
 - **Screenshots…**, in the Games tab: a game's two screenshots as the
   console shows them, and your own for either one, which no download
   replaces. Hacks, translations and homebrew get only yours.
-- Each game's kind is worked out from its file name, its folder and the
-  database, shown in the Games tab and searchable; a wrong guess is
-  corrected there and kept on the card as a `Kind:` line.
+- Each game's kind is worked out from the tags in its file name, its folder
+  when it says, and what the database knows of the game it was built on,
+  so a card with every game in one folder is sorted too. It is shown in
+  the Games tab and searchable; a wrong guess is corrected there and kept
+  on the card as a `Kind:` line.
+- While a card is updated, each step names everything it is working on:
+  boxes, screenshots and cheat codes fetched, covers and screenshots made.
 - Every text box has Cut, Copy, Paste and Select All on a right-click, and
   on a Mac in the Edit menu too: a description can be pasted from the web
   with the mouse.

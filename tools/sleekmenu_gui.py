@@ -245,6 +245,9 @@ STEPS = ("Read your games", "Fetch boxes and descriptions", "Build the catalog",
 #: belongs to.
 STEP_OF_PASS = {"scanning": 0, "checksums": 0, "fetching": 1, "boxes": 1, "cheats": 1, "screenshots": 1,
                 "sprites": 2, "shots": 2}
+#: What each counted pass is counting: one, and many when not one + "s".
+PASS_WORDS = {"boxes": ("box", "boxes"), "cheats": ("cheat file", None), "screenshots": ("screenshot", None),
+              "sprites": ("cover", None), "shots": ("screenshot", None)}
 #: Lines of the report that start a step with no pass of its own.
 STEP_OF_LINE = (("writing:", 3), ("covers:", 2), ("hires:", 1), ("cheats:", 1), ("shots:    ", 1),
                 ("metadata: not on the card", 1))
@@ -257,6 +260,7 @@ class Steps:
     def __init__(self):
         self.current = -1                   # -1: no run to show; len(STEPS): ended well
         self.notes = [""] * len(STEPS)
+        self._said: list[dict[str, str]] = [{} for _ in STEPS]   # per step: pass -> its words
         self.fraction = 0.0                 # of the pass under way
         self._seen = False
 
@@ -270,26 +274,29 @@ class Steps:
             self.current, self.fraction = step, 0.0
 
     def progress(self, label: str, count: int, total: int) -> None:
+        """A pass's progress, said beside its step. A step that runs more
+        than one pass -- boxes, screenshots and cheat codes fetched; covers
+        and screenshots made -- says each, in the order they ran, so the
+        words always name what is being worked on."""
         step = STEP_OF_PASS.get(label)
         if step is None:
             return
         self._reach(step)
         self.fraction = count / total if total else 1.0
+        done = count >= total
         if label == "scanning":
-            self.notes[step] = plural(total, "file") if count >= total else f"{count:,} of {total:,}"
+            said = plural(total, "file") if done else f"{count:,} of {total:,}"
         elif label == "fetching":
             pieces = 1048576 // fetch.CHUNK
-            self.notes[step] = f"{count // pieces} of {max(1, total // pieces)} MB"
-        elif label == "boxes":
-            self.notes[step] = plural(total, "box", "boxes") if count >= total else f"{count:,} of {total:,} boxes"
-        elif label == "cheats":
-            self.notes[step] = (plural(total, "cheat file") if count >= total
-                                else f"{count:,} of {total:,} cheat files")
-        elif label == "screenshots":
-            self.notes[step] = (plural(total, "screenshot") if count >= total
-                                else f"{count:,} of {total:,} screenshots")
-        elif label == "sprites":
-            self.notes[step] = plural(total, "cover") if count >= total else f"{count:,} of {total:,} covers"
+            said = (f"{max(1, total // pieces)} MB" if done
+                    else f"{count // pieces} of {max(1, total // pieces)} MB")
+        elif label in PASS_WORDS:
+            one, many = PASS_WORDS[label]
+            said = plural(total, one, many) if done else f"{count:,} of {total:,} {many or one + 's'}"
+        else:
+            return
+        self._said[step][label] = said
+        self.notes[step] = ", ".join(self._said[step].values())
 
     def line(self, text: str) -> None:
         for prefix, step in STEP_OF_LINE:

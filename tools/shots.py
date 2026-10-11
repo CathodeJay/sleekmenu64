@@ -205,6 +205,7 @@ def plan(roms_root: Path, rom_paths: list[str], database: dict, card: Path,
         return []
     known_missing = set() if retry_missing else set(load_document(target).get("missing", {}))
     index = identify.Index(database)
+    lineages = kinds.Lineage(database)
     listing = custom_art.Index()
     by_serial: dict[str, list[str]] = {}
     for entry in database.values():
@@ -219,7 +220,8 @@ def plan(roms_root: Path, rom_paths: list[str], database: dict, card: Path,
         if not re.fullmatch(r"[A-Z0-9]{4}", code):
             continue
         entry, matched = index.identify(header)
-        if entry is None or kinds.classify(rom_path, matched) != kinds.RETAIL:
+        if entry is None or kinds.classify(rom_path, matched,
+                                           lineage=lineages.of(rom_path, header, matched)) != kinds.RETAIL:
             continue
         names = wanted.setdefault(code, [])
         first = [entry.name] if matched == "crc" else []

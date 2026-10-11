@@ -10,8 +10,9 @@ translation) or **HB** (homebrew) at the end of its row, and the word
 beside its genre on its details. The KIND row of the filter page shows one
 kind only. The Game Catalog Manager works out what each game is from its
 file name ("(Hack)", "[T+Eng]", "(PD)"), the folder it is in ("Hacks",
-"Translations", "Homebrew") and the database, and a wrong guess is
-corrected in its Games tab ([PREP.md](PREP.md#hacks-translations-and-homebrew)).
+"Translations", "Homebrew") when it says, and what the database knows of
+the game it was built on; a wrong guess is corrected in its Games tab
+([PREP.md](PREP.md#hacks-translations-and-homebrew)).
 
 ## Moving
 
