@@ -147,18 +147,44 @@ class CardTests(unittest.TestCase):
             self.assertEqual(server.requests, [])
 
     def test_a_release_page_without_the_rom_or_with_the_wrong_one_changes_nothing(self):
+        """And says which: a page with no SleekMenu yet, or the wrong file on
+        it, is not something a better connection would mend."""
         self.rom.write_bytes(sleekmenu("1.9.0"))
         route = f"/download/v{version.VERSION}/{card_layout.BROWSER_ROM}"
-        for routes, said in (({}, "is not on its release page"),
-                             ({route: (200, sleekmenu("1.9.5"))}, f"not SleekMenu {version.VERSION}"),
-                             ({route: (200, b"<html>nope</html>")}, f"not SleekMenu {version.VERSION}")):
+        for routes, said, why in (({}, "is not on its release page", releases.NOT_RELEASED),
+                                  ({route: (200, sleekmenu("1.9.5"))}, f"not SleekMenu {version.VERSION}",
+                                   releases.WRONG_FILE),
+                                  ({route: (200, sleekmenu(""))}, f"not SleekMenu {version.VERSION}",
+                                   releases.WRONG_FILE),
+                                  ({route: (200, b"<html>nope</html>")}, f"not SleekMenu {version.VERSION}",
+                                   releases.WRONG_FILE),
+                                  ({route: (500, b"")}, "HTTP 500", releases.CONNECTION)):
             with self.subTest(said=said), Server(routes) as server, \
                  mock.patch.object(releases, "RELEASES_URL", server.url("")):
                 log = Log()
                 done = releases.update_card(self.card, log)
                 self.assertTrue(done.failed)
+                self.assertEqual(done.failure, why)
                 self.assertIn(said, log.text())
                 self.assertEqual(self.rom.read_bytes(), sleekmenu("1.9.0"))
+
+    def test_a_card_that_will_not_take_the_file_says_so(self):
+        self.rom.write_bytes(sleekmenu("1.9.0"))
+        route = f"/download/v{version.VERSION}/{card_layout.BROWSER_ROM}"
+        with Server({route: (200, sleekmenu(version.VERSION))}) as server, \
+             mock.patch.object(releases, "RELEASES_URL", server.url("")), \
+             mock.patch.object(releases, "install", side_effect=OSError(28, "No space left on device")):
+            log = Log()
+            done = releases.update_card(self.card, log)
+        self.assertEqual(done.failure, releases.CARD)
+        self.assertIn("No space left", log.text())
+        self.assertEqual(self.rom.read_bytes(), sleekmenu("1.9.0"))
+
+    def test_an_unreachable_release_page_is_the_connection(self):
+        self.rom.write_bytes(sleekmenu("1.9.0"))
+        with mock.patch.object(releases, "RELEASES_URL", "http://127.0.0.1:9/releases"):
+            done = releases.update_card(self.card, Log())
+        self.assertEqual(done.failure, releases.CONNECTION)
 
     def test_a_run_puts_it_there_before_the_x7_copy_is_brought_into_step(self):
         (self.card / "ED64").mkdir()
@@ -181,7 +207,7 @@ class CardTests(unittest.TestCase):
             code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, browser=True), log=log, fail=log,
                                       outcome=outcome)
         self.assertEqual(code, 0, log.text())
-        self.assertFalse(outcome.browser_unreached)
+        self.assertEqual(outcome.browser_failure, "")
         self.assertEqual(self.rom.read_bytes(), mine)
         self.assertEqual((self.card / "ED64" / "autoexec.v64").read_bytes(), mine, "the X7's copy follows")
         # and a run not asked to leaves the card's as it is

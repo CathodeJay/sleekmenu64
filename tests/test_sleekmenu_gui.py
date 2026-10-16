@@ -1148,9 +1148,24 @@ class WindowTests(unittest.TestCase):
                          "get the newer Game Catalog Manager.")
         self.assertIn("Downloads are off", sleekmenu_gui.browser_line(releases.Browser(releases.MISSING),
                                                                       offline=True))
-        self.assertIn(f"SleekMenu {version.VERSION} could not be downloaded",
-                      sleekmenu_gui.finished_line(0, sleekmenu_prep.Outcome(browser_unreached=True),
-                                                  sleekmenu_gui.CardStatus("x", ready=True)))
+        status = sleekmenu_gui.CardStatus("x", ready=True)
+        finished = lambda **failed: sleekmenu_gui.finished_line(0, sleekmenu_prep.Outcome(**failed), status)
+        connection = finished(browser_failure=releases.CONNECTION)
+        self.assertIn(f"SleekMenu {version.VERSION} could not be downloaded", connection)
+        self.assertIn("when the connection is back", connection)
+        # anything else is not the connection, and is not called that
+        for failure, said in ((releases.NOT_RELEASED, "is not on its release page yet"),
+                              (releases.WRONG_FILE, f"the file on the release page is not SleekMenu {version.VERSION}"),
+                              (releases.CARD, "could not be written to the card")):
+            with self.subTest(failure=failure):
+                line = finished(browser_failure=failure)
+                self.assertTrue(line.startswith("Done, but "), line)
+                self.assertIn(said, line)
+                self.assertIn("SleekMenu on the card was not changed", line)
+                self.assertNotIn("connection", line)
+        both = finished(boxes_unreached=2, browser_failure=releases.WRONG_FILE)
+        self.assertTrue(both.startswith("Done, but 2 boxes could not be downloaded."), both)
+        self.assertIn("The file on the release page is not", both)
 
     def test_the_start_up_switch_is_there_for_an_x7_card_only_and_does_what_it_says(self):
         from tests.test_direct_boot import browser, stock_os

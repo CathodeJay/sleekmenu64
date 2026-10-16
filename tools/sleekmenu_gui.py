@@ -346,6 +346,24 @@ class Steps:
         return "done" if step < self.current else "now" if step == self.current else "next"
 
 
+def browser_failure_line(failure: str, status: CardStatus, first: bool = True) -> str:
+    """Why this release's SleekMenu is not on the card when the connection
+    was not the reason: the card keeps the SleekMenu it had either way."""
+    start = "Done, but " if first else ""
+    name = f"SleekMenu {version.VERSION}"
+    if failure == releases.NOT_RELEASED:
+        why = f"{name} is not on its release page yet"
+        then = f"press {status.action} again later"
+    elif failure == releases.WRONG_FILE:
+        why = f"the file on the release page is not {name}"
+        then = "please report it on GitHub"
+    else:
+        why = f"{name} could not be written to the card (is it full or locked?)"
+        then = f"free some room and press {status.action} again"
+    text = f"{start}{why}. SleekMenu on the card was not changed; {then}."
+    return text[0].upper() + text[1:]
+
+
 def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: bool = True,
                   direct: bool = False) -> str:
     """One sentence for how a run ended. `direct` is a card whose console
@@ -363,11 +381,17 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
         (getattr(outcome, "boxes_unreached", 0), "box", "boxes"),
         (getattr(outcome, "cheats_unreached", 0), "cheat file", None),
         (getattr(outcome, "shots_unreached", 0), "screenshot", None)) if count]
-    if getattr(outcome, "browser_unreached", False):
+    browser = getattr(outcome, "browser_failure", "")
+    if browser == releases.CONNECTION:
         unreached.append(f"SleekMenu {version.VERSION}")
+    said = []
     if unreached:
-        return (f"Done, but {' and '.join(unreached)} could not be downloaded. "
-                f"Press {status.action} again when the connection is back.")
+        said.append(f"Done, but {' and '.join(unreached)} could not be downloaded. "
+                    f"Press {status.action} again when the connection is back.")
+    if browser and browser != releases.CONNECTION:
+        said.append(browser_failure_line(browser, status, first=not said))
+    if said:
+        return " ".join(said)
     if direct:
         return "Done. Eject the card and switch the console on: it starts in SleekMenu."
     return "Done. Eject the card and start SleekMenu64.z64 from the EverDrive menu."

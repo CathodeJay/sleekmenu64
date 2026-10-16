@@ -66,8 +66,18 @@ OWN = "own"               # a SleekMenu no release page had: the owner's build
 OTHER = "other"           # a file at that name that is not SleekMenu
 
 
+#: Why this release's SleekMenu could not be put on a card, so the window
+#: can say what to do instead of always blaming the connection.
+CONNECTION = "connection"       # the release page could not be reached
+NOT_RELEASED = "not released"   # the release page has no SleekMenu64.z64
+WRONG_FILE = "wrong file"       # what the release page has is not this release's SleekMenu
+CARD = "card"                   # the card would not take the file
+
+
 class ReleaseError(Exception):
-    pass
+    def __init__(self, message: str, reason: str = CONNECTION):
+        super().__init__(message)
+        self.reason = reason
 
 
 @dataclass(frozen=True)
@@ -167,15 +177,15 @@ def fetch_rom(release: str = version.VERSION, url: str | None = None) -> bytes:
             data = response.read(ROM_LIMIT + 1)
     except urllib.error.HTTPError as error:
         if error.code == 404:
-            raise ReleaseError(f"SleekMenu {release} is not on its release page") from error
+            raise ReleaseError(f"SleekMenu {release} is not on its release page", NOT_RELEASED) from error
         raise ReleaseError(f"{url}: HTTP {error.code}") from error
     except (urllib.error.URLError, OSError, TimeoutError) as error:
         raise ReleaseError(f"{url}: {getattr(error, 'reason', error)}") from error
     if len(data) > ROM_LIMIT:
-        raise ReleaseError(f"{url}: too big to be SleekMenu")
+        raise ReleaseError(f"{url}: too big to be SleekMenu", WRONG_FILE)
     sleekmenu, found = rom_version(data)
     if not sleekmenu or found != release:
-        raise ReleaseError(f"{url}: not SleekMenu {release}")
+        raise ReleaseError(f"{url}: not SleekMenu {release}", WRONG_FILE)
     return data
 
 
@@ -199,9 +209,14 @@ def install(card: Path, data: bytes, current: Browser | None = None) -> Path:
 @dataclass(frozen=True)
 class Updated:
     """What update_card() found and left: the card's SleekMenu afterwards,
-    and whether this release's could not be put there when it was wanted."""
+    and, when this release's was wanted there and could not be put there,
+    why not (one of the reasons above)."""
     browser: Browser
-    failed: bool = False
+    failure: str = ""
+
+    @property
+    def failed(self) -> bool:
+        return bool(self.failure)
 
 
 def update_card(card: Path, log=print, offline: bool = False, url: str | None = None) -> Updated:
@@ -227,10 +242,14 @@ def update_card(card: Path, log=print, offline: bool = False, url: str | None = 
         return Updated(found)
     try:
         data = fetch_rom(mine, url)
-        install(card, data, found)
-    except (ReleaseError, OSError) as error:
+    except ReleaseError as error:
         log(f"sleekmenu: {mine} not put on the card ({error})")
-        return Updated(found, failed=True)
+        return Updated(found, error.reason)
+    try:
+        install(card, data, found)
+    except OSError as error:
+        log(f"sleekmenu: {mine} not put on the card ({error})")
+        return Updated(found, CARD)
     log(f"sleekmenu: {mine} put on the card"
         + (f", in place of {found.version}" if found.state == OLDER and found.version else ""))
     return Updated(card_browser(card))

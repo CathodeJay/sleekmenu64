@@ -342,8 +342,8 @@ class Outcome:
     boxes_unreached: int = 0            # high-resolution boxes the network would not give
     cheats_unreached: int = 0           # cheat files the network would not give
     shots_unreached: int = 0            # screenshots the network would not give
-    browser_unreached: bool = False     # this release's SleekMenu was wanted on the card and could not
-                                        # be fetched or written
+    browser_failure: str = ""           # this release's SleekMenu was wanted on the card and could not
+                                        # be fetched or written: why (releases.CONNECTION, ...)
 
 
 def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None,
@@ -389,8 +389,8 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         # The browser this release goes with, at the card's root, before
         # the X7's start-up copy is brought into step with it.
         if options.browser:
-            outcome.browser_unreached = releases.update_card(
-                card, log, offline=options.no_download or fetch.offline_by_request()).failed
+            outcome.browser_failure = releases.update_card(
+                card, log, offline=options.no_download or fetch.offline_by_request()).failure
         # Where the console starts is a fact about the card, not about its
         # games: it is settled before a card with no games ends the run.
         try:
