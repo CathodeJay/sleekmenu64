@@ -207,10 +207,16 @@ static bool pro_init(char *error, size_t error_size) {
     u32 info[1] = { INFS_MAX_ROM_SIZE };
 
     /* Whatever the stock firmware left in the FIFO goes first, or every
-       reply from here on is shifted by it. */
+       reply from here on is shifted by it. Then one status request, to know
+       the MCU is answering at all: a reply without the status key is an MCU
+       that is not. The status byte in a well-formed reply is the outcome of
+       the last command the MCU ran -- the stock firmware's, not ours -- and
+       says nothing about whether the browser can go on: firmware 26.1014
+       starts the browser with a filesystem error (0xB0) still standing
+       there. What counts is the reply to stopping the device, next. */
     ed_fifo_flush();
     resp = ed_check_status();
-    if (resp) { pro_fail(error, error_size, "MCU did not answer", resp); return false; }
+    if (resp == ERR_UNXP_STAT) { pro_fail(error, error_size, "MCU did not answer", resp); return false; }
     /* The firmware started this browser as a game; that mapping ends now,
        the way the probe did it, before the card is asked anything. */
     resp = ed_init_hw();

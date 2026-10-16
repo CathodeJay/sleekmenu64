@@ -1071,6 +1071,12 @@ class FlashcartInterfaceTests(unittest.TestCase):
         init = pro[pro.index("static bool pro_init("):pro.index("static void pro_flush(")]
         self.assertLess(init.index("ed_fifo_flush()"), init.index("ed_init_hw()"))
         self.assertLess(init.index("ed_init_hw()"), init.index("ed_fs_init()"))
+        # The status before the device is stopped is the stock firmware's
+        # last outcome, not the browser's: only a reply that is not a status
+        # at all stops start-up. 26.1014 leaves a filesystem error there.
+        before_stop = init[:init.index("ed_init_hw()")]
+        self.assertIn("resp == ERR_UNXP_STAT", before_stop)
+        self.assertNotRegex(before_stop, r"if \(resp\)")
         self.assertLess(init.index("ed_fs_init()"), init.index('attach_filesystem("sd:/"'))
         arm = pro[pro.index("static bool pro_arm("):pro.index("static bool pro_attach_disk(")]
         stop = arm.index("ed_dev_stop(0)")
