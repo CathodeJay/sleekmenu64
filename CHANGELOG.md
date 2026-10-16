@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.1.1
+
+**Upgrading from 2.1.0:** download the new Game Catalog Manager and press
+**Update card**: it puts SleekMenu 2.1.1 on the card.
+
+- EverDrive-64 Pro with firmware 26.1014: SleekMenu lists the card's games
+  again. That firmware starts SleekMenu with the outcome of its own last
+  command still standing, an error of no consequence, which SleekMenu took
+  as the cartridge failing and so started with no games. Older firmware
+  and the X7 are not affected.
+- When SleekMenu cannot be put on the card, the Game Catalog Manager now
+  says why: not on its release page yet, the wrong file there, or a card
+  that would not take it. It no longer blames the connection for all of
+  them.
+- The `SleekMenu64.z64` the 2.1.0 release page had on its first day is
+  known as 2.1.0, and replaced by Update card like any older release,
+  rather than left alone as a build of its own.
+
 ## 2.1.0
 
 **Upgrading from 2.0:** download the new Game Catalog Manager and press

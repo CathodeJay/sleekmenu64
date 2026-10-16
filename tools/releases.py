@@ -20,7 +20,8 @@ the newest -- and the newest of everything starts with the tool:
 
 Which SleekMenu a card has is read off the ROM itself: since 2.1 its
 header's title is "SleekMenu 64 2.1.0"; an older one says "SleekMenu 64"
-and is known by its SHA-256, listed below for every release before 2.1.
+and is known by its SHA-256, listed below for every release before 2.1 --
+and for the 2.1.0 the release page first had, built with the bare title.
 """
 
 from __future__ import annotations
@@ -53,6 +54,8 @@ EARLIER = {
     "be7b6b0001ede1484f0ba635aa68ee18dfac932aa2662b03e0abc542b88ba6f2": "1.1.0",
     "57661bf24deea782fa548562c78fd43f1ce89839d5e9515fdfda81e5b0926d63": "1.2.0",
     "d18a5bb76a79190b10e6db6f86ea555f78293daf8b1684c1cd15da1f1007c5f7": "2.0.0",
+    # 2.1.0 as its release page first had it: the same code, the bare title.
+    "ceb18694d7fa22b9f63e7f1acf5c9cdb3c11fdf509117878e32c4adb183129b2": "2.1.0",
 }
 #: A SleekMenu is a few hundred KB; anything past this at that name is not one.
 ROM_LIMIT = 8 * 1048576
