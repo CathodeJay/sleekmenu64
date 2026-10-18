@@ -421,20 +421,36 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
     return "Done. Eject the card, then start SleekMenu64.z64 from the EverDrive menu."
 
 
-def music_line(on_card, picked=None, seconds: float = 0.0, problem: str = "") -> str:
-    """What the Music row says: the song on the card, or the one picked for
-    it, or why the picked file can't be used."""
+#: The longest song name shown beside the Music buttons.
+MUSIC_NAME_MAX = 26
+
+
+def music_name(on_card, picked=None, seconds: float = 0.0) -> str:
+    """Beside the Music buttons: the song picked here, or else the card's,
+    with how long it plays; nothing when there is neither."""
+    if isinstance(picked, Path):
+        name, length = picked.name, seconds
+    elif on_card is not None:
+        name, length = on_card.name or "A song", on_card.seconds
+    else:
+        return ""
+    if len(name) > MUSIC_NAME_MAX:
+        name = name[:MUSIC_NAME_MAX - 1].rstrip() + "…"
+    return f"{name} ({music.duration(length)})"
+
+
+def music_line(on_card, picked=None, problem: str = "") -> str:
+    """Under the Music buttons: what happens to the song, or why the file
+    picked can't be used."""
     if problem:
         return problem
     if picked == REMOVE_MUSIC:
         return "The music comes off the card at the next update."
     if picked is not None:
-        return f"{picked.name} ({music.duration(seconds)}) goes on the card at the next update."
+        return "Goes on the card at the next update."
     if on_card is None:
         return "Choose a song to play in SleekMenu."
-    named = on_card.name or "A song"
-    return (f"{named} ({music.duration(on_card.seconds)}) plays in SleekMenu. "
-            "Press Z on the console to turn it off.")
+    return "Plays in SleekMenu. Press Z on the console to turn it off."
 
 
 def megabytes(size: int) -> str:
@@ -2284,16 +2300,20 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     group(17, "Theme")
     theme_row = ttk.Frame(options)
     theme_row.grid(row=18, column=0, sticky="w", pady=(6, 0))
+    # Each row's controls in a frame of their own, so a long song name on
+    # one row can't push the other row's controls about.
     ttk.Label(theme_row, text="Colors").grid(row=0, column=0, sticky="w")
-    theme_box = ttk.Combobox(theme_row, textvariable=theme_var, state="readonly", width=12,
+    colors_box = ttk.Frame(theme_row)
+    colors_box.grid(row=0, column=1, sticky="w", padx=(8, 0))
+    theme_box = ttk.Combobox(colors_box, textvariable=theme_var, state="readonly", width=12,
                              values=[theme.name for theme in themes.THEMES])
-    theme_box.grid(row=0, column=1, padx=(8, 10))
+    theme_box.grid(row=0, column=0, padx=(0, 10))
     # The theme at a glance: its background, title band, selection, accent
     # and text, side by side.
     swatch_size = 14
-    swatch = tk.Canvas(theme_row, width=len(SWATCH_ROLES) * swatch_size, height=swatch_size,
+    swatch = tk.Canvas(colors_box, width=len(SWATCH_ROLES) * swatch_size, height=swatch_size,
                        highlightthickness=1, highlightbackground=colors["muted"], borderwidth=0)
-    swatch.grid(row=0, column=2)
+    swatch.grid(row=0, column=1)
 
     def draw_swatch(*_args) -> None:
         theme = themes.by_name(theme_var.get()) or themes.DEFAULT
@@ -2305,11 +2325,14 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     draw_swatch()
     ttk.Label(theme_row, text="Music").grid(row=1, column=0, sticky="w", pady=(8, 0))
     music_buttons = ttk.Frame(theme_row)
-    music_buttons.grid(row=1, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(8, 0))
+    music_buttons.grid(row=1, column=1, sticky="w", padx=(8, 0), pady=(8, 0))
     choose_music = ttk.Button(music_buttons, text="Choose…")
     choose_music.grid(row=0, column=0)
     remove_music = ttk.Button(music_buttons, text="Remove")
     remove_music.grid(row=0, column=1, padx=(6, 0))
+    # The song itself, on the row, where the buttons that change it are.
+    music_name_var = tk.StringVar()
+    ttk.Label(music_buttons, textvariable=music_name_var).grid(row=0, column=2, padx=(10, 0))
     hint(19, music_note)
 
     fit(options, hints)
@@ -2483,10 +2506,31 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     def show_music() -> None:
         on_card = music.read_card(current_card())
         picked = state.get("music_pick")
-        music_note.set(music_line(on_card, picked, state.get("music_seconds", 0.0),
-                                  state.get("music_problem", "")))
+        music_name_var.set(music_name(on_card, picked, state.get("music_seconds", 0.0)))
+        music_note.set(music_line(on_card, picked, state.get("music_problem", "")))
         removable = isinstance(picked, Path) or (on_card is not None and picked != REMOVE_MUSIC)
         remove_music.configure(state="normal" if removable else "disabled")
+        make_room()
+
+    def make_room() -> None:
+        """A taller window when either column holds more than it shows.
+        The columns don't take their height from what is in them (see
+        grid_propagate, above), so whatever runs past the bottom is cut off
+        with nothing to say so: on a Mac, whose fonts are larger, that was
+        the line under Music. Only ever taller, and never past the screen."""
+        root.update_idletasks()
+        if not root.winfo_ismapped():
+            return
+        short = 0
+        for column in (body, options):
+            if column.winfo_height() > 1:
+                short = max(short, column.grid_bbox()[3] - column.winfo_height())
+        if short <= 0:
+            return
+        height = min(root.winfo_height() + short + 12, root.winfo_screenheight() - 80)
+        if height > root.winfo_height():
+            root.minsize(root.minsize()[0], height)
+            root.geometry(f"{root.winfo_width()}x{height}")
 
     def read_music() -> None:
         """The card's song, shown, with nothing picked: a run has put
@@ -2773,6 +2817,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
                         "browser": browser_var}
     state["swatch"] = swatch
     state["music_note"] = music_note
+    state["music_name"] = music_name_var
+    state["make_room"] = make_room
     state["pick_music"] = pick_music
     state["drop_music"] = drop_music
     state["boot_row"] = boot_row
@@ -2816,6 +2862,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
         threading.Thread(target=look_for_newer, name="sleekmenu-newer", daemon=True).start()
         root.after(500, show_newer)
 
+    root.after(200, make_room)
     if smoke and card:
         if song:
             pick_music(Path(song))

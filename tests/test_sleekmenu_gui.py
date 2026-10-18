@@ -130,17 +130,22 @@ class FieldTests(unittest.TestCase):
 
     def test_the_music_row_says_what_is_on_the_card_and_what_comes_next(self):
         from tools import music
-        line = sleekmenu_gui.music_line
-        self.assertEqual(line(None), "Choose a song to play in SleekMenu.")
+        line, name = sleekmenu_gui.music_line, sleekmenu_gui.music_name
         on_card = music.OnCard("Title Theme.mp3", 187.4, 1000)
-        self.assertEqual(line(on_card), "Title Theme.mp3 (3:07) plays in SleekMenu. "
-                                        "Press Z on the console to turn it off.")
-        self.assertTrue(line(music.OnCard("", 61, 10)).startswith("A song (1:01) plays"))
-        self.assertEqual(line(on_card, Path("/x/Credits.wav"), 62),
-                         "Credits.wav (1:02) goes on the card at the next update.")
+        # beside the buttons: the song, picked here or on the card
+        self.assertEqual(name(None), "")
+        self.assertEqual(name(on_card), "Title Theme.mp3 (3:07)")
+        self.assertEqual(name(music.OnCard("", 61, 10)), "A song (1:01)")
+        self.assertEqual(name(on_card, Path("/x/Credits.wav"), 62), "Credits.wav (1:02)")
+        self.assertEqual(name(on_card, sleekmenu_gui.REMOVE_MUSIC), "Title Theme.mp3 (3:07)")
+        self.assertEqual(name(None, Path("/x/" + "A" * 40 + ".mp3"), 5), "A" * 25 + "… (0:05)")
+        # under them: what happens to it
+        self.assertEqual(line(None), "Choose a song to play in SleekMenu.")
+        self.assertEqual(line(on_card), "Plays in SleekMenu. Press Z on the console to turn it off.")
+        self.assertEqual(line(on_card, Path("/x/Credits.wav")), "Goes on the card at the next update.")
         self.assertEqual(line(on_card, sleekmenu_gui.REMOVE_MUSIC),
                          "The music comes off the card at the next update.")
-        self.assertEqual(line(on_card, None, 0, "This isn't a WAV file."), "This isn't a WAV file.")
+        self.assertEqual(line(on_card, None, "This isn't a WAV file."), "This isn't a WAV file.")
 
 
 class CardStatusTests(unittest.TestCase):
@@ -1373,13 +1378,14 @@ class WindowTests(unittest.TestCase):
             root = sleekmenu_gui.build(card=str(card))
             root.update()
             state = root.sleekmenu_state
-            note, remove = state["music_note"], state["buttons"]["music_remove"]
+            note, remove, name = state["music_note"], state["buttons"]["music_remove"], state["music_name"]
             shown = labels(root)
             self.assertIn("Theme", shown)
             self.assertIn("Colors", shown)
             self.assertIn("Music", shown)
             self.assertNotIn("Console", shown, "the group is called after what it holds")
             self.assertEqual(note.get(), "Choose a song to play in SleekMenu.")
+            self.assertEqual(name.get(), "")
             self.assertEqual(str(remove.cget("state")), "disabled", "nothing to remove")
 
             # a file that can't be used says so at once, and nothing is picked
@@ -1391,12 +1397,14 @@ class WindowTests(unittest.TestCase):
 
             # a song is checked when picked, and put on the card by the run
             state["pick_music"](song)
-            self.assertEqual(note.get(), "Title Theme.wav (0:03) goes on the card at the next update.")
+            self.assertEqual(name.get(), "Title Theme.wav (0:03)")
+            self.assertEqual(note.get(), "Goes on the card at the next update.")
             self.assertEqual(str(remove.cget("state")), "normal", "a pick can be taken back")
             self.assertIsNone(music.read_card(card), "nothing is written until the button is pressed")
             run(root, state)
             self.assertEqual(music.read_card(card).name, "Title Theme.wav")
-            self.assertTrue(note.get().startswith("Title Theme.wav (0:03) plays in SleekMenu."), note.get())
+            self.assertEqual(name.get(), "Title Theme.wav (0:03)")
+            self.assertTrue(note.get().startswith("Plays in SleekMenu."), note.get())
             self.assertEqual(str(remove.cget("state")), "normal")
 
             # a run with nothing picked leaves it there
@@ -1407,7 +1415,7 @@ class WindowTests(unittest.TestCase):
             # Remove takes back a pick first, then marks the card's song to go
             state["pick_music"](song)
             state["drop_music"]()
-            self.assertTrue(note.get().startswith("Title Theme.wav (0:03) plays"), note.get())
+            self.assertTrue(note.get().startswith("Plays in SleekMenu."), note.get())
             state["drop_music"]()
             self.assertEqual(note.get(), "The music comes off the card at the next update.")
             self.assertEqual(str(remove.cget("state")), "disabled")
@@ -1415,6 +1423,42 @@ class WindowTests(unittest.TestCase):
             run(root, state)
             self.assertIsNone(music.read_card(card))
             self.assertEqual(note.get(), "Choose a song to play in SleekMenu.")
+            self.assertEqual(name.get(), "")
+            root.destroy()
+
+    def test_the_window_grows_until_nothing_in_a_column_is_cut_off(self):
+        """The columns don't size themselves to what they hold, so with a
+        Mac's larger fonts the Music row ran past the bottom of the window
+        and a picked song showed nowhere. Here the line under Music is made
+        long enough to do the same at any font size."""
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            root = sleekmenu_gui.build(card=str(card))
+            if root.winfo_screenheight() < 1000:
+                root.destroy()
+                self.skipTest("the virtual screen is too small to grow into")
+            for _ in range(5):
+                root.update()
+            state = root.sleekmenu_state
+            options = state["columns"]["options"]
+            before = root.winfo_height()
+            self.assertLessEqual(options.grid_bbox()[3], options.winfo_height(), "it all fits to begin with")
+            state["music_note"].set("\n".join(["One more line under Music."] * 8))
+            root.update()
+            self.assertGreater(options.grid_bbox()[3], options.winfo_height(), "cut off")
+            state["make_room"]()
+            root.update()
+            self.assertGreater(root.winfo_height(), before)
+            self.assertLessEqual(options.grid_bbox()[3], options.winfo_height(), "nothing cut off")
+            self.assertGreaterEqual(root.minsize()[1], root.winfo_height() - 1, "and it can't be made shorter")
+            # never shorter: with room to spare, nothing changes
+            state["music_note"].set("One line.")
+            root.update()
+            height = root.winfo_height()
+            state["make_room"]()
+            root.update()
+            self.assertEqual(root.winfo_height(), height)
             root.destroy()
 
     def test_a_build_check_never_downloads_and_ends_on_its_own(self):
