@@ -1710,7 +1710,9 @@ int main(void) {
         frame(PRESS(select));                 /* Beta's card */
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, "Beta.z64"));
         draw();
-        assert(sm_test_drew("other games"));
+        /* Under the prompts, beside B (which picture it is, the D-pad's
+           left and right, is checked in test_launch_preview.py). */
+        assert(sm_test_drew("cycle games"));
         prepares = fake_prepares;
 
         /* Right: the next game, its title and facts at once, nothing read
@@ -1776,7 +1778,7 @@ int main(void) {
         frame(PRESS(select));
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
         draw();
-        assert(!sm_test_drew("other games"));
+        assert(!sm_test_drew("cycle games"));
         frame(PRESS(right)); frame(PRESS(left));
         assert(ui.selected == 1u && !ui.card_pending);
         frame(PRESS(back));

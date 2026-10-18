@@ -172,6 +172,17 @@ class HostModuleTests(unittest.TestCase):
         build_and_run("buttons-test", ["src/buttons.c", "tests/stubs/libdragon_stub.c", "tests/buttons_test.c"],
                       ["-Itests/stubs"], whole)
 
+    def test_the_d_pad_is_drawn_as_the_d_pad(self):
+        """{<} and {>} are the yellow C-left and C-right, which switch the
+        genre tabs; the D-pad's left and right are {-}. A hint for the
+        D-pad's arrows drawn as C buttons sends a thumb to the wrong side
+        of the controller."""
+        source = (ROOT / "src/ui.c").read_text(encoding="utf-8")
+        lines = set(re.findall(r'"((?:[^"\\]|\\.)*)"', source))
+        c_arrows = sorted(line for line in lines if "{<}" in line or "{>}" in line)
+        self.assertEqual(c_arrows, ["{S}PLAY {A}INFO {<}{>}TABS {^}VIEW {v}STAR {Z}FILTER"])
+        self.assertIn("{-} cycle games", lines)
+
     def test_host_list_view_module(self):
         build_and_run("list-view-test",
                       ["src/list_view.c", "tests/list_view_test.c"])

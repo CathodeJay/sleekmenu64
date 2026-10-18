@@ -3068,7 +3068,7 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
         graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         sm_hints_draw(s, l->safe_left + 3, y + 11, l->safe_right - 3, "{B} back");
         if (card_has_others(ui))
-            sm_hints_draw(s, text_x, y + 11, l->safe_right - 3, "{<}{>} other games");
+            sm_hints_draw(s, text_x, y + 11, l->safe_right - 3, "{-} cycle games");
     }
 
     snprintf(line, sizeof(line), "%s LOAD {A}BOX {^}SWITCH {Z}DETAILS%s",
