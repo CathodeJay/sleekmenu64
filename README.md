@@ -93,7 +93,7 @@ SleekMenu ships none of them.
 
 | Control | Browsing | A game's details |
 |---|---|---|
-| D-pad / stick | Move; hold to keep moving, faster and then several games at a time the longer you hold. The stick leaned part way moves one game at a time | Scroll the description |
+| D-pad / stick | Move; hold to keep moving, faster and then several games at a time the longer you hold. The stick leaned part way moves one game at a time | Up and down scroll the description; left and right go to the previous or next game |
 | A | Open a folder, or a game's details | The box, full screen; left and right turn to the screenshots |
 | B | Parent folder | Back to the list |
 | Start | Play | Play |

@@ -1563,6 +1563,59 @@ static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_
     ui->screen = SM_SCREEN_LAUNCH_DETAILS;
 }
 
+/* Left or right on the card: the next game in the list either way, round
+   from the last to the first, folders passed over. The list's cursor moves
+   with it, so B lands on the game last shown. What the catalog has -- the
+   title, the facts, the description -- is up at once; what comes off the
+   card waits until the presses stop, so holding the button runs through
+   the games rather than stopping at each to read it. */
+static void step_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_t *layout,
+    int direction) {
+    uint32_t at = ui->selected;
+    sm_game_t game;
+    if (!ui->item_count) return;
+    for (uint32_t i = 0; i < ui->item_count; i++) {
+        at = direction > 0 ? (at + 1u) % ui->item_count
+                           : (at + ui->item_count - 1u) % ui->item_count;
+        if (!(ui->items[at] & SM_UI_FOLDER_BIT)) break;
+    }
+    if (at == ui->selected || (ui->items[at] & SM_UI_FOLDER_BIT)) return;
+    if (!catalog_get(catalog, ui->items[at], &game)) return;
+    launch_cancel();
+    unload_cover(ui);
+    unload_shot_thumbs(ui);
+    ui->selected_details_loaded = false;
+    ui->selected_features = 0u;
+    ui->selected = at;
+    focus_selected(ui, layout);
+    if (ui->view == SM_VIEW_COVERFLOW) sm_glide_snap(&ui->flow, (float)at);
+    render_description(ui, layout, game.description);
+    ui->status = NULL;
+    ui->card_pending = true;
+    ui->settle = SM_UI_SETTLE_FRAMES;
+}
+
+/* The card's reads for the game it moved to: the presses have stopped, or
+   a button wants the game ready. */
+static void finish_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_t *layout) {
+    sm_game_t game;
+    uint32_t item;
+    ui->card_pending = false;
+    ui->settle = 0;
+    if (!ui->item_count) return;
+    item = ui->items[ui->selected];
+    if (!(item & SM_UI_FOLDER_BIT) && catalog_get(catalog, item, &game))
+        open_card(ui, catalog, layout, item, &game);
+}
+
+/* Whether the list has another game for left and right to go to. */
+static bool card_has_others(const sm_ui_t *ui) {
+    unsigned games = 0;
+    for (uint32_t i = 0; i < ui->item_count && games < 2u; i++)
+        if (!(ui->items[i] & SM_UI_FOLDER_BIT)) games++;
+    return games >= 2u;
+}
+
 /* Start, on the card or straight from the list: the same call, so history,
    the registry and the save are handled in one place, inside launch_rom. */
 static void launch_from_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_t *layout) {
@@ -1644,10 +1697,27 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
     if (ui->screen == SM_SCREEN_LAUNCH_DETAILS) {
         if (actions.back) {
             if (ui->diagnostics) { ui->diagnostics = false; return; }
+            ui->card_pending = false;
             launch_cancel(); ui->screen = SM_SCREEN_LIBRARY;
             unload_shot_thumbs(ui);
             ui->status = launch_status_message();
             return;
+        }
+        if (!ui->diagnostics && (actions.left || actions.right)) {
+            step_card(ui, catalog, layout, actions.left ? -1 : 1);
+            return;
+        }
+        if (ui->card_pending) {
+            /* Every other button on the card is about the game, which has
+               to be ready for it. Start on a game not read yet is Start
+               from the list: it plays unless the card has something in red
+               to say, which nobody has seen yet. */
+            if (actions.start || actions.select || actions.favorite || actions.filter ||
+                    actions.toggle_view || !ui->settle || !--ui->settle) {
+                finish_card(ui, catalog, layout);
+                if (actions.start && (launch_last_result() != SM_LAUNCH_OK || card_warning()))
+                    return;
+            }
         }
         if (actions.toggle_view)
             launch_set_boot_mode(launch_boot_mode() == SM_BOOT_FAST ? SM_BOOT_VERIFY : SM_BOOT_FAST);
@@ -2855,8 +2925,12 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
     else {
         graphics_draw_box(s, l->safe_left + 3, y, SM_COVER_WIDTH, SM_COVER_HEIGHT,
             sm_colour(SM_C_WELL));
-        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
-        graphics_draw_text(s, l->safe_left + 3 + (SM_COVER_WIDTH - 6 * SM_FONT_WIDTH) / 2, y + 32, "NO ART");
+        /* An empty well while the box is still to be read: "NO ART" would
+           say something that is not known yet. */
+        if (!ui->card_pending) {
+            graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
+            graphics_draw_text(s, l->safe_left + 3 + (SM_COVER_WIDTH - 6 * SM_FONT_WIDTH) / 2, y + 32, "NO ART");
+        }
     }
 
     {
@@ -2915,11 +2989,14 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
         graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, text_x, info_y, "SAVE");
         graphics_set_color(sm_colour(SM_C_ACCENT), 0);
+        /* Moving through the games, the facts from the card are "..." until
+           the presses stop and they are read. */
         draw_truncated(s, text_x + LABEL_COLUMN, info_y,
+            ui->card_pending ? "..." :
             launch_selected_is_disk() ? "ON THE 64DD DISK" : sm_save_type_name(launch_save_type()),
             ROW_CHARS(info_y) - 6);
         info_y += 11;
-        if (launch_sibling_disk()[0]) {
+        if (!ui->card_pending && launch_sibling_disk()[0]) {
             /* The expansion disk found beside the ROM, by its file name. */
             const char *name = strrchr(launch_sibling_disk(), '/');
             graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
@@ -2929,7 +3006,7 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
                 ROW_CHARS(info_y) - 6);
             info_y += 11;
         }
-        if (launch_cheats_available()) {
+        if (!ui->card_pending && launch_cheats_available()) {
             const sm_cheat_set_t *set = launch_cheats();
             uint32_t on = sm_cheats_enabled_count(set);
             graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
@@ -2952,7 +3029,8 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
         }
         graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
         graphics_draw_text(s, text_x, info_y, "SIZE");
-        sm_format_rom_size(ui->selected_size, line, sizeof(line));
+        if (ui->card_pending) snprintf(line, sizeof(line), "...");
+        else sm_format_rom_size(ui->selected_size, line, sizeof(line));
         graphics_set_color(sm_colour(SM_C_TEXT), 0);
         draw_truncated(s, text_x + LABEL_COLUMN, info_y, line, ROW_CHARS(info_y) - 6);
         info_y += 11;
@@ -2989,6 +3067,8 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
         sm_hints_draw(s, l->safe_left + 3, y, l->safe_right - 3, "{S} play");
         graphics_set_color(sm_colour(SM_C_TEXT_MUTED), 0);
         sm_hints_draw(s, l->safe_left + 3, y + 11, l->safe_right - 3, "{B} back");
+        if (card_has_others(ui))
+            sm_hints_draw(s, text_x, y + 11, l->safe_right - 3, "{<}{>} other games");
     }
 
     snprintf(line, sizeof(line), "%s LOAD {A}BOX {^}SWITCH {Z}DETAILS%s",

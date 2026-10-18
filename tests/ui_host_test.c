@@ -67,8 +67,10 @@ bool sm_cart_image_intact(void) { return true; }
 /* The prepared game, the way launch.c keeps it: set by prepare, cleared by
    cancel, and what the card's Start checks before it plays. */
 static char fake_selected[256];
+static int fake_prepares;
 sm_launch_result_t launch_prepare(const char *path) {
     snprintf(fake_selected, sizeof(fake_selected), "%s", path);
+    fake_prepares++;
     return SM_LAUNCH_OK;
 }
 const char *launch_status_message(void) { return "ready"; }
@@ -1689,6 +1691,94 @@ int main(void) {
         assert(sm_test_drew("LETTER ") && sm_test_drew("FILTER"));
         frame(PRESS(start));
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && fake_launches == 6);
+        frame(PRESS(back));
+    }
+
+    /* ---- left and right on the card go through the folder's games ------- */
+    {
+        static const row_t rows[] = {
+            {"Racing/Wave Race 64.z64", "Wave Race 64", "Racing", 0, "", 0, NULL},
+            {"Alpha.z64", "Alpha", "Action", 0, "", 0, NULL},
+            {"Beta.z64", "Beta", "Action", 0, "", 0, NULL},
+            {"Gamma.z64", "Gamma", "Action", 0, "", 0, NULL},
+        };
+        int prepares, launches;
+        start(rows, 4u);
+        settle();
+        assert(ui.item_count == 4u && (ui.items[0] & SM_UI_FOLDER_BIT));
+        frame(PRESS(down)); frame(PRESS(down));
+        frame(PRESS(select));                 /* Beta's card */
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, "Beta.z64"));
+        draw();
+        assert(sm_test_drew("other games"));
+        prepares = fake_prepares;
+
+        /* Right: the next game, its title and facts at once, nothing read
+           off the card yet -- and the launcher let go of the last one. */
+        frame(PRESS(right));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && ui.selected == 3u && ui.card_pending);
+        assert(fake_selected[0] == '\0' && fake_prepares == prepares);
+        draw();
+        assert(sm_test_drew("Gamma") && sm_test_drew("...") && !sm_test_drew("NO ART"));
+        /* The presses stop: the game is read and made ready. */
+        idle(SM_UI_SETTLE_FRAMES + 1);
+        assert(!ui.card_pending && !strcmp(fake_selected, "Gamma.z64") && fake_prepares == prepares + 1);
+
+        /* Round from the last to the first, past the folder. */
+        frame(PRESS(right));
+        assert(ui.selected == 1u);
+        /* A run of presses reads only where it stops. */
+        frame(PRESS(right)); frame(PRESS(right));
+        assert(ui.selected == 3u && fake_prepares == prepares + 1);
+        idle(SM_UI_SETTLE_FRAMES + 1);
+        assert(!strcmp(fake_selected, "Gamma.z64") && fake_prepares == prepares + 2);
+        /* And left goes back, round from the first to the last. */
+        frame(PRESS(left)); frame(PRESS(left));
+        assert(ui.selected == 1u);
+        frame(PRESS(left));
+        assert(ui.selected == 3u);
+
+        /* Start on a game not read yet reads it and plays, as from the list. */
+        launches = fake_launches;
+        frame(PRESS(start));
+        assert(!ui.card_pending && fake_launches == launches + 1 && !strcmp(fake_selected, "Gamma.z64"));
+        /* With something in red to say, it stops at the card instead. */
+        frame(PRESS(left));
+        fake_last_result = SM_LAUNCH_BAD_MAGIC;
+        frame(PRESS(start));
+        assert(fake_launches == launches + 1 && ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        fake_last_result = SM_LAUNCH_OK;
+
+        /* B lands on the game last shown. */
+        frame(PRESS(left));
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LIBRARY && ui.selected == 1u && !ui.card_pending);
+        assert(ui.first_visible <= ui.selected);
+
+        /* With the numbers up, left and right are the transport probe. */
+        frame(PRESS(select));
+        frame(PRESS(filter));
+        assert(ui.diagnostics);
+        frame(PRESS(right));
+        assert(ui.selected == 1u && !ui.card_pending);
+        frame(PRESS(back)); frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LIBRARY);
+    }
+    {
+        /* One game in the folder: nowhere to go, and nothing says so. */
+        static const row_t rows[] = {
+            {"Racing/Wave Race 64.z64", "Wave Race 64", "Racing", 0, "", 0, NULL},
+            {"Alpha.z64", "Alpha", "Action", 0, "", 0, NULL},
+        };
+        start(rows, 2u);
+        settle();
+        frame(PRESS(down));
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        draw();
+        assert(!sm_test_drew("other games"));
+        frame(PRESS(right)); frame(PRESS(left));
+        assert(ui.selected == 1u && !ui.card_pending);
         frame(PRESS(back));
     }
 

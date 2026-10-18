@@ -100,6 +100,10 @@ typedef struct {
     uint32_t selected_size;
     bool selected_details_loaded;
     bool selected_disk;        /* the highlighted item is a 64DD disk image */
+    /* Left or right on a game's card moved to another game, and what comes
+       off the card for it -- the box, the header, the launch -- waits for
+       the presses to stop (settle), as the list's covers do. */
+    bool card_pending;
     /* Horizontal offset for a selected title too long for the row, advanced
        one pixel per frame and wrapped by the drawing code. */
     unsigned marquee;

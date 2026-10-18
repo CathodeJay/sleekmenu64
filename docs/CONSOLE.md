@@ -47,8 +47,12 @@ jump to the next letter of the alphabet instead of paging.
 and players, the save type, how many cheats are on, the size and what the
 game needs (a Controller Pak, a Rumble Pak), then the description, which
 scrolls. A game with [screenshots](#screenshots) shows them as two small
-pictures at the right of the facts. Start plays; C-up switches between a fast and a verified load; C-down
-opens the cheats; Z shows the diagnostics.
+pictures at the right of the facts. Left and right go to the previous or
+next game in the list, round from the last to the first: the title and the
+facts are up at once, and the box, the save type and the size follow when
+you stop. B goes back to the list on the game you ended on. Start plays;
+C-up switches between a fast and a verified load; C-down opens the cheats;
+Z shows the diagnostics.
 
 ![The details: the box on the left; the title, year, publisher, genre, region, players, save type, cheats, size and needed accessories beside it; the description below](screenshots/detail.png)
 

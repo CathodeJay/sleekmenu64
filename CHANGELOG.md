@@ -20,6 +20,9 @@
   is fetched into the `sleekmenu/` folder with everything else the Game
   Catalog Manager keeps, and one at the card root is moved there by the
   next update. Nothing is downloaded again.
+- **Left and right on a game's details go to the previous or next game.**
+  Hold the button to run through them; the box and the save type follow
+  when you stop, and B goes back to the list on the game you ended on.
 - **No more "1 new folder" that never goes away.** An empty folder, or one
   with only Controller Pak files, is no longer listed as a new folder or
   counted in the status line; running the Game Catalog Manager could never
