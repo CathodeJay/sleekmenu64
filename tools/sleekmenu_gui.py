@@ -2058,7 +2058,7 @@ def palette(root, tk, ttk) -> dict[str, str]:
             "info": "#8fc7f0" if dark else "#1f5fa8"}
 
 
-def build(smoke: bool = False, card: str = "", metadata: str = ""):
+def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = ""):
     """The window, as a Tk root. `smoke` closes it after a moment, which is
     how a build is checked to start at all; with `card` as well it presses
     the button and closes when the run is done, which is how the whole
@@ -2817,6 +2817,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         root.after(500, show_newer)
 
     if smoke and card:
+        if song:
+            pick_music(Path(song))
         root.after(100, start)
     elif smoke:
         root.after(500, root.destroy)
@@ -2829,17 +2831,26 @@ def main(argv: list[str] | None = None) -> int:
                         help="open the window and close it at once; a build check")
     parser.add_argument("--card", default="", help="with --smoke: prepare this card, then close")
     parser.add_argument("--metadata", default="", help="with --smoke: the collection to use")
+    parser.add_argument("--music", default="", help="with --smoke: put this song on the card too")
     args = parser.parse_args(argv)
     if not available():
         print("sleekmenu-catalog-manager: no window toolkit (tkinter) in this Python, or no display; "
               "run sleekmenu-catalog-manager.pyz from a terminal instead", file=sys.stderr)
         return 2
-    root = build(smoke=args.smoke, card=args.card, metadata=args.metadata)
+    root = build(smoke=args.smoke, card=args.card, metadata=args.metadata, song=args.music)
     root.mainloop()
     if args.smoke:
         code = root.sleekmenu_state.get("last_code")
+        decoders = music.decoders()
         print("window opened and closed" + (f"; the run returned {code}" if code is not None else "")
-              + "; drag and drop: " + ("yes" if root.sleekmenu_state["catalog"].drop_works else "no"))
+              + "; drag and drop: " + ("yes" if root.sleekmenu_state["catalog"].drop_works else "no")
+              + "; music: " + (", ".join(decoders) or "WAV only"))
+        # A downloadable build reads every song itself, so nobody who
+        # downloads it has a package to install: one whose miniaudio did
+        # not load is a broken build, whatever else it can fall back on.
+        if getattr(sys, "frozen", False) and "miniaudio" not in decoders:
+            print("sleekmenu-catalog-manager: miniaudio did not load in this build", file=sys.stderr)
+            return 4
         return int(code or 0)
     return 0
 

@@ -99,6 +99,7 @@ jobs:
             --add-data "data/LICENSE:data" \
             --collect-all tkinterdnd2 \
             --hidden-import miniaudio \
+            --hidden-import _cffi_backend \
             tools/sleekmenu_gui.py
 
       - name: Prove the build starts and prepares a card
@@ -117,14 +118,18 @@ jobs:
             *)       app="dist/SleekMenu-Catalog-Manager" ;;
           esac
           card="$PWD/smoke/CARD"
+          song="$PWD/tests/fixtures/music/tone.mp3"
           run=""
           case "${{ runner.os }}" in
             Linux)   sudo apt-get install -y xvfb; run="xvfb-run -a" ;;
-            Windows) card="$(pwd -W)/smoke/CARD" ;;
+            Windows) card="$(pwd -W)/smoke/CARD"; song="$(pwd -W)/tests/fixtures/music/tone.mp3" ;;
           esac
-          $run "$app" --smoke --card "$card" | tee smoke/report.txt
+          # The build exits 4 when its miniaudio did not load: the MP3 below
+          # must be read by the build itself, not by anything on the runner.
+          $run "$app" --smoke --card "$card" --music "$song" | tee smoke/report.txt
           test -f smoke/CARD/sleekmenu/catalog.ebc
           test -f smoke/CARD/sleekmenu/covers.pak
+          test -f smoke/CARD/sleekmenu/music.wav64
           # The window works without drag and drop, so a build where its
           # library will not load is flagged here rather than failed. A
           # windowed program on Windows prints nothing to read.

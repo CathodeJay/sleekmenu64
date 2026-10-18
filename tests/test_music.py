@@ -24,6 +24,9 @@ from tests.test_sleekmenu_prep import stay_offline
 from tools import card_layout, music, sleekmenu_prep
 
 ROOT = Path(__file__).resolve().parent.parent
+#: Two seconds of a 440 Hz sine, mono, 22.05 kHz, 32 kbps, no tags: made
+#: for these tests with ffmpeg's sine source and LAME.
+TONE_MP3 = ROOT / "tests" / "fixtures" / "music" / "tone.mp3"
 
 
 def tone(count: int, channels: int = 1, step: float = 0.05, level: int = 8000) -> array.array:
@@ -231,6 +234,14 @@ class MiniaudioTests(unittest.TestCase):
     def tearDown(self):
         self.temporary.cleanup()
 
+    def test_an_mp3_is_read(self):
+        with mock.patch.object(music, "_converters", return_value=[]):
+            track = music.decode(TONE_MP3)
+            self.assertAlmostEqual(music.probe(TONE_MP3), 2.06, delta=0.05)
+        self.assertEqual(track.rate, music.DECODED_RATE)
+        self.assertAlmostEqual(track.seconds, 2.06, delta=0.05)
+        self.assertGreater(max(track.samples), 2000, "a tone, not silence")
+
     def test_a_decoded_file_is_brought_to_32_khz_mono(self):
         path = ulaw_wav(self.folder / "song.wav", 2)
         with mock.patch.object(music, "_converters", return_value=[]):
@@ -324,6 +335,8 @@ class ConverterTests(unittest.TestCase):
             track = music.decode(ulaw_wav(self.folder / "song.wav", 2))
             self.assertEqual(track.rate, music.DECODED_RATE)
             self.assertAlmostEqual(track.seconds, 2.0, delta=0.02)
+            # an MP3
+            self.assertAlmostEqual(music.decode(TONE_MP3).seconds, 2.06, delta=0.05)
             # and a FLAC, which ffmpeg also writes
             flac = self.folder / "song.flac"
             subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(self.folder / "song.wav"),

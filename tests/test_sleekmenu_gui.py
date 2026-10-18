@@ -1429,10 +1429,41 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(root.sleekmenu_state["last_code"], 0)
             self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
             self.assertFalse((card / "release-metadata.zip").exists())
+            # a song for the card is put on it by the same run
+            from tools import music
+            song = Path(__file__).parent / "fixtures" / "music" / "tone.mp3"
+            root = sleekmenu_gui.build(smoke=True, card=str(card), song=str(song))
+            root.mainloop()
+            self.assertEqual(root.sleekmenu_state["last_code"], 0)
+            if music.decoder_available():
+                self.assertEqual(music.read_card(card).name, "tone.mp3")
             # and with no card at all it opens, finds nothing to act on, and closes
             root = sleekmenu_gui.build(smoke=True, card=str(Path(scratch) / "nowhere"))
             root.mainloop()
             self.assertEqual(root.sleekmenu_state["last_code"], 1)
+
+    def test_a_downloadable_build_without_miniaudio_fails_its_build_check(self):
+        """The downloadable builds read MP3s themselves, so nobody has a
+        package to install. A frozen build whose miniaudio did not load
+        says so and exits 4, which fails the release workflow on every
+        platform, even the ones whose stdout nobody reads."""
+        from tools import music
+        with mock.patch.object(sys, "frozen", True, create=True), \
+                mock.patch.object(music, "_miniaudio", return_value=None), \
+                contextlib.redirect_stdout(io.StringIO()) as said, \
+                contextlib.redirect_stderr(io.StringIO()) as complained:
+            self.assertEqual(sleekmenu_gui.main(["--smoke"]), 4)
+        self.assertIn("; music: ", said.getvalue())
+        self.assertIn("miniaudio did not load", complained.getvalue())
+        if music.decoders()[:1] == ["miniaudio"]:
+            with mock.patch.object(sys, "frozen", True, create=True), \
+                    contextlib.redirect_stdout(io.StringIO()) as said:
+                self.assertEqual(sleekmenu_gui.main(["--smoke"]), 0)
+            self.assertIn("; music: miniaudio", said.getvalue())
+        # run from a checkout or the archive, the fallbacks are enough
+        with mock.patch.object(music, "_miniaudio", return_value=None), \
+                contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(sleekmenu_gui.main(["--smoke"]), 0)
 
     def test_every_text_box_has_cut_copy_and_paste_on_a_right_click(self):
         """Tk gives a text box its keyboard shortcuts and no menu, and a game's
