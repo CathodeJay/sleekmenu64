@@ -23,7 +23,7 @@ from unittest import mock
 from tests.rom_fixtures import write_rom
 from tests.test_custom_art import picture
 from tests.test_sleekmenu_prep import stay_offline, write_collection
-from tools import custom_art, fetch, hires, releases, sleekmenu_gui, sleekmenu_prep, version
+from tools import custom_art, fetch, hires, metadata_repo, releases, sleekmenu_gui, sleekmenu_prep, version
 
 
 class VolumeTests(unittest.TestCase):
@@ -405,6 +405,14 @@ class CollectionLineTests(unittest.TestCase):
             self.assertFalse(broken.ready)
             self.assertTrue(broken.downloadable)
             self.assertIn("fetched again at the next update", broken.line)
+            # the zip chosen at the root, since moved into sleekmenu/ by a run
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            chosen_root = str(card / "release-metadata.zip")
+            metadata_repo.settle_on_card(card)
+            moved = sleekmenu_gui.collection_status(card, chosen_root)
+            self.assertTrue(moved.ready, moved.line)
+            self.assertEqual(moved.path, card / "sleekmenu" / "release-metadata.zip")
+            self.assertIn("sleekmenu/release-metadata.zip is on the card", moved.line)
 
 
 class RunnerTests(unittest.TestCase):
@@ -693,7 +701,7 @@ class WindowTests(unittest.TestCase):
                     while state["runner"] is not None:
                         root.update()
             self.assertEqual(state["last_code"], 0)
-            self.assertTrue((card / "release-metadata.zip").is_file())
+            self.assertTrue((card / "sleekmenu" / "release-metadata.zip").is_file())
             self.assertTrue((card / "sleekmenu" / "art" / "hires" / "NSME.png").is_file())
             self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
             self.assertEqual([state["steps"].state(i) for i in range(4)], ["done"] * 4)
@@ -704,7 +712,7 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(str(buttons["action"].cget("text")), "Update card")
             self.assertEqual(str(buttons["action"].cget("state")), "normal")
             self.assertTrue(words["last"].get().startswith("Last update: "))
-            self.assertTrue(words["pack"].get().startswith("✓ release-metadata.zip is on the card: 1 boxes"))
+            self.assertTrue(words["pack"].get().startswith("✓ sleekmenu/release-metadata.zip is on the card: 1 boxes"))
             self.assertIn("Super Mario 64", state["catalog"].tree.item("ROMS/Super Mario 64 (USA).z64", "text"))
             root.destroy()
 

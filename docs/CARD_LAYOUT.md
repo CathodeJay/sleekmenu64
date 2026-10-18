@@ -10,11 +10,12 @@ this is the reference.
 /SleekMenu64.z64            the browser                        put there by the tool, or by you
 /sleekmenu-catalog-manager.pyz
                             the tool, for a terminal           you copy it, if you use it
-/release-metadata.zip       box art and descriptions           fetched by the tool
 /ROMS/...                   your games, in any folders          yours
 /<any other folder>/...     or anywhere else on the card        yours
                             (or one chosen folder: --roms, or the window's Games folder)
 
+/sleekmenu/release-metadata.zip
+                            box art and descriptions           fetched by the tool
 /sleekmenu/art/...          your own pictures and text         yours, or the window's
 /sleekmenu/art/hires/...    512-pixel boxes, one per game code  fetched by the tool (--hires)
 /sleekmenu/art/shots/...    screenshots, two per game code      fetched by the tool (--shots)
@@ -65,8 +66,9 @@ These, and nothing else:
 It never creates folders, never renames, moves or deletes a file, and never
 touches the network. The Game Catalog Manager creates the `sleekmenu/`
 folder and writes `catalog.ebc` and `covers.pak` into it, and fetches
-`release-metadata.zip` to the card root when the card has no collection;
-everything else it reads in place. One file of the tool's lives outside
+`release-metadata.zip` into it when the card has no collection; a
+`release-metadata.zip` at the card root, where versions before 2.2 put it,
+is moved in at the next run. Everything else it reads in place. One file of the tool's lives outside
 `sleekmenu/`, and only when asked for: `ED64/autoexec.v64`, below.
 
 ## Which SleekMenu
@@ -186,8 +188,10 @@ on. A ROM with a blank or unprintable code — most homebrew — gets no box.
 
 The collection can be on the card in any of these forms; the tool takes the
 first it finds and never unpacks a zip. A card with none gets the zip
-fetched to its root (`--no-download` forbids that; offline, the report says
-where to get it):
+fetched into `sleekmenu/` (`--no-download` forbids that; offline, the report
+says where to get it). A zip at the card root is moved into `sleekmenu/` by
+the next run; when `sleekmenu/` already has one, the root's is removed only
+if it is the same file, and otherwise left where it is:
 
 ```text
 sleekmenu/release-metadata.zip    or    release-metadata.zip

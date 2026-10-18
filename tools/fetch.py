@@ -27,7 +27,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from tools import metadata_repo
+from tools import card_layout, metadata_repo
 from tools.progress import Cancelled
 
 REPOSITORY = "n64-tools/n64-flashcart-menu-metadata"
@@ -140,11 +140,14 @@ def _discard(part: Path) -> None:
 
 def collection(card: Path, progress_factory=None, cancel=None, log=None,
                addresses: list[str] | None = None) -> Fetched:
-    """The collection onto the card root, tried from each address in turn
-    and kept only once it opens as a collection with boxes in it. Raises
-    FetchError with the last reason when none worked; a stop passes
-    through as Cancelled."""
-    destination = card / ASSET
+    """The collection into the card's sleekmenu/ folder, tried from each
+    address in turn and kept only once it opens as a collection with boxes
+    in it. Raises FetchError with the last reason when none worked; a stop
+    passes through as Cancelled."""
+    folder = card / card_layout.CARD_FOLDER
+    made = not folder.exists()
+    folder.mkdir(exist_ok=True)
+    destination = folder / ASSET
     last = "no address to try"
     for url in addresses if addresses is not None else release_addresses():
         try:
@@ -168,4 +171,10 @@ def collection(card: Path, progress_factory=None, cancel=None, log=None,
             last = f"{url}: the zip holds no boxes"
             continue
         return Fetched(destination, url, received)
+    if made:
+        # A card left as it was found.
+        try:
+            folder.rmdir()
+        except OSError:
+            pass
     raise FetchError(last)

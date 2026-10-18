@@ -511,6 +511,11 @@ def collection_status(card: Path | None, chosen: str = "", offline: bool = False
     the one on the card -- opened and counted. One that is not there is
     fetched by the run, unless downloads are off."""
     offline = offline or fetch.offline_by_request()
+    if chosen.strip() and card is not None and not Path(chosen.strip()).expanduser().exists() \
+            and Path(chosen.strip()).expanduser().parent == card:
+        # The zip chosen at the card's root, since moved into sleekmenu/ by
+        # a run: the card's own copy is the one meant.
+        chosen = ""
     if chosen.strip():
         path = Path(chosen.strip()).expanduser()
         try:

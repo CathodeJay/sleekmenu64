@@ -243,10 +243,13 @@ class EntryPointTests(unittest.TestCase):
         self.assertTrue((out / card_layout.CATALOG_NAME).is_file())
         self.assertTrue((out / card_layout.COVER_PACK_NAME).is_file())
         self.assertIn(b"A description of NWRE.", (out / card_layout.CATALOG_NAME).read_bytes())
-        # and nothing was unpacked onto the card
+        # and nothing was unpacked onto the card: the zip moved into sleekmenu/
         self.assertEqual(sorted(p.name for p in out.iterdir()),
                          [card_layout.CATALOG_NAME, card_layout.CATALOG_JSON_NAME,
-                          card_layout.COVER_PACK_LARGE_NAME, card_layout.COVER_PACK_NAME])
+                          card_layout.COVER_PACK_LARGE_NAME, card_layout.COVER_PACK_NAME,
+                          "release-metadata.zip"])
+        self.assertFalse((self.card / "release-metadata.zip").exists())
+        self.assertIn("release-metadata.zip moved from the card root into sleekmenu/", self.output)
         self.assertIn("large:    1 covers for the box view", self.output)
         # --no-large-covers leaves the box view's pack out of the run (and,
         # as with everything else, never deletes the one already there)

@@ -157,7 +157,8 @@ class CollectionTests(unittest.TestCase):
                 server.url("/first.zip"), server.url("/second.zip"), server.url("/third.zip")])
             self.assertEqual(fetched.url, server.url("/third.zip"))
             self.assertEqual(server.requests, ["/first.zip", "/second.zip", "/third.zip"])
-        self.assertEqual((self.card / "release-metadata.zip").read_bytes(), self.zip_bytes)
+        self.assertEqual((self.card / "sleekmenu" / "release-metadata.zip").read_bytes(), self.zip_bytes)
+        self.assertFalse((self.card / "release-metadata.zip").exists(), "never at the root")
         self.assertIn("HTTP 404", log.text())
         self.assertIn("not a collection", log.text())
 
@@ -196,7 +197,8 @@ class RunTests(unittest.TestCase):
             code, text = self.run_with([server.url("/release-metadata.zip")])
         self.assertEqual(code, 0, text)
         self.assertIn("fetching release-metadata.zip", text)
-        self.assertTrue((self.card / "release-metadata.zip").is_file())
+        self.assertTrue((self.card / "sleekmenu" / "release-metadata.zip").is_file())
+        self.assertFalse((self.card / "release-metadata.zip").exists())
         self.assertTrue((self.card / "sleekmenu" / "covers.pak").is_file())
         # and a second run leaves the zip alone
         with Server({}) as server:
@@ -214,6 +216,7 @@ class RunTests(unittest.TestCase):
         self.assertTrue((self.card / "sleekmenu" / "catalog.ebc").is_file())
         self.assertFalse((self.card / "sleekmenu" / "covers.pak").exists())
         self.assertFalse((self.card / "release-metadata.zip").exists())
+        self.assertFalse((self.card / "sleekmenu" / "release-metadata.zip").exists())
 
     def test_the_games_are_read_before_anything_is_fetched(self):
         """Read, fetch, build, write: the order the window's steps are in."""
@@ -237,13 +240,41 @@ class RunTests(unittest.TestCase):
         order = [first(marker) for marker in ("scanning", "fetching", "covers:", "sprites", "writing:", "wrote")]
         self.assertEqual(order, sorted(order), events)
 
+    def test_a_card_from_before_has_its_zip_moved_in_and_read_from_there(self):
+        """A card prepared by an earlier version keeps the zip at its root:
+        the next run moves it into sleekmenu/, reads it there, and fetches
+        nothing -- even when the run was pointed at the old place."""
+        (self.card / "release-metadata.zip").write_bytes(self.zip_bytes)
+        with Server({}) as server:
+            code, text = self.run_with([server.url("/release-metadata.zip")])
+            self.assertEqual(server.requests, [])
+        self.assertEqual(code, 0, text)
+        self.assertIn("moved from the card root into sleekmenu/", text)
+        self.assertFalse((self.card / "release-metadata.zip").exists())
+        self.assertEqual((self.card / "sleekmenu" / "release-metadata.zip").read_bytes(), self.zip_bytes)
+        self.assertTrue((self.card / "sleekmenu" / "covers.pak").is_file())
+        # pointed at the old place
+        (self.card / "sleekmenu" / "release-metadata.zip").rename(self.card / "release-metadata.zip")
+        (self.card / "sleekmenu" / "covers.pak").unlink()
+        with Server({}) as server:
+            code, text = self.run_with([server.url("/release-metadata.zip")],
+                                       metadata=self.card / "release-metadata.zip")
+            self.assertEqual(server.requests, [])
+        self.assertEqual(code, 0, text)
+        self.assertTrue((self.card / "sleekmenu" / "covers.pak").is_file())
+        # and a dry run moves nothing
+        (self.card / "sleekmenu" / "release-metadata.zip").rename(self.card / "release-metadata.zip")
+        code, text = self.run_with([], dry_run=True)
+        self.assertEqual(code, 0, text)
+        self.assertTrue((self.card / "release-metadata.zip").exists())
+
     def test_a_collection_on_the_card_that_will_not_open_is_fetched_again(self):
         (self.card / "release-metadata.zip").write_bytes(b"PK cut short by a pulled card")
         with Server({"/release-metadata.zip": (200, self.zip_bytes)}) as server:
             code, text = self.run_with([server.url("/release-metadata.zip")])
         self.assertEqual(code, 0, text)
         self.assertIn("will not open", text)
-        self.assertEqual((self.card / "release-metadata.zip").read_bytes(), self.zip_bytes)
+        self.assertEqual((self.card / "sleekmenu" / "release-metadata.zip").read_bytes(), self.zip_bytes)
         self.assertTrue((self.card / "sleekmenu" / "covers.pak").is_file())
         # one named with --metadata is the owner's to fix: said, not replaced
         (self.card / "mine.zip").write_bytes(b"not a zip")

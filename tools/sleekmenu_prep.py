@@ -21,7 +21,7 @@ What it puts beside itself:
 
 The collection is n64-flashcart-menu-metadata, the public-domain set the
 N64FlashcartMenu and the EverDrive-64 Pro both use. A card without it gets
-release-metadata.zip fetched onto it from
+release-metadata.zip fetched into its sleekmenu/ folder from
 
     https://github.com/n64-tools/n64-flashcart-menu-metadata/releases
 
@@ -386,6 +386,14 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
     if not options.dry_run:
         for folder in lay_out(card):
             log(f"created   {folder.relative_to(card)}/")
+        # The collection lives in sleekmenu/ with everything else the tool
+        # keeps; one at the card root is moved in. A run that was pointed at
+        # the zip it moves reads it in its new place.
+        settled = metadata_repo.settle_on_card(card)
+        if settled.note:
+            log(settled.note)
+        if settled.moved_from is not None and source is not None and not source.exists():
+            source = settled.moved_to
         # The browser this release goes with, at the card's root, before
         # the X7's start-up copy is brought into step with it.
         if options.browser:

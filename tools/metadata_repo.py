@@ -314,3 +314,71 @@ def find_on_card(card: Path) -> Path | None:
         if path.is_file() or path.is_dir():
             return path
     return None
+
+
+# -- where the zip lives on a card ---------------------------------------------
+#
+# The tool fetches the zip into sleekmenu/, beside everything else it keeps
+# there, and a card that has one at its root -- fetched there by a version
+# before 2.2, or put there by hand -- has it moved in. A move on the same
+# card is a rename: nothing is copied, nothing fetched again. Older versions
+# look in sleekmenu/ first too, so a card moved in is never fetched again by
+# one of them.
+
+@dataclass(frozen=True)
+class Settled:
+    """What settle_on_card() did: the zip's old and new place when it moved
+    it, and a line for the report whenever there was something to say."""
+    moved_from: Path | None = None
+    moved_to: Path | None = None
+    note: str = ""
+
+
+def _entry(folder: Path, name: str) -> Path | None:
+    """`name` in `folder` as the card spells it."""
+    try:
+        for entry in os.listdir(folder):
+            if card_layout.same_name(entry, name):
+                return folder / card_layout.card_name(entry)
+    except OSError:
+        pass
+    return None
+
+
+def _same_bytes(first: Path, second: Path) -> bool:
+    if first.stat().st_size != second.stat().st_size:
+        return False
+    with first.open("rb") as one, second.open("rb") as two:
+        while True:
+            block = one.read(1 << 20)
+            if block != two.read(1 << 20):
+                return False
+            if not block:
+                return True
+
+
+def settle_on_card(card: Path) -> Settled:
+    """The zip at the card's root moved into sleekmenu/. When sleekmenu/
+    has one already, the root's goes only if it is the same file byte for
+    byte; a different one -- a newer copy put there by hand, perhaps -- is
+    left where it is and the report says which is read."""
+    root = _entry(card, RELEASE_ZIP_NAME)
+    if root is None or not root.is_file():
+        return Settled()
+    folder = _entry(card, card_layout.CARD_FOLDER) or card / card_layout.CARD_FOLDER
+    inside = _entry(folder, RELEASE_ZIP_NAME) if folder.is_dir() else None
+    shown = f"{card_layout.CARD_FOLDER}/{RELEASE_ZIP_NAME}"
+    try:
+        if inside is not None and inside.is_file():
+            if _same_bytes(root, inside):
+                root.unlink()
+                return Settled(note=f"metadata: the copy at the card root was the same as {shown}; removed")
+            return Settled(note=f"metadata: {shown} is read; the different {root.name} at the card root "
+                                "is left as it is")
+        folder.mkdir(exist_ok=True)
+        target = folder / RELEASE_ZIP_NAME
+        os.replace(root, target)
+    except OSError as error:
+        return Settled(note=f"metadata: {root.name} left at the card root ({error})")
+    return Settled(root, target, f"metadata: {root.name} moved from the card root into "
+                                 f"{card_layout.CARD_FOLDER}/")

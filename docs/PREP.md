@@ -440,14 +440,16 @@ The box art and descriptions come from
 [n64-flashcart-menu-metadata](https://github.com/n64-tools/n64-flashcart-menu-metadata/releases),
 a community-maintained collection of box scans and descriptions for every
 cartridge, shared with other N64 menus. SleekMenu ships none of it: the
-tool puts its `release-metadata.zip` on the card, where it is read in
-place from then on.
+tool puts its `release-metadata.zip` in the card's `sleekmenu/` folder,
+where it is read in place from then on. A card that has it at its root,
+where versions before 2.2 put it, has it moved into `sleekmenu/` by the next
+run.
 
 What the tool writes, and what it leaves alone:
 
 ```text
 /SleekMenu64.z64           the browser of this release, when the card had an older one or none
-/release-metadata.zip      the box-art collection, fetched once and read in place
+/sleekmenu/release-metadata.zip  the box-art collection, fetched once and read in place
 /sleekmenu/catalog.ebc     titles, genre, publisher, year, descriptions
 /sleekmenu/catalog.json    the same, readable, with where every field came from
 /sleekmenu/covers.pak      every cover in one file

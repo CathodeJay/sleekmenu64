@@ -2,6 +2,7 @@
 import io
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 from pathlib import Path
 
@@ -201,6 +202,67 @@ class CardSearchTests(unittest.TestCase):
         self.assertEqual(metadata_repo.find_on_card(self.card), self.card / "menu" / "metadata")
         with MetadataRepo.open(self.card / "menu" / "metadata") as repo:
             self.assertEqual(repo.width_scale, 1.0)
+
+
+class SettleTests(unittest.TestCase):
+    """The zip lives in sleekmenu/; one at the card root is moved in, and
+    nothing that might be the owner's own copy is ever deleted."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.card = Path(self.temporary.name)
+        self.root = self.card / "release-metadata.zip"
+        self.inside = self.card / "sleekmenu" / "release-metadata.zip"
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_nothing_at_the_root_is_nothing_to_do(self):
+        self.assertEqual(metadata_repo.settle_on_card(self.card), metadata_repo.Settled())
+        self.inside.parent.mkdir()
+        self.inside.write_bytes(b"zip")
+        self.assertEqual(metadata_repo.settle_on_card(self.card).note, "")
+        self.assertEqual(self.inside.read_bytes(), b"zip")
+
+    def test_the_root_zip_moves_into_sleekmenu(self):
+        self.root.write_bytes(b"the collection")
+        settled = metadata_repo.settle_on_card(self.card)
+        self.assertFalse(self.root.exists())
+        self.assertEqual(self.inside.read_bytes(), b"the collection")
+        self.assertEqual((settled.moved_from, settled.moved_to), (self.root, self.inside))
+        self.assertIn("moved from the card root into sleekmenu/", settled.note)
+        self.assertEqual(metadata_repo.find_on_card(self.card), self.inside)
+
+    def test_however_the_card_spells_the_names(self):
+        (self.card / "SleekMenu").mkdir()
+        (self.card / "Release-Metadata.ZIP").write_bytes(b"the collection")
+        settled = metadata_repo.settle_on_card(self.card)
+        self.assertEqual(sorted(p.name for p in self.card.iterdir()), ["SleekMenu"])
+        self.assertEqual(settled.moved_to, self.card / "SleekMenu" / "release-metadata.zip")
+        self.assertEqual(settled.moved_to.read_bytes(), b"the collection")
+
+    def test_a_second_copy_goes_only_when_it_is_the_same_file(self):
+        self.inside.parent.mkdir()
+        self.inside.write_bytes(b"the collection")
+        self.root.write_bytes(b"the collection")
+        settled = metadata_repo.settle_on_card(self.card)
+        self.assertFalse(self.root.exists())
+        self.assertIn("was the same", settled.note)
+        self.assertIsNone(settled.moved_from)
+        # a different one -- a newer copy put there by hand -- is left alone
+        self.root.write_bytes(b"another collection")
+        settled = metadata_repo.settle_on_card(self.card)
+        self.assertEqual(self.root.read_bytes(), b"another collection")
+        self.assertEqual(self.inside.read_bytes(), b"the collection")
+        self.assertIn("left as it is", settled.note)
+
+    def test_a_card_that_will_not_take_the_move_keeps_its_zip_where_it_is(self):
+        self.root.write_bytes(b"the collection")
+        with unittest.mock.patch.object(metadata_repo.os, "replace", side_effect=OSError(30, "Read-only")):
+            settled = metadata_repo.settle_on_card(self.card)
+        self.assertEqual(self.root.read_bytes(), b"the collection")
+        self.assertIn("left at the card root", settled.note)
+        self.assertEqual(metadata_repo.find_on_card(self.card), self.root)
 
 
 class RegionOrderTests(unittest.TestCase):
