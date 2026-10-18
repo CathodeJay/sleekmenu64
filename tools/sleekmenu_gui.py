@@ -2171,6 +2171,14 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     browser_check.grid(row=8, column=0, sticky="w", pady=(14, 0))
     browser_hint = ttk.Label(body, textvariable=browser_note, foreground=colors["muted"], justify="left")
     browser_hint.grid(row=9, column=0, sticky="w", padx=(24, 0))
+    # Where the console starts, beside the SleekMenu it would start: a row
+    # shown only for a card an X7 or a Pro has been in.
+    boot_row = ttk.Frame(body)
+    boot_row.columnconfigure(0, weight=1)
+    boot_check = ttk.Checkbutton(boot_row, text="Start the console in SleekMenu", variable=boot_var)
+    boot_check.grid(row=0, column=0, sticky="w")
+    boot_hint = ttk.Label(boot_row, textvariable=boot_note, foreground=colors["muted"], justify="left")
+    boot_hint.grid(row=1, column=0, sticky="w", padx=(24, 0))
     # A newer Game Catalog Manager, when there is one, under the SleekMenu
     # it would bring: said once, with the file for this computer a click
     # away.
@@ -2179,7 +2187,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     newer_text.grid(row=0, column=0, sticky="w")
     newer_link = ttk.Label(newer_bar, text="Download it", foreground=colors["info"], cursor="hand2")
     newer_link.grid(row=1, column=0, sticky="w")
-    fit(body, [(headline, 0), (detail, 0), (explain, 0), (result, 0), (browser_hint, 24), (newer_text, 0)])
+    fit(body, [(headline, 0), (detail, 0), (explain, 0), (result, 0), (browser_hint, 24), (boot_hint, 24),
+               (newer_text, 0)])
 
     # The choices, in groups: what each is about, not the order they came in.
     hints: list[tuple] = []
@@ -2234,9 +2243,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     option(15, rebuild_var, "Rebuild everything from scratch",
            "Slower. For a card whose boxes or names look wrong.")
 
-    # What the console does with the card: the browser's colours, and on a
-    # card for an X7 or a Pro the start-up switch, a row that is there only
-    # for one of them.
+    # What the console does with the card: the browser's colours. (Where it
+    # starts is with the SleekMenu on the card, in the left column.)
     group(17, "Console")
     theme_row = ttk.Frame(options)
     theme_row.grid(row=18, column=0, sticky="w", pady=(6, 0))
@@ -2260,9 +2268,6 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     theme_var.trace_add("write", draw_swatch)
     draw_swatch()
 
-    boot_row = ttk.Frame(options)
-    boot_row.columnconfigure(0, weight=1)
-    boot_check = option(0, boot_var, "Start the console in SleekMenu", boot_note, boot_row)
     fit(options, hints)
 
     # -- the run's report, on a tab of its own ----------------------------------
@@ -2401,7 +2406,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         boot = direct_boot.state(chosen) if chosen is not None else direct_boot.State()
         state["boot"] = boot
         if boot.cart:
-            boot_row.grid(row=19, column=0, sticky="ew")
+            boot_row.grid(row=10, column=0, sticky="ew", pady=(10, 0))
             boot_check.configure(state="normal" if boot.available else "disabled")
             boot_note.set(boot_line(boot))
         else:
@@ -2697,7 +2702,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         if found:
             newer_var.set(f"Game Catalog Manager {found} is out (this one is {version.VERSION}).")
             newer_link.bind("<Button-1>", lambda _event: webbrowser.open(releases.download_url(found)))
-            newer_bar.grid(row=10, column=0, sticky="w", pady=(14, 0))
+            newer_bar.grid(row=11, column=0, sticky="w", pady=(14, 0))
 
     state["newer_bar"] = newer_bar
     state["show_newer"] = show_newer

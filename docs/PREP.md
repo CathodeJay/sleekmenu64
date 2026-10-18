@@ -44,7 +44,11 @@ right.
   `SleekMenu64.z64` of this release at the root of the card when the card
   has an older one, or none; the line under it says which the card has.
   See [Versions](#versions).
-- When a newer Game Catalog Manager is out, the tab says so under that,
+- **Start the console in SleekMenu**, under it on a card for an
+  EverDrive-64 X7 or Pro, makes the console power on in SleekMenu instead
+  of the EverDrive menu. See
+  [Starting the console in SleekMenu](#starting-the-console-in-sleekmenu).
+- When a newer Game Catalog Manager is out, the tab says so under those,
   with a link to the file for your computer.
 
 The right side is what most people never change. It applies the next time
@@ -85,9 +89,6 @@ only that. The card remembers the choice.
 - **Theme** picks the browser's colours; the squares beside it show the
   theme's background, title band, selection, accent and text. See
   [Themes](#themes).
-- **Start the console in SleekMenu**, on a card for an EverDrive-64 X7,
-  makes the console power on in SleekMenu instead of the EverDrive menu.
-  See [Starting the console in SleekMenu](#starting-the-console-in-sleekmenu).
 
 ### Games
 
