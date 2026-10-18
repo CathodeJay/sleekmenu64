@@ -94,6 +94,29 @@ int main(int argc, char **argv) {
     assert(sm_cover_pack_read(&pack, "", &length) == NULL);
     assert(sm_cover_pack_read(&pack, NULL, &length) == NULL);
 
+    /* A second pack: reading from it closes the first one's file, and
+       reading from the first again opens it again. One file at a time. */
+    {
+        sm_cover_pack_t other;
+        assert(sm_cover_pack_open(&other, argv[1]));
+        assert(sm_cover_pack_holding());
+        expect_found(&other, "Wave Race 64 (USA).sprite", 64u, 48u);
+        expect_found(&pack, "Zelda (Japan).sprite", 96u, 72u);
+        expect_found(&other, "Zelda (Japan).sprite", 96u, 72u);
+        /* Let go, and the next read opens it again. */
+        sm_cover_pack_let_go();
+        assert(!sm_cover_pack_holding() && sm_cover_pack_ready(&pack));
+        expect_found(&pack, "Super Mario 64 (USA).sprite", 96u, 72u);
+        assert(sm_cover_pack_holding());
+        /* Closing the pack whose file is open closes the file. */
+        sm_cover_pack_close(&pack);
+        assert(!sm_cover_pack_holding());
+        expect_found(&other, "Wave Race 64 (USA).sprite", 64u, 48u);
+        sm_cover_pack_close(&other);
+        assert(!sm_cover_pack_holding());
+        assert(sm_cover_pack_open(&pack, argv[1]));
+    }
+
     sm_cover_pack_close(&pack);
     assert(!sm_cover_pack_ready(&pack));
     sm_cover_pack_close(&pack);      /* twice must be harmless */

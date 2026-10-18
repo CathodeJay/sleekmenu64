@@ -16,6 +16,7 @@
 #include "theme.h"
 #include "version.h"
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -84,10 +85,12 @@ sm_launch_result_t launch_probe(void) { return SM_LAUNCH_OK; }
    selected file is whatever a test says it is. */
 static int fake_launches;
 static bool fake_music_during_launch;
+static bool fake_pack_during_launch;
 static sm_launch_result_t fake_last_result = SM_LAUNCH_OK;
 sm_launch_result_t launch_rom(sm_launch_progress_cb cb, void *ctx) {
     (void)cb; (void)ctx; fake_launches++;
     fake_music_during_launch = sm_music_playing();
+    fake_pack_during_launch = sm_cover_pack_holding();
     return SM_LAUNCH_OK;
 }
 sm_boot_mode_t launch_boot_mode(void) { return SM_BOOT_FAST; }
@@ -177,6 +180,15 @@ static uint16_t rgba16_of(unsigned red, unsigned green, unsigned blue) {
 }
 /* A button's picture is boxes in the button's own colour, and a theme's
    colour is seen the same way. */
+/* How many files this process has open: what the X7's SD driver would have
+   to find slots for, of the four it has. */
+static int open_files(void) {
+    int count = 0;
+    for (int fd = 3; fd < 256; fd++)
+        if (fcntl(fd, F_GETFD) != -1) count++;
+    return count;
+}
+
 static bool drew_button(sm_button_t button) {
     const unsigned char *rgb = sm_button_rgb(button);
     return sm_test_boxes_of(graphics_make_color(rgb[0], rgb[1], rgb[2], 255)) > 0;
@@ -2379,10 +2391,15 @@ int main(void) {
             {"d.z64", "Delta", "Racing", 0, "", 0, NULL},
         };
         static const uint16_t sets[] = {1u, 2u, 0u, 3u};
-        int well = 0;
+        int well = 0, files;
+        sm_cover_pack_let_go();
+        files = open_files();
         start(rows, 4u);
         ROW_SHOTS = sets;
         settle();
+        /* Four packs on the card, one file open: the X7 has four slots,
+           and a ROM, a header, a save and the music need theirs. */
+        assert(open_files() <= files + 1);
 
         /* Both: read as the card opens, framed at the right of the facts,
            and the title beside them is cut to the room they leave -- the
@@ -2415,6 +2432,18 @@ int main(void) {
         assert(ui.box_page == 0 && !ui.shot_sprite && sm_test_sprite_frees == 1);
         frame(PRESS(left));
         assert(ui.box_page == 2 && ui.shot_sprite);
+        assert(open_files() <= files + 1);
+        /* Start lets go of it: the launch has every slot. */
+        {
+            int before = fake_launches;
+            fake_pack_during_launch = true;
+            frame(PRESS(start));
+            assert(fake_launches == before + 1 && !fake_pack_during_launch);
+            assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+            frame(PRESS(select));
+            frame(PRESS(right)); frame(PRESS(right));
+            assert(ui.box_page == 2 && ui.shot_sprite);
+        }
         /* Back to the card puts the box view's picture away; back to the
            list, the thumbnails. */
         frame(PRESS(back));
@@ -2460,6 +2489,7 @@ int main(void) {
         draw();
         assert(sm_test_drew("NO PICTURE"));
         frame(PRESS(back)); frame(PRESS(back));
+        assert(open_files() <= files + 1);
         ROW_SHOTS = NULL;
     }
 

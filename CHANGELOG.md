@@ -20,6 +20,10 @@
   is fetched into the `sleekmenu/` folder with everything else the Game
   Catalog Manager keeps, and one at the card root is moved there by the
   next update. Nothing is downloaded again.
+- **Games start again on the X7 when the card has screenshots.** Since
+  2.1, SleekMenu kept its four picture files open, and the X7 can only have
+  four files open at once, so every game failed with "ROM OPEN FAILED" and
+  the music could not play. It now keeps one of them open at a time.
 - **Cycle through games from a game's details.** Left and right on the
   D-pad go to the previous or next game. Hold it to run through them. The
   box and the save type show up when you stop, and B goes back to the list

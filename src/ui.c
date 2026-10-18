@@ -1624,8 +1624,10 @@ static void launch_from_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_
     ui->load_total_kib = 0;
     ui->load_verifying = false;
     /* The load needs the card to itself, and the game the audio hardware
-       as it was at power-on. */
+       as it was at power-on. The X7's SD driver has four file slots: the
+       ROM, a save and the record the EverDrive menu reads have them all. */
     sm_music_fade_out();
+    sm_cover_pack_let_go();
     launch_rom(draw_launch_progress, &draw);
     /* Only reached when the handoff did not happen. The bar has to go with
        it, or a refusal is left sitting under a full progress bar that says

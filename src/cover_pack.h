@@ -13,8 +13,14 @@
 
    Here the index is 16 bytes per cover, held in RAM, and a lookup is a binary
    search over sorted 64-bit name hashes followed by one seek. The file stays
-   open for the session, so after startup a cover costs no directory work at
+   open while it is read from, so a run of covers costs no directory work at
    all.
+
+   Only one pack's file is open at a time, whichever was read last: reading
+   from another closes it and opens that one. The X7's SD driver has four
+   file slots in all, and a browser that kept its four packs open had none
+   left for a ROM to start, a game's header, a save or the music.
+   sm_cover_pack_let_go closes it before a game is loaded.
 
    Written by tools/cover_pack.py, which documents the layout. Only the header
    is checked here: the pack is ten megabytes and verifying its CRC at startup
@@ -41,7 +47,7 @@ typedef struct {
 } sm_cover_entry_t;
 
 typedef struct {
-    FILE *file;
+    char path[256];               /* to open it again when it is read from */
     sm_cover_entry_t *entries;
     uint32_t count;
     uint32_t payload_offset;
@@ -62,8 +68,13 @@ int32_t sm_cover_pack_find(const sm_cover_entry_t *entries, uint32_t count, uint
 bool sm_cover_pack_open(sm_cover_pack_t *pack, const char *path);
 void sm_cover_pack_close(sm_cover_pack_t *pack);
 static inline bool sm_cover_pack_ready(const sm_cover_pack_t *pack) {
-    return pack && pack->file && pack->entries && pack->count;
+    return pack && pack->entries && pack->count;
 }
+/* Close the one pack file that is open, if any. The next read opens it
+   again. */
+void sm_cover_pack_let_go(void);
+/* Whether a pack file is open now, for the tests. */
+bool sm_cover_pack_holding(void);
 
 /* The sprite bytes for a cover, malloc'd, or NULL. The caller owns the buffer;
    on the console it is handed straight to sprite_load_buf, which works in

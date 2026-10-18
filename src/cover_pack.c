@@ -57,24 +57,47 @@ int32_t sm_cover_pack_find(const sm_cover_entry_t *entries, uint32_t count, uint
     return -1;
 }
 
+/* The one pack whose file is open, and the file. */
+static const sm_cover_pack_t *open_pack;
+static FILE *open_file;
+
+void sm_cover_pack_let_go(void) {
+    if (open_file) fclose(open_file);
+    open_file = NULL;
+    open_pack = NULL;
+}
+
+bool sm_cover_pack_holding(void) { return open_file != NULL; }
+
+static FILE *pack_file(const sm_cover_pack_t *pack) {
+    if (open_pack == pack && open_file) return open_file;
+    sm_cover_pack_let_go();
+    open_file = fopen(pack->path, "rb");
+    if (open_file) open_pack = pack;
+    return open_file;
+}
+
 bool sm_cover_pack_open(sm_cover_pack_t *pack, const char *path) {
     uint8_t header[SM_COVER_PACK_HEADER];
     uint8_t *raw = NULL;
     uint32_t count = 0u, index_offset = 0u, payload_offset = 0u, i;
+    FILE *file;
     if (!pack) return false;
+    if (open_pack == pack) sm_cover_pack_let_go();
     memset(pack, 0, sizeof(*pack));
-    if (!path) return false;
-    pack->file = fopen(path, "rb");
-    if (!pack->file) return false;
-    if (fread(header, 1, sizeof(header), pack->file) != sizeof(header) ||
+    if (!path || strlen(path) >= sizeof(pack->path)) return false;
+    memcpy(pack->path, path, strlen(path) + 1u);
+    file = pack_file(pack);
+    if (!file) return false;
+    if (fread(header, 1, sizeof(header), file) != sizeof(header) ||
         !sm_cover_pack_parse_header(header, sizeof(header), &count, &index_offset, &payload_offset))
         goto fail;
 
     raw = (uint8_t *)malloc((size_t)count * SM_COVER_PACK_ENTRY);
     pack->entries = (sm_cover_entry_t *)malloc((size_t)count * sizeof(sm_cover_entry_t));
     if (!raw || !pack->entries) goto fail;
-    if (fseek(pack->file, (long)index_offset, SEEK_SET) ||
-        fread(raw, 1, (size_t)count * SM_COVER_PACK_ENTRY, pack->file) !=
+    if (fseek(file, (long)index_offset, SEEK_SET) ||
+        fread(raw, 1, (size_t)count * SM_COVER_PACK_ENTRY, file) !=
             (size_t)count * SM_COVER_PACK_ENTRY)
         goto fail;
     for (i = 0u; i < count; i++) {
@@ -101,7 +124,7 @@ fail:
 
 void sm_cover_pack_close(sm_cover_pack_t *pack) {
     if (!pack) return;
-    if (pack->file) fclose(pack->file);
+    if (open_pack == pack) sm_cover_pack_let_go();
     free(pack->entries);
     memset(pack, 0, sizeof(*pack));
 }
@@ -110,6 +133,7 @@ void *sm_cover_pack_read(sm_cover_pack_t *pack, const char *name, uint32_t *leng
     int32_t at;
     void *buffer;
     uint32_t size;
+    FILE *file;
     if (length) *length = 0u;
     if (!sm_cover_pack_ready(pack) || !name || !name[0]) return NULL;
     at = sm_cover_pack_find(pack->entries, pack->count, sm_cover_hash(name));
@@ -119,10 +143,12 @@ void *sm_cover_pack_read(sm_cover_pack_t *pack, const char *name, uint32_t *leng
        size of a ROM is a corrupt offset. Both are cheaper to refuse here than
        to hand to the decoder. */
     if (size < 16u || size > (1u << 20)) return NULL;
+    file = pack_file(pack);
+    if (!file) return NULL;
     buffer = malloc(size);
     if (!buffer) return NULL;
-    if (fseek(pack->file, (long)pack->entries[at].offset, SEEK_SET) ||
-        fread(buffer, 1, size, pack->file) != size) {
+    if (fseek(file, (long)pack->entries[at].offset, SEEK_SET) ||
+        fread(buffer, 1, size, file) != size) {
         free(buffer);
         return NULL;
     }
