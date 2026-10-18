@@ -77,49 +77,68 @@ static bool find_track(const char *path) {
 }
 
 #ifdef __mips__
-/* The samples come off the card in blocks of this size, kept until the
-   mixer has taken them. Under the Pro file driver's 16 KiB window, so a
-   block is served by its fast read rather than the slow one. */
-#define STAGE_SAMPLES 4096u
-static int16_t stage[STAGE_SAMPLES] __attribute__((aligned(16)));
-static uint32_t stage_first, stage_count;
+/* Read-ahead: about a second of the track, topped up a block a frame while
+   the card is free. While the browser lists a folder the card is the
+   listing's (folder_scan.h), and the music plays from what is here. A block
+   is under the Pro file driver's 16 KiB window, so it is served by the fast
+   read rather than the slow one. */
+#define RING_SAMPLES 32768u
+#define BLOCK_SAMPLES 4096u
+static int16_t ring[RING_SAMPLES] __attribute__((aligned(16)));
+static uint32_t ring_start, ring_count;   /* where the oldest sample is, and how many */
+static uint32_t ring_pos;                 /* the track position of ring[ring_start] */
+static bool card_free = true;
 static int track_fd = -1;
 static bool broken;
 static waveform_t wave;
 
-static bool refill(uint32_t at) {
-    uint32_t want = track.samples - at;
-    if (want > STAGE_SAMPLES) want = STAGE_SAMPLES;
+/* One block onto the end of what is held, from where the track goes on. */
+static bool read_block(void) {
+    uint32_t at = (ring_pos + ring_count) % track.samples;
+    uint32_t end = (ring_start + ring_count) % RING_SAMPLES;
+    uint32_t want = BLOCK_SAMPLES;
+    if (want > RING_SAMPLES - ring_count) want = RING_SAMPLES - ring_count;
+    if (want > RING_SAMPLES - end) want = RING_SAMPLES - end;
+    if (want > track.samples - at) want = track.samples - at;
+    if (!want) return true;
     if (lseek(track_fd, (off_t)(track.data_offset + at * 2u), SEEK_SET) < 0) return false;
-    if (read(track_fd, stage, want * 2u) != (int)(want * 2u)) return false;
-    stage_first = at;
-    stage_count = want;
+    if (read(track_fd, ring + end, want * 2u) != (int)(want * 2u)) return false;
+    ring_count += want;
     return true;
 }
 
 /* The mixer asks for at least `wlen` samples from `wpos`, and loops by
-   asking from 0 again. A card that stops answering gets silence, and
+   asking from 0 again. Anywhere but where the held samples start is a seek,
+   and they are let go. Run dry while the card is busy, it gets silence and
+   the track moves on; a card that stops answering gets silence, and
    sm_music_poll stops the music. */
 static void read_samples(void *ctx, samplebuffer_t *sbuf, int wpos, int wlen, bool seeking) {
     int16_t *out = samplebuffer_append(sbuf, wlen);
     uint32_t at = (uint32_t)wpos % track.samples;
     uint32_t left = (uint32_t)wlen;
     (void)ctx; (void)seeking;
+    if (at != ring_pos) {
+        ring_pos = at;
+        ring_start = ring_count = 0;
+    }
     while (left) {
-        uint32_t from, take;
-        if (broken || ((at < stage_first || at >= stage_first + stage_count) && !refill(at))) {
-            broken = true;
+        uint32_t take;
+        if (!ring_count) {
+            if (!broken && card_free && read_block() && ring_count) continue;
+            if (card_free) broken = true;
             memset(out, 0, left * 2u);
+            ring_pos = (ring_pos + left) % track.samples;
             return;
         }
-        from = at - stage_first;
-        take = stage_count - from;
+        take = ring_count;
+        if (take > RING_SAMPLES - ring_start) take = RING_SAMPLES - ring_start;
         if (take > left) take = left;
-        memcpy(out, stage + from, take * 2u);
+        memcpy(out, ring + ring_start, take * 2u);
+        ring_start = (ring_start + take) % RING_SAMPLES;
+        ring_count -= take;
+        ring_pos = (ring_pos + take) % track.samples;
         out += take;
         left -= take;
-        at += take;
-        if (at >= track.samples) at = 0;
     }
 }
 
@@ -135,7 +154,8 @@ static void pump(void) {
 static bool start(float from) {
     track_fd = open(track_path, O_RDONLY);
     if (track_fd < 0) return false;
-    stage_first = stage_count = 0;
+    ring_start = ring_count = ring_pos = 0;
+    card_free = true;
     broken = false;
     audio_init((int)track.frequency, MUSIC_BUFFERS);
     mixer_init(1);
@@ -162,12 +182,15 @@ static void stop(void) {
     track_fd = -1;
 }
 
-void sm_music_poll(void) {
+void sm_music_poll(bool card_free_now) {
     if (!playing) return;
     /* The card stopped giving the track back: the MUSIC row says None
        from here on rather than an On that plays nothing. */
     if (broken) { stop(); playing = false; available = false; return; }
+    card_free = card_free_now;
     pump();
+    if (card_free && !broken && RING_SAMPLES - ring_count >= BLOCK_SAMPLES && !read_block())
+        broken = true;
 }
 
 void sm_music_fade_out(void) {
@@ -175,6 +198,8 @@ void sm_music_fade_out(void) {
     if (!playing) return;
     /* What is already queued plays at the old volume, so the wait is the
        fade and then the queue. */
+    /* The launch has the card already: whatever was listing gave way. */
+    card_free = true;
     began = get_ticks_ms();
     for (;;) {
         uint32_t elapsed = (uint32_t)(get_ticks_ms() - began);
@@ -193,7 +218,7 @@ void sm_music_fade_out(void) {
 /* The host has no audio hardware: starting and stopping is the state. */
 static bool start(float from) { (void)from; return true; }
 static void stop(void) {}
-void sm_music_poll(void) {}
+void sm_music_poll(bool card_free_now) { (void)card_free_now; }
 void sm_music_fade_out(void) {
     if (!playing) return;
     resume_at = 1.0f;

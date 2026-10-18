@@ -156,7 +156,7 @@ int main(void) {
     static frame_meter_t meter;
 #endif
     while (1) {
-        sm_music_poll();
+        sm_music_poll(!ui_card_busy(&ui));
 #ifdef SM_SHOW_FRAME_TIME
         uint64_t began = get_ticks_us();
         ui_update(&ui, &catalog, app_input_poll(), &layout);

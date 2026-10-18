@@ -1713,11 +1713,13 @@ int main(void) {
         sm_game_t game;
         sm_test_dir_opens = 0;
         sm_test_dir_set("sd:/ROMS", entries, 10);
+        sm_test_dir_add("sd:/ROMS/New", (const sm_test_dir_entry_t[]){{"Delta.z64", false}}, 1);
         start(rows, 3u);
         /* The folder is read in the frame the catalog is listed, and one
-           this short is finished in it. */
+           this short is finished in it, the new subfolder looked into for
+           something to play as well. */
         assert(!strcmp(ui.folder, "ROMS"));
-        assert(sm_test_dir_opens == 1);
+        assert(sm_test_dir_opens == 2);
         assert(ui.item_count == 5u);
         /* Folders first, then games, each where its name sorts. */
         assert((ui.items[0] & SM_UI_FOLDER_BIT) && (ui.items[1] & SM_UI_FOLDER_BIT));
@@ -1737,7 +1739,7 @@ int main(void) {
         assert(sm_test_drew("[New]") && sm_test_drew("beta two"));
         /* The card was read once for the covers, and not for the folder
            again. */
-        assert(sm_test_dir_opens == 1);
+        assert(sm_test_dir_opens == 2);
 
         /* Down to the new game: the panel says why there is no box. */
         frame(PRESS(down)); frame(PRESS(down)); frame(PRESS(down));
@@ -1770,13 +1772,13 @@ int main(void) {
         assert(!strcmp(ui.folder, "ROMS/New"));
         assert(ui.item_count == 0u);
         frame(NONE);
-        assert(sm_test_dir_opens == 2 && ui.item_count == 1u);
+        assert(sm_test_dir_opens == 3 && ui.item_count == 1u);
         assert(catalog_get(&CATALOG, ui.items[0], &game) && !strcmp(game.path, "ROMS/New/Delta.z64"));
         frame(PRESS(back));
         assert(!strcmp(ui.folder, "ROMS"));
         /* Remembered: listed at once, the folder not read again, the
            cursor on the folder just left. */
-        assert(sm_test_dir_opens == 2 && ui.item_count == 5u);
+        assert(sm_test_dir_opens == 3 && ui.item_count == 5u);
         assert(catalog_get(&CATALOG, ui.items[ui.selected] & ~SM_UI_FOLDER_BIT, &game) &&
                !strcmp(game.path, "ROMS/New/"));
         assert(ui.status && strstr(ui.status, "1 new file"));
@@ -1906,6 +1908,7 @@ int main(void) {
         sm_game_t game;
         bool ascii = true;
         sm_test_dir_set("sd:/ROMS", entries, 3);
+        sm_test_dir_add("sd:/ROMS/Fran\xc3\xa7" "ais", (const sm_test_dir_entry_t[]){{"Jeu.z64", false}}, 1);
         start(rows, 1u);
         idle(3);
         assert(ui.item_count == 3u);
@@ -1943,6 +1946,89 @@ int main(void) {
         idle(2);
         frame(PRESS(back));
         assert(!strcmp(ui.folder, "ROMS") && ui.selected == 0u);
+        sm_test_dir_set(NULL, NULL, 0);
+    }
+
+    /* ---- a new folder is only new if it holds something to play ------------- */
+    {
+        /* The card that reported "1 new folder" after the Game Catalog
+           Manager had just run: an empty Randomizer folder beside the games,
+           which the tool never records because it has no games, and so
+           was new every time. Folders with games in them, at any depth the
+           look reaches, are still new. */
+        static const row_t rows[] = {
+            {"ROMS/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+        };
+        static const sm_test_dir_entry_t roms[] = {
+            {"Alpha.z64", false}, {"Randomizer", true}, {"Paks", true}, {"Deep", true},
+            {"Mixed", true}, {"Wide", true},
+        };
+        static const sm_test_dir_entry_t paks[] = {{"Mario.mpk", false}, {"notes.txt", false}};
+        static const sm_test_dir_entry_t deep[] = {{"readme.txt", false}, {"Sub", true}};
+        static const sm_test_dir_entry_t deep_sub[] = {{"Seeds", true}, {".Trashes", true}};
+        static const sm_test_dir_entry_t deep_seeds[] = {{"Seed 1.z64", false}};
+        static const sm_test_dir_entry_t mixed[] = {{"._Game.z64", false}, {"Hack.v64", false}};
+        /* More subfolders than the look keeps track of, all empty: too
+           many to be sure of, so it is taken to have games. */
+        static const sm_test_dir_entry_t wide[] = {
+            {"A", true}, {"B", true}, {"C", true}, {"D", true}, {"E", true},
+            {"F", true}, {"G", true}, {"H", true}, {"I", true},
+        };
+        sm_game_t game;
+        sm_test_dir_set("sd:/ROMS", roms, 6);
+        sm_test_dir_add("sd:/ROMS/Randomizer", NULL, 0);
+        sm_test_dir_add("sd:/ROMS/Paks", paks, 2);
+        sm_test_dir_add("sd:/ROMS/Deep", deep, 2);
+        sm_test_dir_add("sd:/ROMS/Deep/Sub", deep_sub, 2);
+        sm_test_dir_add("sd:/ROMS/Deep/Sub/Seeds", deep_seeds, 1);
+        sm_test_dir_add("sd:/ROMS/Mixed", mixed, 2);
+        sm_test_dir_add("sd:/ROMS/Wide", wide, 9);
+        start(rows, 1u);
+        idle(4);
+        assert(!sm_folder_scan_busy(&ui.scan));
+        /* Deep, Mixed and Wide; not Randomizer or Paks. */
+        assert(ui.item_count == 4u);
+        assert(catalog_get(&CATALOG, ui.items[0] & ~SM_UI_FOLDER_BIT, &game) && !strcmp(game.path, "ROMS/Deep/"));
+        assert(catalog_get(&CATALOG, ui.items[1] & ~SM_UI_FOLDER_BIT, &game) && !strcmp(game.path, "ROMS/Mixed/"));
+        assert(catalog_get(&CATALOG, ui.items[2] & ~SM_UI_FOLDER_BIT, &game) && !strcmp(game.path, "ROMS/Wide/"));
+        assert(ui.items[3] == 0u);
+        assert(ui.status && !strcmp(ui.status, "3 new folders: run Game Catalog Manager"));
+        sm_test_dir_set(NULL, NULL, 0);
+    }
+    {
+        /* Only the empty one: nothing is new, and nothing is said. */
+        static const row_t rows[] = {
+            {"ROMS/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+        };
+        static const sm_test_dir_entry_t roms[] = {{"Alpha.z64", false}, {"Randomizer", true}};
+        sm_test_dir_set("sd:/ROMS", roms, 2);
+        start(rows, 1u);
+        idle(2);
+        assert(ui.item_count == 1u && ui.items[0] == 0u);
+        assert(ui.status == NULL || !strstr(ui.status, "new folder"));
+        sm_test_dir_set(NULL, NULL, 0);
+    }
+    {
+        /* A new folder with more in it than a frame reads is looked into
+           over several frames, the card the scan's until it is done. */
+        static const row_t rows[] = {
+            {"ROMS/Alpha.z64", "Alpha", "Racing", 0, "", 0, NULL},
+        };
+        static const sm_test_dir_entry_t roms[] = {{"Alpha.z64", false}, {"Notes", true}};
+        static sm_test_dir_entry_t notes[70];
+        static char names[70][16];
+        for (int i = 0; i < 70; i++) {
+            snprintf(names[i], sizeof(names[i]), "note %02d.txt", i);
+            notes[i].name = names[i];
+            notes[i].folder = false;
+        }
+        sm_test_dir_set("sd:/ROMS", roms, 2);
+        sm_test_dir_add("sd:/ROMS/Notes", notes, 70);
+        start(rows, 1u);
+        assert(sm_folder_scan_busy(&ui.scan));
+        idle(4);
+        assert(!sm_folder_scan_busy(&ui.scan));
+        assert(ui.item_count == 1u);
         sm_test_dir_set(NULL, NULL, 0);
     }
 

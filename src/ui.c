@@ -1584,6 +1584,8 @@ static void launch_from_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_
 
 static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout);
 
+bool ui_card_busy(const sm_ui_t *ui) { return sm_folder_scan_busy(&ui->scan); }
+
 void ui_update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout) {
     uint64_t now = get_ticks_us();
     float seconds = ui->last_update_us ? (float)(now - ui->last_update_us) / 1000000.0f : 0.0f;

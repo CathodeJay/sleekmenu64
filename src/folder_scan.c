@@ -327,6 +327,8 @@ static void publish(sm_folder_scan_t *scan, sm_catalog_t *catalog, unsigned slot
 
 static void drop_cursor(sm_folder_scan_t *scan) {
     scan->entry_pending = false;
+    scan->check_open = false;
+    scan->check_count = 0;
     extras_clear(&scan->found);
 }
 
@@ -358,10 +360,129 @@ static void remember(sm_folder_scan_t *scan, sm_catalog_t *catalog) {
     catalog->extras = scan->slots[0];
 }
 
+/* -- looking into a new subfolder ----------------------------------------- */
+
+static void finish(sm_folder_scan_t *scan, sm_catalog_t *catalog) {
+    /* The subfolders found to hold nothing to play were emptied of their
+       names along the way; what is left closes up. */
+    uint32_t kept = 0;
+    for (uint32_t i = 0; i < scan->found.count; i++) {
+        if (scan->found.entries[i].path == NULL) continue;
+        scan->found.entries[kept++] = scan->found.entries[i];
+    }
+    scan->found.count = kept;
+    if (scan->found.count)
+        qsort(scan->found.entries, scan->found.count, sizeof(*scan->found.entries), compare_extras);
+    scan->entry_pending = false;
+    scan->check_open = false;
+    scan->state = SM_SCAN_IDLE;
+    free(scan->known);
+    scan->known = NULL;
+    remember(scan, catalog);
+}
+
+/* The next new subfolder to look into, from check_index on; false when
+   there are no more. Its card path is queued without the trailing slash. */
+static bool next_check(sm_folder_scan_t *scan) {
+    for (; scan->check_index < scan->found.count; scan->check_index++) {
+        const sm_extra_t *extra = &scan->found.entries[scan->check_index];
+        size_t length;
+        if (!extra->folder || extra->path == NULL) continue;
+        length = strlen(extra->path);
+        if (length < 2u || length > sizeof(scan->check_queue[0])) continue;
+        memcpy(scan->check_queue[0], extra->path, length - 1u);
+        scan->check_queue[0][length - 1u] = '\0';
+        scan->check_head = 0;
+        scan->check_count = 1;
+        scan->check_entries = 0;
+        scan->check_open = false;
+        return true;
+    }
+    return false;
+}
+
+/* The subfolder being looked into is known now: kept (`games`) or left
+   out, and on to the next. */
+static void settle_check(sm_folder_scan_t *scan, bool games) {
+    sm_extra_t *extra = &scan->found.entries[scan->check_index];
+    if (!games) {
+        free(extra->title);
+        free(extra->path);
+        extra->title = extra->path = NULL;
+    }
+    scan->check_open = false;
+    scan->check_count = 0;
+    scan->entry_pending = false;
+    scan->check_index++;
+}
+
+/* Up to `budget` entries of looking. True when every new subfolder has been
+   looked into. */
+static bool check_step(sm_folder_scan_t *scan, unsigned budget) {
+    unsigned read = 0;
+    while (read < budget) {
+        int result;
+        const dir_t *entry = &scan->entry;
+        if (scan->check_count == 0 && !next_check(scan)) return true;
+        if (!scan->check_open) {
+            char path[sizeof(SM_SD_ROOT) + sizeof(scan->check_queue[0])];
+            snprintf(path, sizeof(path), SM_SD_ROOT "%s", scan->check_queue[scan->check_head]);
+            result = dir_findfirst(path, &scan->entry);
+            read++;
+            if (result != 0) {
+                /* Empty, or unreadable: nothing to play in this one. */
+                scan->check_head = (scan->check_head + 1u) % SM_SCAN_CHECK_QUEUE;
+                if (--scan->check_count == 0) settle_check(scan, false);
+                continue;
+            }
+            scan->check_open = true;
+            scan->entry_pending = true;
+        }
+        if (!scan->entry_pending) {
+            /* The path only names the filesystem; the cursor is the one
+               dir_findfirst opened just above. */
+            if (dir_findnext(scan->sd_path, &scan->entry) != 0) {
+                scan->check_open = false;
+                scan->check_head = (scan->check_head + 1u) % SM_SCAN_CHECK_QUEUE;
+                if (--scan->check_count == 0) settle_check(scan, false);
+                continue;
+            }
+        }
+        scan->entry_pending = false;
+        read++;
+        if (++scan->check_entries > SM_SCAN_CHECK_ENTRIES) { settle_check(scan, true); continue; }
+        if (entry->d_type == DT_DIR) {
+            const char *parent = scan->check_queue[scan->check_head];
+            size_t parent_length = strlen(parent), name_length = strlen(entry->d_name);
+            char *queued;
+            if (sm_folder_excluded(entry->d_name)) continue;
+            if (scan->check_count == SM_SCAN_CHECK_QUEUE ||
+                parent_length + 1u + name_length >= sizeof(scan->check_queue[0])) {
+                settle_check(scan, true);
+                continue;
+            }
+            /* Never the slot being listed: the queue is not full. */
+            queued = scan->check_queue[(scan->check_head + scan->check_count) % SM_SCAN_CHECK_QUEUE];
+            memcpy(queued, parent, parent_length);
+            queued[parent_length] = '/';
+            memcpy(queued + parent_length + 1u, entry->d_name, name_length + 1u);
+            scan->check_count++;
+        } else if (entry->d_type == DT_REG) {
+            if (sm_name_is_rom(entry->d_name) && !sm_file_excluded(entry->d_name)) settle_check(scan, true);
+        }
+    }
+    return false;
+}
+
 bool sm_folder_scan_step(sm_folder_scan_t *scan, sm_catalog_t *catalog) {
     int result;
     unsigned read = 0;
     if (scan->state == SM_SCAN_IDLE) return false;
+    if (scan->state == SM_SCAN_CHECKING) {
+        if (!check_step(scan, SM_SCAN_ENTRIES_PER_STEP)) return false;
+        finish(scan, catalog);
+        return true;
+    }
     if (scan->state == SM_SCAN_WANTED) {
         if (scan->known == NULL && !known_build(scan, catalog)) {
             scan->failed = true;
@@ -388,14 +509,14 @@ bool sm_folder_scan_step(sm_folder_scan_t *scan, sm_catalog_t *catalog) {
             if (result != 0) {
                 scan->failed = result < -1;
                 if (scan->failed) extras_clear(&scan->found);
-                if (scan->found.count)
-                    qsort(scan->found.entries, scan->found.count, sizeof(*scan->found.entries),
-                        compare_extras);
                 scan->entry_pending = false;
-                scan->state = SM_SCAN_IDLE;
-                free(scan->known);
-                scan->known = NULL;
-                remember(scan, catalog);
+                /* The folder is read; its new subfolders are looked into,
+                   with what is left of this frame's reading and after. */
+                scan->check_index = 0;
+                scan->check_count = 0;
+                scan->state = SM_SCAN_CHECKING;
+                if (!check_step(scan, SM_SCAN_ENTRIES_PER_STEP - read)) return false;
+                finish(scan, catalog);
                 return true;
             }
         }
@@ -415,13 +536,13 @@ bool sm_folder_scan_step(sm_folder_scan_t *scan, sm_catalog_t *catalog) {
 }
 
 void sm_folder_scan_yield(sm_folder_scan_t *scan) {
-    if (scan->state != SM_SCAN_RUNNING) return;
+    if (scan->state != SM_SCAN_RUNNING && scan->state != SM_SCAN_CHECKING) return;
     drop_cursor(scan);
     scan->state = SM_SCAN_WANTED;
 }
 
 bool sm_folder_scan_busy(const sm_folder_scan_t *scan) {
-    return scan->state == SM_SCAN_RUNNING;
+    return scan->state == SM_SCAN_RUNNING || scan->state == SM_SCAN_CHECKING;
 }
 
 void sm_folder_scan_close(sm_folder_scan_t *scan, sm_catalog_t *catalog) {

@@ -14,7 +14,13 @@
    at a time -- the scan gives way to the launch card and to anything else
    that opens a file, and starts over afterwards -- because a directory
    listing in progress and a file read do not always share the card cleanly
-   on every cartridge. */
+   on every cartridge.
+
+   A subfolder the catalog does not know is only new if it holds something
+   to play: after the folder is read, each one is looked into, a level or
+   two down, before it is listed. A folder left empty, or holding only
+   Controller Pak files, is not a folder of games the Game Catalog Manager
+   was not run for, and running it would not change anything. */
 #include "catalog.h"
 #include <libdragon.h>
 
@@ -28,11 +34,17 @@ enum { SM_SCAN_MAX_EXTRAS = 1024 };
    read most of the time; on the Pro eight of them are one FIFO round trip.
    Thirty-two keeps a frame's worth of reading under a frame. */
 enum { SM_SCAN_ENTRIES_PER_STEP = 32 };
+/* Looking into a new subfolder stops at the first game. One whose first
+   this-many entries hold none, or with more subfolders than the queue
+   holds, is taken to have some: the check is to leave out the empty ones,
+   not to walk a big new tree. */
+enum { SM_SCAN_CHECK_ENTRIES = 256, SM_SCAN_CHECK_QUEUE = 8 };
 
 typedef enum {
     SM_SCAN_IDLE,       /* the extras for the wanted folder are published */
     SM_SCAN_WANTED,     /* a folder is to be read; nothing is open yet */
-    SM_SCAN_RUNNING     /* a directory cursor is open on the card */
+    SM_SCAN_RUNNING,    /* a directory cursor is open on the card */
+    SM_SCAN_CHECKING    /* the folder is read; its new subfolders are being looked into */
 } sm_scan_state_t;
 
 typedef struct {
@@ -54,6 +66,12 @@ typedef struct {
     uint32_t *known;
     uint32_t known_mask;
     bool failed;          /* the folder could not be read; nothing is added */
+    /* Looking into the new subfolders: which extra, the folders still to
+       list for it (card paths, oldest first), and whether one is open. */
+    uint32_t check_index;
+    char check_queue[SM_SCAN_CHECK_QUEUE][256];
+    unsigned check_head, check_count, check_entries;
+    bool check_open;
 } sm_folder_scan_t;
 
 /* The rules the whole-card scan and the folder scan share with

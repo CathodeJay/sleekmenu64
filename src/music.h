@@ -53,8 +53,10 @@ bool sm_music_playing(void);
 void sm_music_set_enabled(bool on);
 bool sm_music_save_setting(const char *path);
 
-/* Once a frame: hands the audio hardware what it has used up. */
-void sm_music_poll(void);
+/* Once a frame: hands the audio hardware what it has used up, and reads a
+   little more of the track ahead -- unless the card is busy listing a
+   folder (`card_free` false), when it plays from what it read before. */
+void sm_music_poll(bool card_free);
 /* Before a game is loaded: fades out, then lets go of the card and the
    audio hardware. Where the track was is kept for sm_music_resume. */
 void sm_music_fade_out(void);

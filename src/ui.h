@@ -253,4 +253,8 @@ void ui_close(sm_ui_t *ui);
    it is not rounded into looking like a retail cart. */
 void sm_format_rom_size(uint32_t bytes, char *out, size_t size);
 
+/* Something is listing a folder on the card, which is not to be read
+   from meanwhile. */
+bool ui_card_busy(const sm_ui_t *ui);
+
 #endif

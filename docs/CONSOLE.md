@@ -198,8 +198,10 @@ chip would be and `NOT IN CATALOG` where the box would be. It plays like any
 other; the status line says how many are waiting, and the next update gives
 them their boxes and facts. Only the folders the browser shows are read:
 with the whole library under one folder, a new folder beside it at the card
-root is not seen until the card is prepared again. A ROM-shaped file the
-tool set aside as not a ROM is known to the browser and never listed.
+root is not seen until the card is prepared again. A new folder is only
+listed if there is something to play in it: an empty folder, or one with
+only Controller Pak files, is left out. A ROM-shaped file the tool set
+aside as not a ROM is known to the browser and never listed.
 
 ## Not done yet
 

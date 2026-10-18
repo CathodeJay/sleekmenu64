@@ -119,6 +119,8 @@ typedef struct {
 } sm_test_dir_entry_t;
 /* The entries dir_findfirst(path) will list; any other path lists nothing. */
 void sm_test_dir_set(const char *path, const sm_test_dir_entry_t *entries, int count);
+/* Another folder, beside the ones already set. */
+void sm_test_dir_add(const char *path, const sm_test_dir_entry_t *entries, int count);
 /* How many times a folder was opened for listing. */
 extern int sm_test_dir_opens;
 

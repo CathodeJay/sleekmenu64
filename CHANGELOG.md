@@ -20,6 +20,10 @@
   is fetched into the `sleekmenu/` folder with everything else the Game
   Catalog Manager keeps, and one at the card root is moved there by the
   next update. Nothing is downloaded again.
+- **No more "1 new folder" that never goes away.** An empty folder, or one
+  with only Controller Pak files, is no longer listed as a new folder or
+  counted in the status line; running the Game Catalog Manager could never
+  clear it, since a folder with no games is not in the catalog.
 - **Plainer wording in the Game Catalog Manager.** Every message was
   rewritten to say simply what happens, and a few options have new names:
   Download cheat codes, Download screenshots, Don't download anything, Fix

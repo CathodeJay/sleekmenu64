@@ -96,35 +96,49 @@ surface_t sprite_get_pixels(sprite_t *sprite) {
     return out;
 }
 
-/* One folder's worth of directory entries, served to whoever lists that
-   path; every other path is empty. The browser reads the folder it is in
-   for files the catalog does not know, and this is that folder. */
-static const sm_test_dir_entry_t *dir_entries;
-static int dir_entry_count;
+/* The folders the card lists, each with its entries, served to whoever
+   lists that path; every other path is empty. The browser reads the folder
+   it is in for files the catalog does not know, and looks into the new
+   subfolders it finds; these are those folders. One listing at a time, as
+   on the cartridges. */
+enum { DIR_FOLDERS = 16 };
+static struct { char path[272]; const sm_test_dir_entry_t *entries; int count; } dir_folders[DIR_FOLDERS];
+static int dir_folder_count;
+static int dir_current = -1;
 static int dir_position;
-static char dir_path[272];
 int sm_test_dir_opens;
 
 void sm_test_dir_set(const char *path, const sm_test_dir_entry_t *entries, int count) {
-    snprintf(dir_path, sizeof(dir_path), "%s", path ? path : "");
-    dir_entries = entries;
-    dir_entry_count = count;
+    dir_folder_count = 0;
+    dir_current = -1;
     dir_position = 0;
+    if (path) sm_test_dir_add(path, entries, count);
+}
+
+void sm_test_dir_add(const char *path, const sm_test_dir_entry_t *entries, int count) {
+    if (dir_folder_count == DIR_FOLDERS) return;
+    snprintf(dir_folders[dir_folder_count].path, sizeof(dir_folders[0].path), "%s", path);
+    dir_folders[dir_folder_count].entries = entries;
+    dir_folders[dir_folder_count].count = count;
+    dir_folder_count++;
 }
 
 int dir_findnext(const char *path, dir_t *entry) {
     (void)path;
-    if (dir_position >= dir_entry_count) return -1;
-    snprintf(entry->d_name, sizeof(entry->d_name), "%s", dir_entries[dir_position].name);
-    entry->d_type = dir_entries[dir_position].folder ? DT_DIR : DT_REG;
+    if (dir_current < 0 || dir_position >= dir_folders[dir_current].count) return -1;
+    snprintf(entry->d_name, sizeof(entry->d_name), "%s", dir_folders[dir_current].entries[dir_position].name);
+    entry->d_type = dir_folders[dir_current].entries[dir_position].folder ? DT_DIR : DT_REG;
     dir_position++;
     return 0;
 }
 
 int dir_findfirst(const char *path, dir_t *entry) {
     sm_test_dir_opens++;
+    dir_current = -1;
     dir_position = 0;
-    if (!dir_entries || strcmp(path, dir_path)) return -1;
+    for (int i = 0; i < dir_folder_count; i++)
+        if (dir_folders[i].entries && !strcmp(path, dir_folders[i].path)) dir_current = i;
+    if (dir_current < 0) return -1;
     return dir_findnext(path, entry);
 }
 

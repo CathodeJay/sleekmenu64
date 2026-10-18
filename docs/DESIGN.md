@@ -303,7 +303,14 @@ count, served by the same `catalog_get`, so every view, the filters and
 favourites see them without knowing. A file gets its name for a title and
 `SM_EXTRA_DESCRIPTION` for a box back; a folder is an entry whose path ends
 in `/`, which is what lets it stand in for "the first game inside it"
-wherever a folder item is read. Each is moved to where its name sorts, since
+wherever a folder item is read. A subfolder is only an extra if it holds
+something to play: once the folder is read, each new subfolder is looked
+into, breadth first and still thirty-two entries a frame, until a ROM-shaped
+file turns up. One that is empty, or holds only Controller Pak files, is
+left out -- the tool records folders by their games, so an empty one would
+be new on every visit, and running the tool would not change that. The
+look stops at the first game, and gives up (counting the folder in) after
+256 entries or more subfolders than its queue of eight holds. Each extra is moved to where its name sorts, since
 the catalog is in path order. Membership is one hash lookup per entry
 against the catalog's names in that folder, built once per read, and it
 compares bytes: the catalog must spell a name exactly as the card stores
@@ -317,7 +324,7 @@ dropped, "ae" for the ligature -- when it is drawn, and a title made from a
 file name is spelled so when it is made. A
 finished folder is kept for the session, four at a time, so stepping back
 into one lists its extras at once. Only one thing reads the card at a time:
-covers and headers wait for the read to finish, and the launch card, which
+covers, headers and the music's read-ahead wait for the read to finish, and the launch card, which
 reads the header and on the Pro lists the folder for a disk, takes the card
 over -- the read starts again from the top on the way back. The shortlists
 are card-wide and list no extras, because the card has only been read where
@@ -379,11 +386,14 @@ is another.
 
 **Music is streamed, not decoded.** The song is a WAV64 file of plain
 16-bit mono samples, which the Game Catalog Manager writes from whatever
-the owner picked, so the console does no decoding at all: `music` reads
-the file in 8 KB blocks, a tenth to a fifth of a second of sound each, and copies
-the samples into libdragon's mixer as it asks for them. A block is under
-the Pro file driver's 16 KB read-ahead window, so on the Pro it is served
-by the fast transfer. Mono halves what is read while the browser draws,
+the owner picked, so the console does no decoding at all: `music` keeps
+about a second of the track read ahead, topped up one 8 KB block a frame,
+and copies the samples into libdragon's mixer as it asks for them. A block
+is under the Pro file driver's 16 KB read-ahead window, so on the Pro it is
+served by the fast transfer. While a folder is being listed the card is the
+listing's, as it is for the covers, and the music plays from what it read
+before; a listing longer than the read-ahead is a moment of silence, not a
+listing disturbed. Mono halves what is read while the browser draws,
 and the mixer loops the whole track by asking for it again from the start.
 The audio hardware is fed once a frame from the main loop, with six
 buffers queued, about a quarter of a second, which rides out a frame that
