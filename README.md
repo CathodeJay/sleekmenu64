@@ -67,7 +67,12 @@ it; see [below](#starting-the-console-in-sleekmenu-x7-only).
 **Themes:** the browser comes in ten sets of colours: Midnight, Charcoal,
 the six Funtastic colours (Jungle, Grape, Fire, Ice, Smoke, Watermelon),
 Atomic Purple and Gold. Change it on the console (Z, then the THEME row)
-or under **Console** on the Game Catalog Manager's Card tab.
+or under **Theme** on the Game Catalog Manager's Card tab.
+
+**Music:** choose a song under **Theme** in the Game Catalog Manager
+(WAV, MP3, FLAC or OGG) and SleekMenu plays it on a loop while you browse.
+It fades out when a game starts. Turn it on or off on the console with Z,
+then the MUSIC row.
 
 The Game Catalog Manager also shows your card the way the console will, and
 lets you give any game your own picture, description or facts; see
@@ -96,7 +101,7 @@ SleekMenu ships none of them.
 | C-up | List, grid or coverflow | Fast or verified load |
 | C-down | Favourite | Cheats |
 | L / R | Page up / down (coverflow: previous / next letter) | — |
-| Z | Filters and theme | Diagnostics |
+| Z | Filters, theme and music | Diagnostics |
 
 The bar along the bottom of every screen says what the buttons do there,
 each button drawn in its own colour: a blue A, a green B, a red Start, the

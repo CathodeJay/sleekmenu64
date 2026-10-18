@@ -30,6 +30,7 @@ own AGPL code and `data/`:
 | Python, with Tcl/Tk | PSF-2.0; Tcl/Tk's BSD-style licence |
 | Pillow | MIT-CMU |
 | tkinterdnd2, with the tkdnd library it loads | MIT; tkdnd's BSD-style licence |
+| miniaudio (the Python package), with the miniaudio and stb_vorbis code it is built from, and cffi | MIT |
 | PyInstaller's bootloader | GPL-2.0 with the bootloader exception, which places no terms on the frozen program |
 
 Nothing else is bundled; the box art still comes from the card.

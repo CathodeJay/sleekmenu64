@@ -123,6 +123,24 @@ class FieldTests(unittest.TestCase):
         self.assertIs(from_window("/c", direct_boot=False).direct_boot, False)
         self.assertIsNone(from_window("/c").theme, "nothing chosen: the card's theme is left alone")
         self.assertEqual(from_window("/c", theme="jungle").theme, "jungle")
+        self.assertEqual((from_window("/c").music, from_window("/c").no_music), (None, False),
+                         "nothing picked: the card's song is left alone")
+        self.assertEqual(from_window("/c", music_file="/m/song.mp3").music, Path("/m/song.mp3"))
+        self.assertIs(from_window("/c", no_music=True).no_music, True)
+
+    def test_the_music_row_says_what_is_on_the_card_and_what_comes_next(self):
+        from tools import music
+        line = sleekmenu_gui.music_line
+        self.assertEqual(line(None), "Choose a song to play in SleekMenu.")
+        on_card = music.OnCard("Title Theme.mp3", 187.4, 1000)
+        self.assertEqual(line(on_card), "Title Theme.mp3 (3:07) plays in SleekMenu. "
+                                        "Press Z on the console to turn it off.")
+        self.assertTrue(line(music.OnCard("", 61, 10)).startswith("A song (1:01) plays"))
+        self.assertEqual(line(on_card, Path("/x/Credits.wav"), 62),
+                         "Credits.wav (1:02) goes on the card at the next update.")
+        self.assertEqual(line(on_card, sleekmenu_gui.REMOVE_MUSIC),
+                         "The music comes off the card at the next update.")
+        self.assertEqual(line(on_card, None, 0, "This isn't a WAV file."), "This isn't a WAV file.")
 
 
 class CardStatusTests(unittest.TestCase):
@@ -1175,6 +1193,10 @@ class WindowTests(unittest.TestCase):
         both = finished(boxes_unreached=2, browser_failure=releases.WRONG_FILE)
         self.assertTrue(both.startswith("Done, but 2 boxes couldn't be downloaded."), both)
         self.assertIn("The SleekMenu download was the wrong file.", both)
+        self.assertEqual(finished(music_failure="This isn't a WAV file."),
+                         "Done, but the music couldn't be put on the card. See the Log tab.")
+        self.assertIn("2 boxes couldn't be downloaded. Try again when you're back online. The music couldn't",
+                      finished(boxes_unreached=2, music_failure="x"))
 
     def test_the_start_up_switch_is_there_for_an_x7_or_a_pro_card_and_does_what_it_says(self):
         from tests.test_direct_boot import browser, stock_os
@@ -1315,6 +1337,84 @@ class WindowTests(unittest.TestCase):
             while state["runner"] is not None:
                 root.update()
             self.assertEqual(themes.path(card).read_bytes(), b"grape\n")
+            root.destroy()
+
+    def test_the_music_is_picked_put_on_the_card_and_taken_off(self):
+        import wave
+        from tests.test_music import little, tone
+        from tools import music
+
+        def labels(widget):
+            found = []
+            for child in widget.winfo_children():
+                try:
+                    found.append(str(child.cget("text")))
+                except Exception:
+                    pass
+                found += labels(child)
+            return found
+
+        def run(root, state):
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(state["last_code"], 0)
+
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            song = Path(scratch) / "Title Theme.wav"
+            with wave.open(str(song), "wb") as file:
+                file.setnchannels(1)
+                file.setsampwidth(2)
+                file.setframerate(22050)
+                file.writeframes(little(tone(22050 * 3)))
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            note, remove = state["music_note"], state["buttons"]["music_remove"]
+            shown = labels(root)
+            self.assertIn("Theme", shown)
+            self.assertIn("Colors", shown)
+            self.assertIn("Music", shown)
+            self.assertNotIn("Console", shown, "the group is called after what it holds")
+            self.assertEqual(note.get(), "Choose a song to play in SleekMenu.")
+            self.assertEqual(str(remove.cget("state")), "disabled", "nothing to remove")
+
+            # a file that can't be used says so at once, and nothing is picked
+            bad = Path(scratch) / "notes.wav"
+            bad.write_bytes(b"not a song")
+            state["pick_music"](bad)
+            self.assertIn("can't be read" if music.decoder_available() else "isn't a WAV", note.get())
+            self.assertEqual(str(remove.cget("state")), "disabled")
+
+            # a song is checked when picked, and put on the card by the run
+            state["pick_music"](song)
+            self.assertEqual(note.get(), "Title Theme.wav (0:03) goes on the card at the next update.")
+            self.assertEqual(str(remove.cget("state")), "normal", "a pick can be taken back")
+            self.assertIsNone(music.read_card(card), "nothing is written until the button is pressed")
+            run(root, state)
+            self.assertEqual(music.read_card(card).name, "Title Theme.wav")
+            self.assertTrue(note.get().startswith("Title Theme.wav (0:03) plays in SleekMenu."), note.get())
+            self.assertEqual(str(remove.cget("state")), "normal")
+
+            # a run with nothing picked leaves it there
+            before = music.track_path(card).read_bytes()
+            run(root, state)
+            self.assertEqual(music.track_path(card).read_bytes(), before)
+
+            # Remove takes back a pick first, then marks the card's song to go
+            state["pick_music"](song)
+            state["drop_music"]()
+            self.assertTrue(note.get().startswith("Title Theme.wav (0:03) plays"), note.get())
+            state["drop_music"]()
+            self.assertEqual(note.get(), "The music comes off the card at the next update.")
+            self.assertEqual(str(remove.cget("state")), "disabled")
+            self.assertIsNotNone(music.read_card(card))
+            run(root, state)
+            self.assertIsNone(music.read_card(card))
+            self.assertEqual(note.get(), "Choose a song to play in SleekMenu.")
             root.destroy()
 
     def test_a_build_check_never_downloads_and_ends_on_its_own(self):

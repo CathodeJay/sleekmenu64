@@ -54,7 +54,7 @@ from pathlib import Path
 
 from tools import (build_catalog, card_catalog, card_layout, cheat_codes, cover_pack, coverdb, custom_art,
                    direct_boot, fetch, headers, hires, library, make_sprite, metadata_repo, n64_checksum,
-                   pack_covers, prepare_card, progress, releases, shots, themes, version)
+                   music, pack_covers, prepare_card, progress, releases, shots, themes, version)
 from tools.metadata_repo import MetadataRepo, RepoError
 from tools.progress import Progress
 
@@ -325,6 +325,8 @@ class Options:
     direct_boot: bool | None = None  # the console starts in SleekMenu: True, False, or None to
                                      # leave the card as it is and keep the copy in step
     theme: str | None = None        # the browser's colours, by a theme's id; None leaves the card's
+    music: Path | None = None       # a track to loop in the browser; None leaves the card's
+    no_music: bool = False          # take the music off the card
     browser: bool = False           # put this release's SleekMenu64.z64 on a card with an older one
                                     # or none (the command line and the window ask for it unless told
                                     # otherwise); False leaves the card's as it is
@@ -344,6 +346,7 @@ class Outcome:
     shots_unreached: int = 0            # screenshots the network would not give
     browser_failure: str = ""           # this release's SleekMenu was wanted on the card and could not
                                         # be fetched or written: why (releases.CONNECTION, ...)
+    music_failure: str = ""             # the track picked for the card could not go on it: why
 
 
 def run(options: Options, log=print, fail=None, progress_factory=None, cancel=None,
@@ -410,6 +413,13 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
             themes.sync(card, options.theme, log)
         except OSError as error:
             log(f"theme:    not changed ({error})")
+        # And its music.
+        if options.music is not None or options.no_music:
+            try:
+                music.sync(card, options.music, options.no_music, log)
+            except (OSError, music.MusicError) as error:
+                log(f"music:    not changed ({error})")
+                outcome.music_failure = str(error)
     if found.created is not None:
         log(f"created   {found.created.relative_to(card)}/")
         log("")
@@ -596,6 +606,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--theme", choices=[theme.id for theme in themes.THEMES], default=None,
                         help="the browser's colours on this card (the default is "
                              f"{themes.DEFAULT.id}); the card keeps the choice")
+    parser.add_argument("--music", type=Path, default=None, metavar="FILE",
+                        help="loop this track in the browser (WAV; MP3, FLAC and OGG need the miniaudio "
+                             "package); the console's filter page turns it on and off")
+    parser.add_argument("--no-music", action="store_true",
+                        help="take the music off the card")
     parser.add_argument("--gui", action="store_true",
                         help="open the window instead of running in the terminal")
     parser.add_argument("--version", action="version", version=f"%(prog)s {version.VERSION}")
@@ -620,7 +635,8 @@ def main(argv: list[str] | None = None) -> int:
                            cheats=False if args.no_cheats else True if args.cheats else None,
                            shots=False if args.no_shots else True if args.shots else None,
                            direct_boot=None if args.direct_boot is None else args.direct_boot == "on",
-                           theme=args.theme, browser=not args.keep_browser,
+                           theme=args.theme, music=args.music, no_music=args.no_music,
+                           browser=not args.keep_browser,
                            no_large_covers=args.no_large_covers, rebuild=args.rebuild),
                    log=print, fail=lambda message: print(message, file=sys.stderr))
     except KeyboardInterrupt:

@@ -31,6 +31,8 @@ this is the reference.
 /sleekmenu/cheats/          your own .cht files (optional)     yours
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump     fetched by the tool (--cheats)
 /sleekmenu/theme.txt        the browser's theme, one word      written by the browser or the tool
+/sleekmenu/music.wav64      the song the browser loops         written by the tool (--music)
+/sleekmenu/music.txt        whether it plays: on or off        written by the browser
 /sleekmenu/art/             your own box art and text (optional)  yours
 
 /ED64/autoexec.v64          a copy of the browser (X7, optional)  written by the tool (--direct-boot)
@@ -60,6 +62,8 @@ These, and nothing else:
 - `sleekmenu/cheats.txt` when you leave the cheats page
 - `sleekmenu/theme.txt` when you leave the filter page having changed the
   theme
+- `sleekmenu/music.txt` when you leave the filter page having turned the
+  music on or off
 - `ED64/gamedata/<game>.<eep|srm|fla>` and `ED64/sysdata/registry.dat` — the
   save and the record the EverDrive menu reads, in its own names and format,
   so a game started from either menu finishes its save in the other
@@ -97,6 +101,23 @@ a theme that ROM does not have, so a card prepared by a newer tool still
 starts on an older browser. The browser writes the file when the theme is
 changed on its filter page, the tool when one is chosen there; a card that
 never chose has none.
+
+## The music
+
+`sleekmenu/music.wav64` is a WAV64 file, libdragon's audio container,
+version 2: a 24-byte big-endian header (`WV64`, version 2, format 0 for
+uncompressed samples, one channel, 16 bits, then the sample rate, the
+length in samples, the loop length and the offset of the first sample),
+and the samples, signed 16-bit big-endian. The browser plays only that
+shape, at 8 to 48 kHz, and loops the whole track. Between the header and
+the first sample the tool records the name of the file the song came from
+(`name`, one length byte, UTF-8), which the window shows; the browser
+skips it, since the header says where the samples start.
+
+`sleekmenu/music.txt` turns the music off when its first word is `off`.
+Anything else, or no file, plays it. The browser writes it from the MUSIC
+row of its filter page; the tool removes it when it puts a new song on
+the card, and with the song when it takes the music off.
 
 ## Starting in the browser
 

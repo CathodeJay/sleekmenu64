@@ -60,8 +60,9 @@ game with screenshots, left and right turn to them.
 
 Z opens the **filter** from any view: genre (with a count for each), region,
 players, publisher, year, favourites and kind, combined. Z again clears it,
-B applies it. The header shows how many games match. The last row of the
-page is not a filter: it is the [theme](#themes).
+B applies it. The header shows how many games match. The last two rows of
+the page are not filters: they are the [theme](#themes) and the
+[music](#music).
 
 ![The filter screen, in the Ice theme: genres with counts, then region, players, publisher, year and favourites, and the theme row under them](screenshots/filters.png)
 
@@ -90,7 +91,7 @@ before them, simply has none.
 
 The colours are a theme: Midnight, Charcoal, Jungle, Grape, Fire, Ice,
 Smoke, Watermelon, Atomic Purple and Gold. Midnight is the default. To change it, press Z and go to the **THEME** row
-under the filters (up from the top row gets there at once): left and right
+under the filters (up twice from the top row gets there): left and right
 step through the themes, and the screen takes each one as you do. B keeps
 the choice, on the card in `sleekmenu/theme.txt`, and the browser starts in
 it from then on. The Game Catalog Manager sets the same file
@@ -99,6 +100,20 @@ warning and an error are the same in every theme.
 
 In the grid and in coverflow, where the genre tabs are not shown, the
 title bar names the genre you are in, spelled out.
+
+## Music
+
+SleekMenu can play a song on a loop while you browse. Choose it in the Game
+Catalog Manager ([PREP.md](PREP.md#music)), which puts it on the card as
+`sleekmenu/music.wav64`. The music starts once the list is up and fades out
+when you start a game. If the game doesn't start, it picks up where it left
+off.
+
+To turn it off, press Z and go to the **MUSIC** row, the last one (up from
+the top row gets there at once): left or right turns it on or off, and you
+hear the change right away. B keeps the choice in `sleekmenu/music.txt`.
+The row says **None** when the card has no song. Choosing a new song in the
+Game Catalog Manager turns the music back on.
 
 ## Starting the console in SleekMenu
 

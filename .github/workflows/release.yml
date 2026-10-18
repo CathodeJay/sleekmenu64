@@ -98,6 +98,7 @@ jobs:
             --add-data "data/genres.csv:data" \
             --add-data "data/LICENSE:data" \
             --collect-all tkinterdnd2 \
+            --hidden-import miniaudio \
             tools/sleekmenu_gui.py
 
       - name: Prove the build starts and prepares a card

@@ -8,6 +8,7 @@
 #include "flashcart.h"
 #include "buttons.h"
 #include "rom_db.h"
+#include "music.h"
 #include "theme.h"
 #include "version.h"
 #include <libdragon.h>
@@ -17,7 +18,7 @@
 
 /* The filter page's rows: the genre grid, five more filters, and under them
    the one row that is not a filter -- the theme. */
-enum { FILTER_ROWS = 8, FILTER_ROW_KIND = 6, FILTER_ROW_THEME = 7 };
+enum { FILTER_ROWS = 9, FILTER_ROW_KIND = 6, FILTER_ROW_THEME = 7, FILTER_ROW_MUSIC = 8 };
 
 /* Where the card keeps its art. Named rather than spelled out at the one call
    site so the host test can point the browser at a directory it can create;
@@ -1266,6 +1267,13 @@ static void change_filter(sm_ui_t *ui, sm_catalog_t *catalog, int direction) {
             ui->theme_changed = true;
             ui->flow_desc_item = UINT32_MAX;
             return;
+        /* Not a filter either: on or off, heard at once. A card without a
+           track says None and has nothing to turn on. */
+        case FILTER_ROW_MUSIC:
+            if (!sm_music_available()) return;
+            sm_music_set_enabled(!sm_music_enabled());
+            ui->music_changed = true;
+            return;
     }
     /* The header counts what the filter would show. Leaving it until the
        screen closes meant composing a filter blind, which is when the count
@@ -1562,12 +1570,16 @@ static void launch_from_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_
     ui->load_done_kib = 0;
     ui->load_total_kib = 0;
     ui->load_verifying = false;
+    /* The load needs the card to itself, and the game the audio hardware
+       as it was at power-on. */
+    sm_music_fade_out();
     launch_rom(draw_launch_progress, &draw);
     /* Only reached when the handoff did not happen. The bar has to go with
        it, or a refusal is left sitting under a full progress bar that says
        the opposite. */
     ui->load_total_kib = 0;
     ui->status = launch_status_message();
+    sm_music_resume();
 }
 
 static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, const sm_layout_t *layout);
@@ -1725,6 +1737,11 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
                 ui->theme_changed = false;
                 if (!sm_theme_save(SM_THEME_PATH))
                     ui->status = "Theme not saved: the card could not be written";
+            }
+            if (ui->music_changed) {
+                ui->music_changed = false;
+                if (!sm_music_save_setting(SM_MUSIC_SETTING_PATH))
+                    ui->status = "Music setting not saved: the card could not be written";
             }
             return;
         }
@@ -2608,7 +2625,7 @@ static void draw_panel(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c
 static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
     const sm_ui_t *ui) {
     static const char *LABELS[] = {"GENRE", "REGION", "PLAYERS", "PUBLISHER",
-                                   "YEAR", "FAVORITES", "KIND", "THEME"};
+                                   "YEAR", "FAVORITES", "KIND", "THEME", "MUSIC"};
     static const char *KINDS[] = {"Any", "Retail", "Hacks", "Translations", "Homebrew"};
     int step;
     int y = l->safe_top + SM_HEADER_HEIGHT + 6;
@@ -2684,11 +2701,15 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
         if (row == 5) shown = ui->filter.favorites_only ? "Only" : "Any";
         if (row == FILTER_ROW_KIND) shown = KINDS[ui->filter.kind < 5u ? ui->filter.kind : 0u];
         if (row == FILTER_ROW_THEME) {
-            /* Set apart from the filters, where there is room to. */
-            if (y + 6 + SM_FONT_HEIGHT + 2 <= l->footer_top - 2) y += 6;
+            /* Set apart from the filters, with MUSIC under it, where there
+               is room to. */
+            if (y + 6 + (FILTER_ROWS - 1 - row) * step + SM_FONT_HEIGHT + 2 <= l->footer_top - 2) y += 6;
             snprintf(value, sizeof(value), "< %s >", sm_theme_name(sm_theme_current()));
             shown = value;
         }
+        if (row == FILTER_ROW_MUSIC)
+            shown = !sm_music_available() ? "None"
+                  : sm_music_enabled() ? "< On >" : "< Off >";
         if (row == ui->filter_row)
             graphics_draw_box(s, l->safe_left, y - 2, width, 11,
                 sm_colour(SM_C_SELECT));

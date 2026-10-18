@@ -5,6 +5,11 @@
 **Upgrading from 2.1:** download the new Game Catalog Manager and press
 **Update card**.
 
+- **Background music.** Choose a song under **Theme** on the Card tab
+  (WAV, MP3, FLAC or OGG) and SleekMenu plays it on a loop while you
+  browse. It fades out when a game starts. On the console, Z and then the
+  new MUSIC row turns it on or off. The Card tab's **Console** group is now
+  called **Theme**, with **Colors** and **Music** in it.
 - **Start the console in SleekMenu on the Pro too.** The switch on the
   Card tab now works on the EverDrive-64 Pro with firmware 26.1014 or
   newer: it copies SleekMenu to `ED64/menu.n64`, which the Pro starts in

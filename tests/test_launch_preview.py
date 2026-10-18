@@ -104,7 +104,7 @@ class HostModuleTests(unittest.TestCase):
         to be indistinguishable from the browser's side, and the only way to
         know they are is to hold the behaviour fixed and swap the source."""
         sources = ["tests/ui_host_test.c", "tests/stubs/libdragon_stub.c",
-                   "src/ui.c", "src/theme.c", "src/buttons.c", "src/genre.c", "src/favorites.c",
+                   "src/ui.c", "src/theme.c", "src/music.c", "src/buttons.c", "src/genre.c", "src/favorites.c",
                    "src/history.c",
                    "src/list_view.c", "src/picture.c", "src/save_type.c", "src/cover_pack.c",
                    "src/folder_scan.c", "src/rom_db.c"] + CHEATS_SOURCES
@@ -138,12 +138,19 @@ class HostModuleTests(unittest.TestCase):
                     ["-Itests/stubs"] + CHEATS_FLAGS +
                     [f'-DSM_FAVORITES_PATH="{scratch}/favorites.txt"',
                      f'-DSM_THEME_PATH="{scratch}/theme.txt"',
+                     f'-DSM_MUSIC_PATH="{scratch}/music.wav64"',
+                     f'-DSM_MUSIC_SETTING_PATH="{scratch}/music.txt"',
                      f'-DSM_COVERS_DIR="{scratch}/covers"',
                      f'-DSM_COVER_PACK_PATH="{pack}"',
                      f'-DSM_COVER_PACK_LARGE_PATH="{large}"',
                      f'-DSM_SHOT_PACK_PATH="{shots_small}"',
                      f'-DSM_SHOT_PACK_LARGE_PATH="{shots_large}"'],
                 )
+
+    def test_host_music_module(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            build_and_run("music-test", ["src/music.c", "tests/stubs/libdragon_stub.c", "tests/music_test.c"],
+                          ["-Itests/stubs"], [scratch])
 
     def test_host_theme_module(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -717,8 +724,11 @@ class SafetyGateTests(unittest.TestCase):
     # cheats_io.c writes the record of which cheats are on -- one small text
     # file under the browser's folder, in the same spirit as favourites.
     # theme.c writes the theme chosen on the filter page: one word, in a file
-    # of its own under the browser's folder, when the page is left.
-    SD_WRITERS = {"save_io.c", "ed64_registry.c", "favorites.c", "history.c", "cheats_io.c", "theme.c"}
+    # of its own under the browser's folder, when the page is left. music.c
+    # is the same: "on" or "off", from the MUSIC row; the song itself is
+    # only ever read.
+    SD_WRITERS = {"save_io.c", "ed64_registry.c", "favorites.c", "history.c", "cheats_io.c", "theme.c",
+                  "music.c"}
 
     def test_only_the_save_modules_write_to_the_card(self):
         for path in sorted((ROOT / "src").rglob("*.c")):

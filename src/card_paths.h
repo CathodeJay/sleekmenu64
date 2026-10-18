@@ -68,6 +68,15 @@
 #ifndef SM_THEME_PATH
 #define SM_THEME_PATH SM_CARD_DIR "/theme.txt"
 #endif
+/* The background music, written by the Game Catalog Manager, and whether
+   it plays, written by the MUSIC row of the filter page. tools/card_layout.py
+   has the same names. */
+#ifndef SM_MUSIC_PATH
+#define SM_MUSIC_PATH SM_CARD_DIR "/music.wav64"
+#endif
+#ifndef SM_MUSIC_SETTING_PATH
+#define SM_MUSIC_SETTING_PATH SM_CARD_DIR "/music.txt"
+#endif
 
 /* The stock firmware's own folder. Excluded from the library scan for the same
    reason: it holds saves and system state, not games. */

@@ -2,6 +2,7 @@
 #include <libdragon.h>
 
 char sm_test_text[SM_TEST_TEXT_MAX][96];
+int sm_test_text_y[SM_TEST_TEXT_MAX];
 int sm_test_text_count;
 int sm_test_box_count;
 int sm_test_sprite_loads;
@@ -31,9 +32,11 @@ int sm_test_boxes_of(uint32_t colour) {
 }
 
 void graphics_draw_text(surface_t *s, int x, int y, const char *text) {
-    (void)s; (void)x; (void)y;
-    if (sm_test_text_count < SM_TEST_TEXT_MAX && text)
+    (void)s; (void)x;
+    if (sm_test_text_count < SM_TEST_TEXT_MAX && text) {
+        sm_test_text_y[sm_test_text_count] = y;
         snprintf(sm_test_text[sm_test_text_count++], 96, "%s", text);
+    }
 }
 
 bool sm_test_drew(const char *needle) {

@@ -224,7 +224,8 @@ class CardLayoutTests(unittest.TestCase):
         header = self.header()
         for macro in ("SM_CATALOG_PATH", "SM_COVER_PACK_PATH",
                       "SM_COVERS_DIR", "SM_FAVORITES_PATH", "SM_HISTORY_PATH",
-                      "SM_CHEATS_STATE_PATH", "SM_CHEATS_DIR", "SM_THEME_PATH"):
+                      "SM_CHEATS_STATE_PATH", "SM_CHEATS_DIR", "SM_THEME_PATH",
+                      "SM_MUSIC_PATH", "SM_MUSIC_SETTING_PATH"):
             self.assertRegex(header, rf"#define {macro} SM_CARD_DIR ",
                              f"{macro} must derive from SM_CARD_DIR")
 
@@ -234,5 +235,6 @@ class CardLayoutTests(unittest.TestCase):
         header = self.header()
         for macro in ("SM_CATALOG_PATH", "SM_COVER_PACK_PATH",
                       "SM_COVERS_DIR", "SM_FAVORITES_PATH", "SM_HISTORY_PATH",
-                      "SM_CHEATS_STATE_PATH", "SM_CHEATS_DIR", "SM_THEME_PATH"):
+                      "SM_CHEATS_STATE_PATH", "SM_CHEATS_DIR", "SM_THEME_PATH",
+                      "SM_MUSIC_PATH", "SM_MUSIC_SETTING_PATH"):
             self.assertIn(f"#ifndef {macro}", header)

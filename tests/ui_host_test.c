@@ -11,6 +11,7 @@
 #include "buttons.h"
 #include "favorites.h"
 #include "launch.h"
+#include "music.h"
 #include "rom_load.h"
 #include "theme.h"
 #include "version.h"
@@ -80,9 +81,12 @@ sm_launch_result_t launch_probe(void) { return SM_LAUNCH_OK; }
 /* Launches are counted rather than made, and the launcher's verdict on the
    selected file is whatever a test says it is. */
 static int fake_launches;
+static bool fake_music_during_launch;
 static sm_launch_result_t fake_last_result = SM_LAUNCH_OK;
 sm_launch_result_t launch_rom(sm_launch_progress_cb cb, void *ctx) {
-    (void)cb; (void)ctx; fake_launches++; return SM_LAUNCH_OK;
+    (void)cb; (void)ctx; fake_launches++;
+    fake_music_during_launch = sm_music_playing();
+    return SM_LAUNCH_OK;
 }
 sm_boot_mode_t launch_boot_mode(void) { return SM_BOOT_FAST; }
 void launch_set_boot_mode(sm_boot_mode_t mode) { (void)mode; }
@@ -1996,7 +2000,9 @@ int main(void) {
         frame(PRESS(filter));
         assert(ui.screen == SM_SCREEN_FILTERS);
 
-        /* The row under the filters. Up from the first row wraps onto it. */
+        /* The row under the filters, above MUSIC. Up from the first row
+           wraps onto MUSIC, and once more is THEME. */
+        frame(PRESS(up));
         frame(PRESS(up));
         draw();
         assert(sm_test_drew("THEME") && sm_test_drew("< Midnight >"));
@@ -2039,6 +2045,118 @@ int main(void) {
         assert(fopen(SM_THEME_PATH, "rb") == NULL);
         sm_theme_use(0);
         memset(&ui.filter, 0, sizeof(ui.filter));
+    }
+
+    /* ---- the music is turned on and off on the filter page, and kept ---- */
+    {
+        static const row_t rows[] = {
+            {"a.z64", "Alpha", "Racing", 0, "Nintendo", 1996, NULL},
+        };
+        /* Two seconds of silence at 16 kHz, as the Game Catalog Manager
+           writes a track. */
+        static const uint8_t header[24] = {'W', 'V', '6', '4', 2, 0, 1, 16,
+            0, 0, 0x3E, 0x80, 0, 0, 0x7D, 0, 0, 0, 0x7D, 0, 0, 0, 0, 24};
+        char text[16];
+        FILE *file;
+        size_t read;
+        remove(SM_MUSIC_SETTING_PATH);
+
+        /* No track on the card: None, and nothing to turn on or save. */
+        remove(SM_MUSIC_PATH);
+        sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
+        assert(!sm_music_available() && !sm_music_playing());
+        start(rows, 1u);
+        frame(PRESS(filter));
+        frame(PRESS(up));                     /* the last row */
+        draw();
+        assert(sm_test_drew("MUSIC") && sm_test_drew("None"));
+        frame(PRESS(right));
+        assert(!sm_music_playing() && !ui.music_changed);
+        frame(PRESS(back));
+        assert(fopen(SM_MUSIC_SETTING_PATH, "rb") == NULL);
+
+        /* A track and no setting: it plays from the start. */
+        file = fopen(SM_MUSIC_PATH, "wb");
+        assert(file != NULL);
+        fwrite(header, 1, sizeof(header), file);
+        for (int i = 0; i < 32000 * 2; i++) fputc(0, file);
+        fclose(file);
+        sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
+        assert(sm_music_available() && sm_music_enabled() && sm_music_playing());
+        start(rows, 1u);
+        frame(PRESS(filter));
+        frame(PRESS(up));
+        draw();
+        assert(sm_test_drew("< On >"));
+
+        /* Either way is the other one, heard at once, and nothing is written
+           until the page is left. */
+        frame(PRESS(left));
+        assert(!sm_music_playing() && ui.music_changed);
+        draw();
+        assert(sm_test_drew("< Off >"));
+        frame(PRESS(right));
+        assert(sm_music_playing());
+        frame(PRESS(right));
+        assert(!sm_music_playing());
+        /* It filters nothing, and clearing the filters leaves it alone. */
+        frame(PRESS(filter));
+        assert(!sm_music_enabled() && ui.item_count == 1u);
+        assert(fopen(SM_MUSIC_SETTING_PATH, "rb") == NULL);
+        frame(PRESS(back));
+        assert(!ui.music_changed);
+        file = fopen(SM_MUSIC_SETTING_PATH, "rb");
+        assert(file != NULL);
+        read = fread(text, 1, sizeof(text) - 1, file);
+        fclose(file);
+        text[read] = '\0';
+        assert(!strcmp(text, "off\n"));
+        /* Which is what the next start reads: the track is there, silent. */
+        sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
+        assert(sm_music_available() && !sm_music_enabled() && !sm_music_playing());
+
+        /* On again, and a game: the music is stopped before the launch, and
+           plays on when the launch comes back without booting. */
+        sm_music_set_enabled(true);
+        assert(sm_music_playing());
+        fake_launches = 0;
+        frame(PRESS(start));
+        assert(fake_launches == 1 && !fake_music_during_launch);
+        assert(sm_music_playing());
+
+        sm_music_set_enabled(false);
+        remove(SM_MUSIC_PATH);
+        remove(SM_MUSIC_SETTING_PATH);
+        sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
+    }
+
+    /* ---- every genre the catalog can have, and MUSIC still clears the help bar */
+    {
+        static const row_t rows[] = {
+            {"1.z64", "One", "Action", 0, "", 0, NULL},
+            {"2.z64", "Two", "Action-Adventure", 0, "", 0, NULL},
+            {"3.z64", "Three", "Fighting", 0, "", 0, NULL},
+            {"4.z64", "Four", "Other", 0, "", 0, NULL},
+            {"5.z64", "Five", "Platforms", 0, "", 0, NULL},
+            {"6.z64", "Six", "Puzzle", 0, "", 0, NULL},
+            {"7.z64", "Seven", "Racing", 0, "", 0, NULL},
+            {"8.z64", "Eight", "Role Playing Games", 0, "", 0, NULL},
+            {"9.z64", "Nine", "Shooters", 0, "", 0, NULL},
+            {"10.z64", "Ten", "Simulation", 0, "", 0, NULL},
+            {"11.z64", "Eleven", "Sports", 0, "", 0, NULL},
+            {"12.z64", "Twelve", "Strategy", 0, "", 0, NULL},
+        };
+        int music_y = -1, theme_y = -1;
+        start(rows, 12u);
+        frame(PRESS(filter));
+        draw();
+        for (int i = 0; i < sm_test_text_count; i++) {
+            if (!strcmp(sm_test_text[i], "MUSIC")) music_y = sm_test_text_y[i];
+            if (!strcmp(sm_test_text[i], "THEME")) theme_y = sm_test_text_y[i];
+        }
+        assert(theme_y > 0 && music_y > theme_y);
+        assert(music_y + 8 + 2 <= layout.footer_top - 2);
+        frame(PRESS(back));
     }
 
     /* ---- grid and coverflow spell the genre out; the strip keeps its codes -- */

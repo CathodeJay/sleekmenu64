@@ -241,6 +241,7 @@ On the console the work is split into small modules:
 | `picture` | a cover shrunk by averaging, for the grid's tiles |
 | `ui` | list, grid and coverflow views, filters, the launch card and its screenshots, the box view, the cheats page |
 | `theme` | the colours, by what each is for; the built-in themes and the card's choice of one |
+| `music` | the card's song, streamed into libdragon's mixer while the browser runs, and whether it plays |
 | `buttons` | the controller's buttons as pictures, and the help bar's lines of them |
 | `launch_policy` | suffix, magic, size and boot-code checks before anything boots |
 | `flashcart` / `launch` | one interface over the two cartridges; the X7 backend streams the ROM through libcart, the Pro backend (`src/pro/`) has the cartridge's MCU copy it |
@@ -375,6 +376,26 @@ written once, when the page is left. The Game Catalog Manager writes the
 same file. What is painted once into a surface -- the folder picture on the
 coverflow shelf, the paragraph under it -- is painted again when the theme
 is another.
+
+**Music is streamed, not decoded.** The song is a WAV64 file of plain
+16-bit mono samples, which the Game Catalog Manager writes from whatever
+the owner picked, so the console does no decoding at all: `music` reads
+the file in 8 KB blocks, a tenth to a fifth of a second of sound each, and copies
+the samples into libdragon's mixer as it asks for them. A block is under
+the Pro file driver's 16 KB read-ahead window, so on the Pro it is served
+by the fast transfer. Mono halves what is read while the browser draws,
+and the mixer loops the whole track by asking for it again from the start.
+The audio hardware is fed once a frame from the main loop, with six
+buffers queued, about a quarter of a second, which rides out a frame that
+spends a while reading a large picture. The music starts after the catalog
+and the cheat pack are read, so start-up is never fed slowly, and it stops
+before a game is loaded: the load needs the card to itself, and the game's
+boot code expects the RSP halted and the audio interface idle. It fades
+first, over the fade and then the queue, since what is already queued
+plays at the old volume. A launch that comes back without booting starts
+it again where it was. The MUSIC row of the filter page turns it on and
+off like the theme row, at once, and writes `sleekmenu/music.txt` when the
+page is left.
 
 **The help bar draws the buttons.** A line of help is written with a
 button's code in braces -- `{S}PLAY {A}INFO {<}{>}TABS` -- and `buttons`

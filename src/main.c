@@ -5,6 +5,7 @@
 #include "flashcart.h"
 #include "input.h"
 #include "launch.h"
+#include "music.h"
 #include "ui.h"
 #include "save_sync.h"
 #include "theme.h"
@@ -146,11 +147,16 @@ int main(void) {
         launch_read_cheat_pack();
         /* A save that just moved is more worth saying than a catalog count. */
         if (save_sync.ran) ui.status = save_sync.detail;
+        /* Last, once nothing slow is left before the first frame: the music
+           is fed once a frame, and a long start-up step would leave it
+           stuttering. */
+        sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
     }
 #ifdef SM_SHOW_FRAME_TIME
     static frame_meter_t meter;
 #endif
     while (1) {
+        sm_music_poll();
 #ifdef SM_SHOW_FRAME_TIME
         uint64_t began = get_ticks_us();
         ui_update(&ui, &catalog, app_input_poll(), &layout);

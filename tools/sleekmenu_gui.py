@@ -43,7 +43,7 @@ if __package__ in (None, ""):
     _sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
 
 from tools import (card_catalog, card_layout, cheat_codes, coverdb, custom_art, direct_boot, fetch, genre_map,
-                   hires, kinds, library, make_sprite, metadata_repo, progress, provenance, releases,
+                   hires, kinds, library, make_sprite, metadata_repo, music, progress, provenance, releases,
                    shots, sleekmenu_prep, themes, version)
 from tools.metadata_repo import MetadataRepo
 
@@ -61,6 +61,8 @@ CHEATS_OFFLINE = "Unavailable while downloads are off."
 SHOTS_HINT = "Title and in-game screenshots for retail games, from libretro. About 0.4 MB per game."
 #: The colours of a theme shown beside its name, in this order.
 SWATCH_ROLES = ("bg", "band", "select", "accent", "text")
+#: Remove under Music: the next run takes the song off the card.
+REMOVE_MUSIC = "remove"
 #: The box is 96x72 on the console; twice that on a desktop screen is
 #: legible without pretending to be the source picture.
 BOX_ZOOM = 2
@@ -409,11 +411,30 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
                     "Try again when you're back online.")
     if browser and browser != releases.CONNECTION:
         said.append(browser_failure_line(browser, status, first=not said))
+    if getattr(outcome, "music_failure", ""):
+        said.append(("Done, but the" if not said else "The") + " music couldn't be put on the card. "
+                    "See the Log tab.")
     if said:
         return " ".join(said)
     if direct:
         return "Done. Eject the card and turn on your console. It will start in SleekMenu."
     return "Done. Eject the card, then start SleekMenu64.z64 from the EverDrive menu."
+
+
+def music_line(on_card, picked=None, seconds: float = 0.0, problem: str = "") -> str:
+    """What the Music row says: the song on the card, or the one picked for
+    it, or why the picked file can't be used."""
+    if problem:
+        return problem
+    if picked == REMOVE_MUSIC:
+        return "The music comes off the card at the next update."
+    if picked is not None:
+        return f"{picked.name} ({music.duration(seconds)}) goes on the card at the next update."
+    if on_card is None:
+        return "Choose a song to play in SleekMenu."
+    named = on_card.name or "A song"
+    return (f"{named} ({music.duration(on_card.seconds)}) plays in SleekMenu. "
+            "Press Z on the console to turn it off.")
 
 
 def megabytes(size: int) -> str:
@@ -570,7 +591,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
                  cheats: bool = False, cheats_remembered: bool = False,
                  direct_boot: bool | None = None, theme: str | None = None,
                  shots: bool = False, shots_remembered: bool = False,
-                 browser: bool = True) -> sleekmenu_prep.Options:
+                 browser: bool = True, music_file: str | Path | None = None,
+                 no_music: bool = False) -> sleekmenu_prep.Options:
     """The window's choices as the run takes them. An empty collection
     means whatever is on the card, fetched when there is none. An empty
     games folder is the whole card, said so: the field shows what the card
@@ -587,7 +609,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
     `shots_remembered`). `browser` puts the SleekMenu this release goes
     with on a card that has an older one or none. `direct_boot` is the start-up switch as the
     tab shows it, None on a card that has no such switch. `theme` is
-    the id of the colours chosen for the browser."""
+    the id of the colours chosen for the browser. `music_file` is a song
+    picked to go on the card, `no_music` the Remove button."""
     return sleekmenu_prep.Options(
         card=Path(card) if card.strip() else None,
         metadata=Path(metadata) if metadata.strip() else None,
@@ -599,6 +622,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
         shots=False if not shots else None if shots_remembered and not rebuild else True,
         direct_boot=direct_boot,
         theme=theme,
+        music=Path(music_file) if music_file else None,
+        no_music=bool(no_music),
         browser=bool(browser),
         rebuild=bool(rebuild),
     )
@@ -2070,6 +2095,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     browser_note = tk.StringVar()
     newer_var = tk.StringVar()
     theme_var = tk.StringVar(value=themes.DEFAULT.name)
+    music_note = tk.StringVar()
     headline_var = tk.StringVar()
     detail_var = tk.StringVar()
     explain_var = tk.StringVar()
@@ -2253,12 +2279,12 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     option(15, rebuild_var, "Rebuild everything",
            "Slower. Use it if box art or names look wrong.")
 
-    # What the console does with the card: the browser's colours. (Where it
+    # How the browser looks and sounds on the console. (Where the console
     # starts is with the SleekMenu on the card, in the left column.)
-    group(17, "Console")
+    group(17, "Theme")
     theme_row = ttk.Frame(options)
     theme_row.grid(row=18, column=0, sticky="w", pady=(6, 0))
-    ttk.Label(theme_row, text="Theme").grid(row=0, column=0, sticky="w")
+    ttk.Label(theme_row, text="Colors").grid(row=0, column=0, sticky="w")
     theme_box = ttk.Combobox(theme_row, textvariable=theme_var, state="readonly", width=12,
                              values=[theme.name for theme in themes.THEMES])
     theme_box.grid(row=0, column=1, padx=(8, 10))
@@ -2277,6 +2303,14 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                                     fill="#%02x%02x%02x" % theme.colours[role])
     theme_var.trace_add("write", draw_swatch)
     draw_swatch()
+    ttk.Label(theme_row, text="Music").grid(row=1, column=0, sticky="w", pady=(8, 0))
+    music_buttons = ttk.Frame(theme_row)
+    music_buttons.grid(row=1, column=1, columnspan=2, sticky="w", padx=(8, 0), pady=(8, 0))
+    choose_music = ttk.Button(music_buttons, text="Choose…")
+    choose_music.grid(row=0, column=0)
+    remove_music = ttk.Button(music_buttons, text="Remove")
+    remove_music.grid(row=0, column=1, padx=(6, 0))
+    hint(19, music_note)
 
     fit(options, hints)
 
@@ -2444,6 +2478,50 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         shots_var.set(shots.remembered(chosen))
         boot_var.set(chosen is not None and direct_boot.state(chosen).on)
         read_theme()
+        read_music()
+
+    def show_music() -> None:
+        on_card = music.read_card(current_card())
+        picked = state.get("music_pick")
+        music_note.set(music_line(on_card, picked, state.get("music_seconds", 0.0),
+                                  state.get("music_problem", "")))
+        removable = isinstance(picked, Path) or (on_card is not None and picked != REMOVE_MUSIC)
+        remove_music.configure(state="normal" if removable else "disabled")
+
+    def read_music() -> None:
+        """The card's song, shown, with nothing picked: a run has put
+        the pick on the card, or another card was chosen."""
+        state["music_pick"] = None
+        state["music_problem"] = ""
+        show_music()
+
+    def pick_music(chosen: Path) -> None:
+        """A song for the card, checked now so the row can say at once
+        whether it can be used; converted by the next run."""
+        try:
+            seconds = music.probe(chosen)
+        except music.MusicError as error:
+            state["music_pick"] = None
+            state["music_problem"] = str(error)
+        else:
+            state["music_pick"] = chosen
+            state["music_seconds"] = seconds
+            state["music_problem"] = ""
+        show_music()
+
+    def drop_music() -> None:
+        """Remove: a song picked here is forgotten; otherwise the next
+        run takes the card's off."""
+        state["music_pick"] = None if isinstance(state.get("music_pick"), Path) else REMOVE_MUSIC
+        state["music_problem"] = ""
+        show_music()
+
+    def browse_music() -> None:
+        patterns = " ".join(f"*{suffix}" for suffix in music.suffixes())
+        chosen = filedialog.askopenfilename(title="A song for SleekMenu",
+                                            filetypes=[("Music", patterns), ("All files", "*")])
+        if chosen:
+            pick_music(Path(chosen))
 
     def read_theme() -> None:
         """The card's theme, shown. The console changes it too, so the
@@ -2625,7 +2703,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                                   shots=shots_var.get(), shots_remembered=shots.remembered(chosen),
                                   browser=browser_var.get(),
                                   direct_boot=boot_var.get() if state["boot"].available else None,
-                                  theme=picked_theme())))
+                                  theme=picked_theme(),
+                                  music_file=state["music_pick"] if isinstance(state.get("music_pick"), Path)
+                                  else None,
+                                  no_music=state.get("music_pick") == REMOVE_MUSIC)))
 
     def picked_theme() -> str | None:
         """The theme picked in the window, None when it is still the one
@@ -2661,6 +2742,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     choose_roms.configure(command=browse_roms)
     choose_pack.configure(command=browse_metadata)
     forget_pack.configure(command=lambda: metadata_var.set(""))
+    choose_music.configure(command=browse_music)
+    remove_music.configure(command=drop_music)
     note.bind("<Button-1>", open_download)
     card_box.bind("<<ComboboxSelected>>", on_card_change)
     card_var.trace_add("write", on_card_change)
@@ -2673,6 +2756,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     stop.configure(command=ask_stop)
     root.bind("<FocusIn>", on_focus)
     on_roms_change()
+    read_music()
     refresh_cards()
     if card:
         card_var.set(card)
@@ -2686,6 +2770,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
                         "cheats": cheats_var, "shots": shots_var, "boot": boot_var, "theme": theme_var,
                         "browser": browser_var}
     state["swatch"] = swatch
+    state["music_note"] = music_note
+    state["pick_music"] = pick_music
+    state["drop_music"] = drop_music
     state["boot_row"] = boot_row
     state["boot_note"] = boot_note
     state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var, "cart": cart_var,
@@ -2694,7 +2781,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state["start"] = start
     state["stop"] = ask_stop
     state["buttons"] = {"action": action, "stop": stop, "coffee": coffee, "boot": boot_check,
-                        "cheats": cheats_check, "shots": shots_check, "browser": browser_check}
+                        "cheats": cheats_check, "shots": shots_check, "browser": browser_check,
+                        "music": choose_music, "music_remove": remove_music}
     state["notebook"] = notebook
     state["header"] = header
     state["edit_menu"] = edit_menu

@@ -72,6 +72,8 @@ static inline void surface_free(surface_t *s) {
 /* --- what the test observes ------------------------------------------- */
 #define SM_TEST_TEXT_MAX 256
 extern char sm_test_text[SM_TEST_TEXT_MAX][96];
+/* Where each line of text was drawn, its top edge. */
+extern int sm_test_text_y[SM_TEST_TEXT_MAX];
 extern int sm_test_text_count;
 extern int sm_test_box_count;
 /* How many boxes were drawn in this colour since the last reset: how a test

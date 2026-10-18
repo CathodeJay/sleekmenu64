@@ -84,11 +84,14 @@ only that. The card remembers the choice.
   box again, and asks libretro again for the boxes it did not have, for a
   card that looks wrong.
 
-**Console**
+**Theme**
 
-- **Theme** picks the browser's colours; the squares beside it show the
+- **Colors** picks the browser's colours; the squares beside it show the
   theme's background, title band, selection, accent and text. See
   [Themes](#themes).
+- **Music** is the song SleekMenu plays while you browse: **Choose…** picks
+  one, **Remove** takes it off. The line under it says which song is on the
+  card, or which one the next update puts there. See [Music](#music).
 
 ### Games
 
@@ -344,7 +347,7 @@ The browser has ten sets of colours, built into `SleekMenu64.z64`:
 | Atomic Purple | indigo with a pale lilac accent |
 | Gold | dark brown with a gold accent |
 
-Choose one under **Console** on the Card tab (`--theme jungle` on the
+Choose one under **Theme** on the Card tab (`--theme jungle` on the
 command line) and press Update card: the choice is written to
 `sleekmenu/theme.txt`, and the browser reads it the next time it starts.
 The same file is written by the console itself when you change the theme
@@ -354,6 +357,26 @@ another one in the window; otherwise the console's choice stays. A
 theme changes colours only: every screen is laid out the same, a warning is
 still amber and an error red, and the buttons on the help bar keep the
 colours they have on the controller.
+
+## Music
+
+SleekMenu can loop one song while you browse. Choose it under **Theme** on
+the Card tab (`--music song.mp3` on the command line) and press Update
+card. The song is converted and written to `sleekmenu/music.wav64`; the
+file you picked stays where it is. **Remove** (`--no-music`) takes it off
+the card.
+
+WAV files are always read. MP3, FLAC and OGG files need the `miniaudio`
+package, which the downloadable builds include; from a terminal,
+`pip install miniaudio` adds it. The song is mixed down to mono, which is
+what the console streams best from the card while it draws. A WAV keeps
+its own sample rate (up to 48 kHz); the other formats are brought to
+32 kHz. A three-minute song takes about 10 to 17 MB on the card. Songs
+longer than 30 minutes are refused.
+
+The console turns the music on and off with its **MUSIC** row
+([CONSOLE.md](CONSOLE.md#music)). Putting a new song on the card turns it
+back on.
 
 ## Versions
 
@@ -430,7 +453,8 @@ card and run the tool again. The options mirror the window's:
 - `--shots` fetches the screenshots and `--no-shots` stops; `--cheats`
   fetches the cheat codes and `--no-cheats` stops;
   `--direct-boot on` and `--direct-boot off` set an X7's start-up switch;
-  `--theme` takes a theme's name in lower case (`--theme grape`).
+  `--theme` takes a theme's name in lower case (`--theme grape`);
+  `--music FILE` puts a song on the card and `--no-music` takes it off.
 - `--keep-browser` leaves `SleekMenu64.z64` on the card as it is; by
   default an older one, or none, is replaced by this release's.
 - `--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps
@@ -464,11 +488,13 @@ What the tool writes, and what it leaves alone:
 /sleekmenu/shots-large.pak the same at 224×168, for the box view
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump, when asked for
 /sleekmenu/theme.txt       the browser's theme, when you chose one
+/sleekmenu/music.wav64     the song the browser plays, when you chose one
 /ED64/autoexec.v64         a copy of SleekMenu64.z64, when an X7 starts in it
 /ED64/menu.n64             a copy of SleekMenu64.z64, when a Pro starts in it
 /sleekmenu/favorites.txt   written by the browser as you star games
 /sleekmenu/history.txt     the last fifteen games you launched
 /sleekmenu/cheats.txt      which cheats are on, per game
+/sleekmenu/music.txt       whether the music plays, when changed on the console
 /ED64/gamedata/            saves, shared with the EverDrive menu — never touched
 ```
 
