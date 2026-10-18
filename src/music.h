@@ -6,8 +6,10 @@
 
    The Game Catalog Manager writes the track as sleekmenu/music.wav64, a
    libdragon WAV64 file holding plain 16-bit mono samples, and the browser
-   streams it from the card a few kilobytes at a time. Nothing is decoded:
-   samples are copied into the mixer as they are. Whether it plays is the
+   streams it from the card a few kilobytes at a time. Nothing is decoded,
+   and nothing is mixed but a volume: the audio interrupt copies the
+   samples into each buffer as the hardware takes it, so a frame that takes
+   long is not heard. Whether it plays is the
    MUSIC row of the filter page, kept in sleekmenu/music.txt ("on" or
    "off"); a card that says nothing plays it.
 

@@ -241,7 +241,7 @@ On the console the work is split into small modules:
 | `picture` | a cover shrunk by averaging, for the grid's tiles |
 | `ui` | list, grid and coverflow views, filters, the launch card and its screenshots, the box view, the cheats page |
 | `theme` | the colours, by what each is for; the built-in themes and the card's choice of one |
-| `music` | the card's song, streamed into libdragon's mixer while the browser runs, and whether it plays |
+| `music` | the card's song, read ahead by the main loop and played by the audio interrupt, and whether it plays |
 | `buttons` | the controller's buttons as pictures, and the help bar's lines of them |
 | `launch_policy` | suffix, magic, size and boot-code checks before anything boots |
 | `flashcart` / `launch` | one interface over the two cartridges; the X7 backend streams the ROM through libcart, the Pro backend (`src/pro/`) has the cartridge's MCU copy it |
@@ -386,24 +386,25 @@ is another.
 
 **Music is streamed, not decoded.** The song is a WAV64 file of plain
 16-bit mono samples, which the Game Catalog Manager writes from whatever
-the owner picked, so the console does no decoding at all: `music` keeps
-about a second of the track read ahead, topped up one 8 KB block a frame,
-and copies the samples into libdragon's mixer as it asks for them. A block
-is under the Pro file driver's 16 KB read-ahead window, so on the Pro it is
-served by the fast transfer. While a folder is being listed the card is the
-listing's, as it is for the covers, and the music plays from what it read
-before; a listing longer than the read-ahead is a moment of silence, not a
-listing disturbed. Mono halves what is read while the browser draws,
-and the mixer loops the whole track by asking for it again from the start.
-The audio hardware is fed once a frame from the main loop, with six
-buffers queued, about a quarter of a second, which rides out a frame that
-spends a while reading a large picture. The music starts after the catalog
-and the cheat pack are read, so start-up is never fed slowly, and it stops
-before a game is loaded: the load needs the card to itself, and the game's
-boot code expects the RSP halted and the audio interface idle. It fades
-first, over the fade and then the queue, since what is already queued
-plays at the old volume. A launch that comes back without booting starts
-it again where it was. The MUSIC row of the filter page turns it on and
+the owner picked, so the console does no decoding, and no mixing either:
+the track is played at its own rate, so there is nothing to resample, and
+the only arithmetic is a volume. The main loop keeps about a second of the
+track read ahead, topped up one 8 KB block a frame and wrapping to the
+start at the end, which is the loop; the audio interrupt copies from it
+into each buffer as the hardware takes it, both channels the same. So a
+frame that works for a while -- a game's details reading its pictures and
+header off the Pro -- is not heard: the interrupt plays on from what was
+read. A block is under the Pro file driver's 16 KB
+read-ahead window, so on the Pro it is served by the fast transfer. While a
+folder is being listed the card is the listing's, as it is for the covers,
+and nothing is read; a listing longer than the read-ahead is a moment of
+silence, not a listing disturbed. Mono halves what is read while the
+browser draws. The music starts after the catalog and the cheat pack are
+read, and it stops before a game is loaded: the load needs the card to
+itself, and the game's boot code expects the audio interface idle. It
+fades over a quarter of a second, heard within the two buffers the
+hardware has queued. A launch that comes back without booting starts it
+again where it was. The MUSIC row of the filter page turns it on and
 off like the theme row, at once, and writes `sleekmenu/music.txt` when the
 page is left.
 
