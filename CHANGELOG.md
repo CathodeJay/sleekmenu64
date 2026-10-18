@@ -3,29 +3,30 @@
 ## 2.2.0
 
 **Upgrading from 2.1:** download the new Game Catalog Manager and press
-**Update card**.
+**Update card**. It puts SleekMenu 2.2.0 on the card.
 
 - **Background music.** Choose a song under **Theme** on the Card tab
-  (WAV, MP3, FLAC or OGG) and SleekMenu plays it on a loop while you
-  browse. It fades out when a game starts. On the console, Z and then the
-  new MUSIC row turns it on or off. The Card tab's **Console** group is now
-  called **Theme**, with **Colors** and **Music** in it.
+  (MP3, WAV, FLAC or OGG) and SleekMenu plays it on a loop while you
+  browse. It fades out when a game starts. On the console, the new MUSIC
+  row of the Z screen turns it on or off. The Card tab's **Console** group
+  is now called **Theme**, with **Colors** and **Music** in it.
 - **Start the console in SleekMenu on the Pro too.** The switch on the
   Card tab now works on the EverDrive-64 Pro with firmware 26.1014 or
-  newer: it copies SleekMenu to `ED64/menu.n64`, which the Pro starts in
+  newer. It copies SleekMenu to `ED64/menu.n64`, which the Pro starts in
   place of its own menu. Games started from SleekMenu then have no in-game
-  menu or save states; untick the switch to have the Pro's menu again. On
+  menu or save states. Untick the switch to get the Pro's menu back. On
   the X7 it works as before, through `ED64/autoexec.v64`.
 - **The box-art collection lives in `sleekmenu/`.** `release-metadata.zip`
   is fetched into the `sleekmenu/` folder with everything else the Game
   Catalog Manager keeps, and one at the card root is moved there by the
   next update. Nothing is downloaded again.
-- **Left and right on a game's details go to the previous or next game.**
-  Hold the button to run through them; the box and the save type follow
-  when you stop, and B goes back to the list on the game you ended on.
+- **Cycle through games from a game's details.** Left and right on the
+  D-pad go to the previous or next game. Hold it to run through them. The
+  box and the save type show up when you stop, and B goes back to the list
+  on the game you ended on.
 - **No more "1 new folder" that never goes away.** An empty folder, or one
   with only Controller Pak files, is no longer listed as a new folder or
-  counted in the status line; running the Game Catalog Manager could never
+  counted in the status line. Running the Game Catalog Manager could never
   clear it, since a folder with no games is not in the catalog.
 - **Plainer wording in the Game Catalog Manager.** Every message was
   rewritten to say simply what happens, and a few options have new names:
