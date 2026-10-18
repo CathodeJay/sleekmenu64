@@ -12,11 +12,13 @@ the file is as simple as the console can play. This module writes it from
 the track the card owner picks.
 
 A WAV file is read here, by the standard library alone, and keeps its own
-sample rate (one above 48 kHz is halved until it is not). MP3, FLAC and OGG
-files need the optional `miniaudio` package, which the downloadable builds
-carry; it also brings every track to 32 kHz. Either way the channels are
-mixed down to one, which is half the reading a stereo track would cost the
-cartridge while the browser draws.
+sample rate (one above 48 kHz is halved until it is not). Anything else --
+MP3, M4A, FLAC, OGG, AIFF -- goes through the first decoder this computer
+has that reads it: the optional `miniaudio` package, which the downloadable
+builds carry; afconvert, which comes with macOS; or ffmpeg. Each brings
+the track to 32 kHz. Either way the channels are mixed down to one, which
+is half the reading a stereo track would cost the cartridge while the
+browser draws.
 
 Whether the music plays is the console's choice, made on its filter page
 and kept in sleekmenu/music.txt. A new track clears that file, so the music
@@ -31,8 +33,11 @@ from __future__ import annotations
 
 import array
 import os
+import shutil
 import struct
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,16 +50,22 @@ from tools import card_layout
 #: The rates the console takes (src/music.h has the same).
 MIN_RATE = 8000
 MAX_RATE = 48000
-#: What a decoded MP3, FLAC or OGG is brought to.
+#: What a decoded MP3, FLAC, OGG... is brought to.
 DECODED_RATE = 32000
 #: Longer than this is not background music, and would cost the card a
 #: lot of room for nothing: an hour at 32 kHz is 230 MB.
 MAX_SECONDS = 30 * 60
 
-#: The suffixes the window offers. WAV is always readable; the others only
-#: with miniaudio.
+#: The suffixes the window's chooser offers. WAV is always read; the others
+#: by whichever decoder the computer has (decoders()).
 WAV_SUFFIXES = (".wav", ".wave")
-DECODED_SUFFIXES = (".mp3", ".flac", ".ogg")
+OTHER_SUFFIXES = (".mp3", ".m4a", ".aac", ".flac", ".ogg", ".aif", ".aiff")
+SUFFIXES = WAV_SUFFIXES + OTHER_SUFFIXES
+#: Where ffmpeg usually is when a program started from the Finder or the
+#: Start menu was not given the shell's PATH.
+FFMPEG_PLACES = ("/opt/homebrew/bin", "/usr/local/bin", "/usr/bin")
+#: The longest a converter may take over one song.
+CONVERT_SECONDS = 300
 
 _HEADER = struct.Struct(">4sbbbbiiii")      # WAV64 version 2, as libdragon reads it
 _NAME_TAG = b"name"
@@ -90,17 +101,41 @@ def setting_path(card: Path) -> Path:
     return card / card_layout.CARD_FOLDER / card_layout.MUSIC_SETTING_FILE
 
 
-def decoder_available() -> bool:
+def _miniaudio():
     try:
-        import miniaudio  # noqa: F401
+        import miniaudio
     except ImportError:
-        return False
-    return True
+        return None
+    return miniaudio
 
 
-def suffixes() -> tuple:
-    """The kinds of file this tool can read now."""
-    return WAV_SUFFIXES + (DECODED_SUFFIXES if decoder_available() else ())
+def _converters() -> list:
+    """The audio converters on this computer, as (name, command for a
+    source and a WAV to write): afconvert on a Mac, then ffmpeg."""
+    found = []
+    if sys.platform == "darwin":
+        tool = shutil.which("afconvert") or shutil.which("afconvert", path="/usr/bin")
+        if tool:
+            # 16-bit little-endian WAV at the decoded rate. Its -c drops
+            # channels rather than mixing them, so read_wav mixes.
+            found.append(("afconvert", lambda source, out, tool=tool: [
+                tool, "-f", "WAVE", "-d", f"LEI16@{DECODED_RATE}", str(source), str(out)]))
+    tool = shutil.which("ffmpeg") or shutil.which("ffmpeg", path=os.pathsep.join(FFMPEG_PLACES))
+    if tool:
+        found.append(("ffmpeg", lambda source, out, tool=tool: [
+            tool, "-nostdin", "-v", "error", "-y", "-i", str(source), "-vn", "-ac", "1",
+            "-ar", str(DECODED_RATE), "-c:a", "pcm_s16le", "-f", "wav", str(out)]))
+    return found
+
+
+def decoders() -> list:
+    """The names of what this computer can read songs other than WAV with,
+    best first."""
+    return (["miniaudio"] if _miniaudio() else []) + [name for name, _ in _converters()]
+
+
+def decoder_available() -> bool:
+    return bool(decoders())
 
 
 def duration(seconds: float) -> str:
@@ -188,38 +223,61 @@ def read_wav(data: bytes) -> Track:
     return Track(rate, mono)
 
 
+NO_DECODER = ("To use MP3, FLAC or OGG files, install the miniaudio package (pip3 install miniaudio) "
+              "or ffmpeg. WAV files always work.")
+UNREADABLE = "This file can't be read. Pick an MP3, FLAC, OGG or WAV file."
+
+
 def _decoded(source: Path) -> Track:
+    """Anything but a plain WAV, through the first decoder that reads it."""
+    miniaudio = _miniaudio()
+    if miniaudio is not None:
+        try:
+            decoded = miniaudio.decode_file(str(source), output_format=miniaudio.SampleFormat.SIGNED16,
+                                            nchannels=1, sample_rate=DECODED_RATE)
+            return Track(DECODED_RATE, array.array("h", decoded.samples))
+        except miniaudio.MiniaudioError:
+            pass                    # an M4A or an AIFF, which miniaudio does not read
+    converters = _converters()
+    for _name, command in converters:
+        with tempfile.TemporaryDirectory(prefix="sleekmenu-music-") as work:
+            out = Path(work) / "song.wav"
+            try:
+                subprocess.run(command(source, out), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=CONVERT_SECONDS, check=True,
+                               creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                return read_wav(out.read_bytes())
+            except (OSError, subprocess.SubprocessError, MusicError):
+                continue
+    if miniaudio is None and not converters:
+        raise MusicError(NO_DECODER)
+    raise MusicError(UNREADABLE)
+
+
+def _is_wav(source: Path) -> bool:
     try:
-        import miniaudio
-    except ImportError:
-        raise MusicError("MP3, FLAC and OGG files need the miniaudio package "
-                         "(pip install miniaudio). WAV files work without it.") from None
-    try:
-        decoded = miniaudio.decode_file(str(source), output_format=miniaudio.SampleFormat.SIGNED16,
-                                        nchannels=1, sample_rate=DECODED_RATE)
-    except miniaudio.MiniaudioError:
-        raise MusicError("This file can't be read. Pick an MP3, FLAC, OGG or WAV file.") from None
-    return Track(DECODED_RATE, array.array("h", decoded.samples))
+        with source.open("rb") as file:
+            head = file.read(12)
+    except OSError as error:
+        raise MusicError(f"This file can't be opened ({error.strerror or error}).") from None
+    return head[0:4] == b"RIFF" and head[8:12] == b"WAVE"
 
 
 def decode(source: Path) -> Track:
     """The picked file as a track the console can play."""
-    suffix = source.suffix.lower()
-    if suffix in DECODED_SUFFIXES or (suffix not in WAV_SUFFIXES and decoder_available()):
-        track = _decoded(source)
-    else:
+    if _is_wav(source) or (source.suffix.lower() in WAV_SUFFIXES and not decoder_available()):
         try:
-            data = source.read_bytes()
+            track = read_wav(source.read_bytes())
         except OSError as error:
             raise MusicError(f"This file can't be opened ({error.strerror or error}).") from None
-        try:
-            track = read_wav(data)
         except MusicError:
-            # A WAV file compressed in one of the ways this module does not
-            # read, which miniaudio may.
+            # A WAV compressed in a way this module does not read, which a
+            # decoder may.
             if not decoder_available():
                 raise
             track = _decoded(source)
+    else:
+        track = _decoded(source)
     if track.rate < MIN_RATE:
         raise MusicError("The sound in this file is too low quality to play. Pick another one.")
     if track.seconds < 1:
@@ -233,17 +291,16 @@ def probe(source: Path) -> float:
     """How long the picked file plays, read quickly, for the window to show
     before anything is converted. Raises MusicError for a file this tool
     can't read."""
-    suffix = source.suffix.lower()
-    if suffix in WAV_SUFFIXES:
+    miniaudio = None if _is_wav(source) else _miniaudio()
+    if miniaudio is None:
+        # A WAV is read in a moment; a converter has to convert the whole
+        # song, a second or two.
         return decode(source).seconds
-    if not decoder_available():
-        raise MusicError("Only WAV files can be read here. MP3, FLAC and OGG need the miniaudio package.")
-    import miniaudio
     try:
         seconds = float(miniaudio.get_file_info(str(source)).duration)
     except miniaudio.MiniaudioError:
         # The quick look goes by the file's name; decoding tries every
-        # format it knows.
+        # format and every decoder.
         return decode(source).seconds
     if seconds > MAX_SECONDS:
         raise MusicError(f"This file is longer than {MAX_SECONDS // 60} minutes. Pick a shorter one.")

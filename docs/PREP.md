@@ -366,12 +366,14 @@ card. The song is converted and written to `sleekmenu/music.wav64`; the
 file you picked stays where it is. **Remove** (`--no-music`) takes it off
 the card.
 
-WAV files are always read. MP3, FLAC and OGG files need the `miniaudio`
-package, which the downloadable builds include; from a terminal,
-`pip install miniaudio` adds it. The song is mixed down to mono, which is
-what the console streams best from the card while it draws. A WAV keeps
-its own sample rate (up to 48 kHz); the other formats are brought to
-32 kHz. A three-minute song takes about 10 to 17 MB on the card. Songs
+WAV files are always read. Other songs (MP3, M4A, FLAC, OGG, AIFF) go
+through the first decoder the computer has: the `miniaudio` package, which
+the downloadable builds include; on a Mac, the converter that comes with
+macOS, which reads MP3, M4A, FLAC and AIFF; or ffmpeg. With none of them,
+only WAV files work, and the Music line says what to install. The song is
+mixed down to mono, which is what the console streams best from the card
+while it draws. A WAV keeps its own sample rate (up to 48 kHz); the other
+formats are brought to 32 kHz. A three-minute song takes about 10 to 17 MB on the card. Songs
 longer than 30 minutes are refused.
 
 The console turns the music on and off with its **MUSIC** row

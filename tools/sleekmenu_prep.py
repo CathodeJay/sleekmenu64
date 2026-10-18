@@ -607,8 +607,9 @@ def main(argv: list[str] | None = None) -> int:
                         help="the browser's colours on this card (the default is "
                              f"{themes.DEFAULT.id}); the card keeps the choice")
     parser.add_argument("--music", type=Path, default=None, metavar="FILE",
-                        help="loop this track in the browser (WAV; MP3, FLAC and OGG need the miniaudio "
-                             "package); the console's filter page turns it on and off")
+                        help="loop this song in the browser (WAV; MP3, M4A, FLAC, OGG and AIFF through "
+                             "miniaudio, macOS's afconvert or ffmpeg); the console's filter page turns it "
+                             "on and off")
     parser.add_argument("--no-music", action="store_true",
                         help="take the music off the card")
     parser.add_argument("--gui", action="store_true",

@@ -8,6 +8,8 @@ import array
 import contextlib
 import io
 import math
+import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -168,28 +170,59 @@ class DecodeTests(unittest.TestCase):
                 self.assertRaisesRegex(music.MusicError, "longer than 0 minutes"):
             music.decode(self.wav("long.wav", 2))
 
-    def test_without_miniaudio_only_wav_files_are_read(self):
+    def test_without_a_decoder_only_wav_files_are_read(self):
         mp3 = self.folder / "song.mp3"
         mp3.write_bytes(b"ID3\x04" + bytes(1000))
-        with mock.patch.dict(sys.modules, {"miniaudio": None}):
+        with no_decoders():
             self.assertFalse(music.decoder_available())
-            self.assertEqual(music.suffixes(), music.WAV_SUFFIXES)
-            with self.assertRaisesRegex(music.MusicError, "need the miniaudio package"):
+            with self.assertRaisesRegex(music.MusicError, "install the miniaudio package .* or ffmpeg"):
                 music.decode(mp3)
-            with self.assertRaisesRegex(music.MusicError, "Only WAV files"):
+            with self.assertRaisesRegex(music.MusicError, "install the miniaudio package"):
                 music.probe(mp3)
             # a file that is not a WAV, whatever its name says
             (self.folder / "fake.wav").write_bytes(b"not a wav")
             with self.assertRaisesRegex(music.MusicError, "isn't a WAV"):
                 music.decode(self.folder / "fake.wav")
             self.assertEqual(music.decode(self.wav("fine.wav", 1.5)).rate, 22050)
+            # a WAV is a WAV whatever its name says, too
+            self.wav("song.mp3", 1.5)
+            self.assertEqual(music.decode(mp3).rate, 22050)
+
+    def test_the_chooser_offers_every_kind_of_song(self):
+        for suffix in (".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aiff"):
+            self.assertIn(suffix, music.SUFFIXES)
 
     def test_a_file_that_is_not_there(self):
         with self.assertRaisesRegex(music.MusicError, "can't be opened"):
             music.decode(self.folder / "gone.wav")
+        with self.assertRaisesRegex(music.MusicError, "can't be opened"):
+            music.decode(self.folder / "gone.mp3")
 
 
-@unittest.skipUnless(music.decoder_available(), "miniaudio is not installed")
+def no_decoders():
+    """This computer, as one with nothing to read an MP3 with."""
+    stack = contextlib.ExitStack()
+    stack.enter_context(mock.patch.object(music, "_miniaudio", return_value=None))
+    stack.enter_context(mock.patch.object(music, "_converters", return_value=[]))
+    return stack
+
+
+def ulaw_wav(path: Path, seconds: float, rate: int = 44100, channels: int = 2) -> Path:
+    """A WAV of G.711 mu-law samples: compressed, so this module does not
+    read it, and every decoder does."""
+    def encode(sample: int) -> int:
+        sign = 0x80 if sample < 0 else 0
+        sample = min(abs(sample), 32635) + 0x84
+        exponent, mask = 7, 0x4000
+        while exponent and not sample & mask:
+            exponent, mask = exponent - 1, mask >> 1
+        return ~(sign | exponent << 4 | (sample >> (exponent + 3)) & 0x0F) & 0xFF
+    data = bytes(encode(value) for value in tone(int(seconds * rate), channels))
+    path.write_bytes(riff(struct.pack("<HHIIHH", 7, channels, rate, rate * channels, channels, 8), data))
+    return path
+
+
+@unittest.skipUnless(music._miniaudio() is not None, "miniaudio is not installed")
 class MiniaudioTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -199,26 +232,103 @@ class MiniaudioTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_a_decoded_file_is_brought_to_32_khz_mono(self):
-        path = self.folder / "song.ogg"
-        # miniaudio reads by what is in the file, not by its name
-        with wave.open(str(path), "wb") as file:
-            file.setnchannels(2)
-            file.setsampwidth(2)
-            file.setframerate(44100)
-            file.writeframes(little(tone(88200, 2)))
-        track = music.decode(path)
+        path = ulaw_wav(self.folder / "song.wav", 2)
+        with mock.patch.object(music, "_converters", return_value=[]):
+            track = music.decode(path)
         self.assertEqual(track.rate, music.DECODED_RATE)
         self.assertAlmostEqual(track.seconds, 2.0, delta=0.01)
-        self.assertAlmostEqual(music.probe(path), 2.0, delta=0.01)
-        self.assertIn(".mp3", music.suffixes())
+        self.assertEqual(music.decoders()[0], "miniaudio")
 
-    def test_a_file_miniaudio_cannot_read(self):
+    def test_a_file_no_decoder_can_read(self):
         path = self.folder / "song.mp3"
         path.write_bytes(bytes(5000))
-        with self.assertRaisesRegex(music.MusicError, "can't be read"):
-            music.decode(path)
-        with self.assertRaisesRegex(music.MusicError, "can't be read"):
-            music.probe(path)
+        with mock.patch.object(music, "_converters", return_value=[]):
+            with self.assertRaisesRegex(music.MusicError, "can't be read"):
+                music.decode(path)
+            with self.assertRaisesRegex(music.MusicError, "can't be read"):
+                music.probe(path)
+
+
+class ConverterTests(unittest.TestCase):
+    """afconvert on a Mac and ffmpeg anywhere, for a computer without
+    miniaudio: the downloadable archive run by a Python that has none."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.folder = Path(self.temporary.name)
+        patch = mock.patch.object(music, "_miniaudio", return_value=None)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def fake_afconvert(self, works: bool = True) -> Path:
+        """An afconvert that writes a 32 kHz stereo WAV and notes how it was
+        called, on a PATH of its own."""
+        bin_dir = self.folder / "bin"
+        bin_dir.mkdir()
+        made = bin_dir / "song.wav"
+        with wave.open(str(made), "wb") as file:
+            file.setnchannels(2)
+            file.setsampwidth(2)
+            file.setframerate(32000)
+            file.writeframes(little(tone(64000, 2)))
+        tool = bin_dir / "afconvert"
+        tool.write_text(
+            f"#!{sys.executable}\n"
+            "import shutil, sys\n"
+            f"open({str(bin_dir / 'called')!r}, 'w').write('\\n'.join(sys.argv[1:]))\n"
+            + (f"shutil.copy({str(made)!r}, sys.argv[-1])\n" if works else "sys.exit(1)\n"),
+            encoding="utf-8")
+        tool.chmod(0o755)
+        return bin_dir
+
+    def test_a_mac_reads_other_songs_with_afconvert(self):
+        bin_dir = self.fake_afconvert()
+        song = self.folder / "Title Theme.mp3"
+        song.write_bytes(b"ID3\x04" + bytes(1000))
+        with mock.patch.object(sys, "platform", "darwin"), \
+                mock.patch.dict(os.environ, {"PATH": str(bin_dir)}), \
+                mock.patch.object(music, "FFMPEG_PLACES", ()):
+            self.assertEqual(music.decoders(), ["afconvert"])
+            track = music.decode(song)
+            self.assertAlmostEqual(music.probe(song), 2.0)
+        self.assertEqual((track.rate, len(track.samples)), (32000, 64000))
+        called = (bin_dir / "called").read_text().split("\n")
+        self.assertEqual(called[:4], ["-f", "WAVE", "-d", "LEI16@32000"])
+        self.assertEqual(called[4], str(song))
+        self.assertTrue(called[5].endswith(".wav"))
+
+    def test_afconvert_is_only_a_macs(self):
+        bin_dir = self.fake_afconvert()
+        with mock.patch.object(sys, "platform", "linux"), \
+                mock.patch.dict(os.environ, {"PATH": str(bin_dir)}), \
+                mock.patch.object(music, "FFMPEG_PLACES", ()):
+            self.assertEqual(music.decoders(), [])
+
+    def test_a_converter_that_fails_is_said_plainly(self):
+        bin_dir = self.fake_afconvert(works=False)
+        song = self.folder / "song.ogg"
+        song.write_bytes(b"OggS" + bytes(1000))
+        with mock.patch.object(sys, "platform", "darwin"), \
+                mock.patch.dict(os.environ, {"PATH": str(bin_dir)}), \
+                mock.patch.object(music, "FFMPEG_PLACES", ()):
+            with self.assertRaisesRegex(music.MusicError, "can't be read. Pick an MP3"):
+                music.decode(song)
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is not installed")
+    def test_ffmpeg_reads_what_this_module_does_not(self):
+        with mock.patch.object(sys, "platform", "linux"):
+            self.assertEqual(music.decoders(), ["ffmpeg"])
+            track = music.decode(ulaw_wav(self.folder / "song.wav", 2))
+            self.assertEqual(track.rate, music.DECODED_RATE)
+            self.assertAlmostEqual(track.seconds, 2.0, delta=0.02)
+            # and a FLAC, which ffmpeg also writes
+            flac = self.folder / "song.flac"
+            subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(self.folder / "song.wav"),
+                            str(flac)], check=True)
+            self.assertAlmostEqual(music.probe(flac), 2.0, delta=0.02)
 
 
 class CardTests(unittest.TestCase):

@@ -2517,7 +2517,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         show_music()
 
     def browse_music() -> None:
-        patterns = " ".join(f"*{suffix}" for suffix in music.suffixes())
+        # Every kind of song a decoder might read, so none is greyed out in
+        # the chooser; one this computer can't read says so when picked.
+        patterns = " ".join(f"*{suffix}" for suffix in music.SUFFIXES)
         chosen = filedialog.askopenfilename(title="A song for SleekMenu",
                                             filetypes=[("Music", patterns), ("All files", "*")])
         if chosen:

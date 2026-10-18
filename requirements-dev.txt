@@ -12,5 +12,6 @@ Pillow>=9.0
 # window works without it, with a button in its place; the downloadable builds carry it.
 tkinterdnd2>=0.4
 # Optional: reads MP3, FLAC and OGG files for the background music. WAV
-# files are read without it; the downloadable builds carry it.
+# files are read without it, and so are the others on a Mac (afconvert)
+# or wherever ffmpeg is installed; the downloadable builds carry it.
 miniaudio>=1.59
