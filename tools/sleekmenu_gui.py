@@ -370,10 +370,13 @@ def boot_line(boot: direct_boot.State) -> str:
     if not boot.available:
         return boot.why
     if boot.cart == direct_boot.PRO:
-        return ("EverDrive-64 Pro, firmware 26.1014 or newer. Replaces the Pro's menu, so no in-game menu "
-                "or save states; untick to have it back.")
-    return ("EverDrive-64 X7. A reset inside a game returns to the EverDrive menu; "
-            "untick to start in the EverDrive menu again.")
+        return ("Turn this on to start the console directly in SleekMenu (needs firmware 26.1014 or newer). "
+                "The Pro's in-game menu and save states won't be available.")
+    return "Turn this on to start the console directly in SleekMenu."
+
+
+#: The line above the headline, for a card an EverDrive has been in.
+CART_LINES = {direct_boot.X7: "EverDrive-64 X7 detected", direct_boot.PRO: "EverDrive-64 Pro detected"}
 
 
 def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: bool = True,
@@ -2132,8 +2135,13 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     strong = tkfont.nametofont("TkDefaultFont").copy()
     strong.configure(weight="bold")
     state["fonts"] = (big, strong)          # a font nothing holds is collected, and the label falls back
-    headline = ttk.Label(body, textvariable=headline_var, font=big, wraplength=width, justify="left")
-    headline.grid(row=0, column=0, sticky="w")
+    # Which EverDrive the card is for, above everything said about it.
+    heading = ttk.Frame(body)
+    heading.grid(row=0, column=0, sticky="w")
+    cart_var = tk.StringVar()
+    cart_label = ttk.Label(heading, textvariable=cart_var, foreground=colors["muted"])
+    headline = ttk.Label(heading, textvariable=headline_var, font=big, wraplength=width, justify="left")
+    headline.grid(row=1, column=0, sticky="w")
     detail = ttk.Label(body, textvariable=detail_var, foreground=colors["muted"], wraplength=width,
                        justify="left")
     detail.grid(row=1, column=0, sticky="w", pady=(6, 0))
@@ -2405,6 +2413,11 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         roms_box.configure(values=[shown_folder("")] + [shown_folder(folder) for folder in folders])
         boot = direct_boot.state(chosen) if chosen is not None else direct_boot.State()
         state["boot"] = boot
+        cart_var.set(CART_LINES.get(boot.cart, ""))
+        if boot.cart:
+            cart_label.grid(row=0, column=0, sticky="w", pady=(0, 2))
+        else:
+            cart_label.grid_remove()
         if boot.cart:
             boot_row.grid(row=10, column=0, sticky="ew", pady=(10, 0))
             boot_check.configure(state="normal" if boot.available else "disabled")
@@ -2673,7 +2686,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     state["swatch"] = swatch
     state["boot_row"] = boot_row
     state["boot_note"] = boot_note
-    state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var,
+    state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var, "cart": cart_var,
                       "result": result_var, "last": last_var, "pack": metadata_note, "cheats": cheats_note,
                       "shots": shots_note, "browser": browser_note, "newer": newer_var}
     state["start"] = start
