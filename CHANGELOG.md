@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.2.1
+
+**Upgrading from 2.2.0:** download the new Game Catalog Manager and press
+**Update card**. It puts SleekMenu 2.2.1 on the card.
+
+- **EverDrive-64 Pro: the card no longer stops answering.** After a while
+  in SleekMenu, most often with music on or while going through games on
+  their details screen, the music stopped and nothing on the card could be
+  read any more. Games failed with "ROM OPEN FAILED" and screenshots no
+  longer loaded until the console was turned off. SleekMenu sometimes read
+  a reply from the cartridge before it had arrived, and every reply after
+  that was out of step. The X7 was not affected.
+
 ## 2.2.0
 
 **Upgrading from 2.1:** download the new Game Catalog Manager and press
