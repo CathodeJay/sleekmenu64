@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.2.0
+
+**Upgrading from 2.1:** download the new Game Catalog Manager and press
+**Update card**.
+
+- **Start the console in SleekMenu on the Pro too.** The switch on the
+  Card tab now works on the EverDrive-64 Pro with firmware 26.1014 or
+  newer: it copies SleekMenu to `ED64/menu.n64`, which the Pro starts in
+  place of its own menu. Games started from SleekMenu then have no in-game
+  menu or save states; untick the switch to have the Pro's menu again. On
+  the X7 it works as before, through `ED64/autoexec.v64`.
+- **The box-art collection lives in `sleekmenu/`.** `release-metadata.zip`
+  is fetched into the `sleekmenu/` folder with everything else the Game
+  Catalog Manager keeps, and one at the card root is moved there by the
+  next update. Nothing is downloaded again.
+
 ## 2.1.1
 
 **Upgrading from 2.1.0:** download the new Game Catalog Manager and press
