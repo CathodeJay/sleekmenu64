@@ -19,8 +19,10 @@ include $(N64_INST)/include/n64.mk
 ROMNAME := sleekmenu
 NFM_BOOT := third_party/n64flashcartmenu/boot
 EDIO := third_party/ed64pro/edio
+# The library's n64.c is not built: its pi_rd and pi_wr come from
+# src/pro/pro_pi.c, whose reads never let a DMA share a cache line.
 C_FILES := $(shell find src -name '*.c') $(NFM_BOOT)/boot.c $(NFM_BOOT)/cic.c $(NFM_BOOT)/cheats.c \
-           $(EDIO)/everdrive.c $(EDIO)/n64.c
+           $(EDIO)/everdrive.c
 S_FILES := $(NFM_BOOT)/reboot.S
 OBJS := $(addprefix $(BUILD_DIR)/,$(C_FILES:.c=.o) $(S_FILES:.S=.o))
 DFS_IMAGE ?=

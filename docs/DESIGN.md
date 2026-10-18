@@ -412,6 +412,19 @@ again where it was. The MUSIC row of the filter page turns it on and
 off like the theme row, at once, and writes `sleekmenu/music.txt` when the
 page is left.
 
+**On the Pro, a DMA never shares a cache line.** Everything the Pro's MCU
+says comes back over the PI by DMA, which writes RDRAM behind the CPU's
+data cache. If the destination shares a cache line with data an interrupt
+uses, the interrupt can bring the line back into the cache while the DMA
+runs, and the CPU then reads the destination's old bytes. libdragon
+updates its tick count on every interrupt, so this is not rare, and one
+stale reading of the FIFO's fill level is enough to throw every reply
+after it out of step, and with them every card access until power-off.
+`src/pro/pro_pi.c` therefore lets the DMA write only whole lines that
+belong to the destination, and sends a part line at either end through a
+buffer of its own. It replaces the vendored library's `n64.c`, which is not
+built.
+
 **The help bar draws the buttons.** A line of help is written with a
 button's code in braces -- `{S}PLAY {A}INFO {<}{>}TABS` -- and `buttons`
 draws each as a nine-pixel picture: a disc for A, B, Start and the C

@@ -38,6 +38,14 @@ implementation; this is the protocol as its author wrote it.
 them, so only the Pro backend includes it, through `appmain.h`, and nothing
 in `src/` outside that backend does.
 
-`n64.c` provides `pi_rd`/`pi_wr` on top of libdragon's `dma_read_raw_async`
-and `dma_write_raw_async`, which exist on trunk (494f1f5) as well as on the
-preview branch the sample was built against.
+`n64.c` is kept here but not compiled. It provides `pi_rd` and `pi_wr`, the
+two PI transfers the rest of the library is built on, and its `pi_rd` lets
+the DMA write into a cache line the destination shares with other data.
+Every register read lands in a four-byte static, and libdragon updates its
+tick count on every interrupt; when the linker puts the two in one line, an
+interrupt during the DMA brings the old value back into the cache, and a
+stale FIFO fill level throws every reply after it out of step.
+`src/pro/pro_pi.c` defines both functions, declared as in `n64.h`, with a
+`pi_rd` whose DMA only writes whole lines of the destination. The library's
+own transfers reach the bus unchanged: one DMA each, same address, same
+length.

@@ -253,6 +253,30 @@ class HostModuleTests(unittest.TestCase):
         self.assertIn("cheats_hook = sm_cheats_hook_check(header, sizeof(header));", launch)
         self.assertIn("cheats_hook == SM_CHEATS_HOOK_OK) {", launch)
 
+    def test_host_pro_pi_module(self):
+        """The PI transfers the Pro library is built on, against a fake bus:
+        a DMA only writes whole cache lines of the caller's own, and the
+        library's transfers reach the bus as one DMA each, as before."""
+        build_and_run("pro-pi-test", ["src/pro/pro_pi.c", "tests/pro_pi_test.c"],
+                      ["-Itests/stubs"])
+
+    def test_the_library_gets_its_pi_transfers_from_the_backend(self):
+        """n64.c stays in third_party, byte for byte, but is not built:
+        pro_pi.c defines the same two functions, declared the same way, and
+        nothing else in the build defines them."""
+        makefile = (ROOT / "Makefile.n64").read_text(encoding="utf-8")
+        self.assertNotIn("$(EDIO)/n64.c", makefile)
+        self.assertTrue((ROOT / "third_party/ed64pro/edio/n64.c").is_file())
+        theirs = (ROOT / "third_party/ed64pro/edio/n64.h").read_text(encoding="utf-8")
+        ours = (ROOT / "src/pro/pro_pi.h").read_text(encoding="utf-8")
+        for prototype in ("void pi_rd(void *dst, unsigned long pi_address, unsigned long len);",
+                          "void pi_wr(void *src, unsigned long pi_address, unsigned long len);"):
+            self.assertIn(prototype, theirs)
+            self.assertIn(prototype, ours)
+        definers = [path for path in (ROOT / "src").rglob("*.c")
+                    if re.search(r"^void pi_rd\(", path.read_text(encoding="utf-8"), re.M)]
+        self.assertEqual(definers, [ROOT / "src/pro/pro_pi.c"])
+
     def test_host_pro_fs_module(self):
         """The Pro's sd:/ driver against a fake MCU that enforces the real
         one's rule -- one open file -- and records every command."""
@@ -355,10 +379,15 @@ class RetiredModuleTests(unittest.TestCase):
         """libdragon's dma_write() forces its address into 0x1000_0000, the
         cartridge ROM window, so it cannot reach the battery-backed save RAM on
         domain 2 at all. The raw call is the only way there, and it is allowed
-        in exactly one place, for exactly that address."""
+        in exactly one place, for exactly that address. The other raw caller
+        is the Pro library's own PI layer, pro_pi.c, which the library calls
+        for its registers and the cartridge's memory and nothing else does."""
         for path in (ROOT / "src").rglob("*.c"):
             source = strip_comments(path.read_text(encoding="utf-8"))
             calls = re.findall(r"dma_(?:read|write)_raw_async\(([^;]*?)\)", source)
+            if path.relative_to(ROOT).as_posix() == "src/pro/pro_pi.c":
+                self.assertEqual(calls, ["dst, pi, len", "bounce, pi, bus", "src, pi, len"])
+                continue
             if path.name != "save_io.c":
                 self.assertEqual(calls, [], f"{path.name} does raw PI transfers")
                 continue
@@ -1197,7 +1226,7 @@ class FlashcartInterfaceTests(unittest.TestCase):
         into anything but the backend."""
         makefile = (ROOT / "Makefile.n64").read_text(encoding="utf-8")
         self.assertIn("$(BUILD_DIR)/src/pro/%.o: CFLAGS += -I$(EDIO)", makefile)
-        self.assertIn("$(EDIO)/everdrive.c $(EDIO)/n64.c", makefile)
+        self.assertIn("$(EDIO)/everdrive.c\n", makefile)
         self.assertIn("$(BUILD_DIR)/$(EDIO)/%.o: CFLAGS += -Wno-error -w", makefile)
         for path in (ROOT / "src").rglob("*.[ch]"):
             text = path.read_text(encoding="utf-8")

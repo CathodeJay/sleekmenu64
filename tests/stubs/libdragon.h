@@ -131,4 +131,14 @@ extern uint64_t sm_test_now_us;
 uint64_t get_ticks_us(void);
 uint64_t get_ticks_ms(void);
 
+/* --- the PI bus -----------------------------------------------------------
+   What src/pro/pro_pi.c asks of libdragon. Nothing in the stub defines
+   these: tests/pro_pi_test.c does, over a fake bus that records every DMA
+   and every cache operation. */
+void data_cache_hit_writeback(volatile const void *addr, unsigned long length);
+void data_cache_hit_writeback_invalidate(volatile void *addr, unsigned long length);
+void dma_read_raw_async(void *ram_address, unsigned long pi_address, unsigned long len);
+void dma_write_raw_async(const void *ram_address, unsigned long pi_address, unsigned long len);
+void dma_wait(void);
+
 #endif
