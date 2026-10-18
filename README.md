@@ -147,12 +147,12 @@ To go back, untick the box and update, or delete the file. More in
   their name, their folder and the database, and tagged HACK, TL or HB on
   their row; Z filters by kind. A wrong guess is corrected in the Game
   Catalog Manager.
-- **Screenshots:** tick **Fetch screenshots** on the Game Catalog Manager's
+- **Screenshots:** tick **Download screenshots** on the Game Catalog Manager's
   Card tab and each retail game gets its title screen and a moment of play:
   two thumbnails beside the facts on its details, and full size in the box
   view, after the box. Add your own for a hack from the Games tab.
 - **Cheats** come from the EverDrive-64 Pro's cheat pack in `ED64/CHEATS/`,
-  or from libretro when you tick **Fetch cheat codes** on the Game Catalog
+  or from libretro when you tick **Download cheat codes** on the Game Catalog
   Manager's Card tab, and need an Expansion Pak.
 - **`.z64` and `.v64`** dumps load; `.n64` ones do not — convert them first.
 

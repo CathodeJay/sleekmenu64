@@ -52,12 +52,13 @@ DOWNLOAD_URL = metadata_repo.RELEASES_URL
 #: The banner at the end of the row above the tabs, and where it leads.
 COFFEE_TEXT = "Buy me a coffee"
 COFFEE_URL = "https://buymeacoffee.com/CathodeJay"
-#: Under Fetch cheat codes: what it does, and why it cannot be ticked while
+#: Under Download cheat codes: what it does, and why it cannot be ticked while
 #: nothing is downloaded.
-CHEATS_HINT = "From libretro, for the games the EverDrive's cheat pack does not cover. Needs an Expansion Pak."
-CHEATS_OFFLINE = "Not while downloads are off."
-#: Under Fetch screenshots.
-SHOTS_HINT = "Title screens and in-game pictures from libretro, for retail games: about 0.4 MB a game on the card."
+CHEATS_HINT = ("Cheat codes from libretro for games the EverDrive's own list doesn't cover. "
+              "Requires an Expansion Pak.")
+CHEATS_OFFLINE = "Unavailable while downloads are off."
+#: Under Download screenshots.
+SHOTS_HINT = "Title and in-game screenshots for retail games, from libretro. About 0.4 MB per game."
 #: The colours of a theme shown beside its name, in this order.
 SWATCH_ROLES = ("bg", "band", "select", "accent", "text")
 #: The box is 96x72 on the console; twice that on a desktop screen is
@@ -154,6 +155,9 @@ def newcomers(document: dict, roms: list[str]) -> list[str]:
 
 SET_UP = "Set up card"
 UPDATE = "Update card"
+#: A card path that is not a folder: typed wrong, or the card was taken out.
+NOT_A_CARD = "Card not found"
+NOT_A_CARD_DETAIL = "Check the path, or click Choose… to find your SD card."
 
 
 @dataclass(frozen=True)
@@ -187,21 +191,23 @@ def browser_line(browser: releases.Browser, keep: bool = True, offline: bool = F
     that keeps it up to date."""
     mine = version.VERSION
     if not keep:
-        return f"{releases.ROM_NAME} on the card is left as it is."
+        return "SleekMenu on the card won't be changed."
     if browser.state == releases.CURRENT:
-        return f"The card has SleekMenu {mine}, the release this Game Catalog Manager goes with."
+        return f"SleekMenu {mine} is installed and up to date."
     if browser.state == releases.NEWER:
-        return (f"The card has SleekMenu {browser.version}, newer than this Game Catalog Manager: "
-                "get the newer Game Catalog Manager.")
+        return (f"SleekMenu {browser.version} is installed, which is newer than this Catalog Manager. "
+                "Download the latest Catalog Manager.")
     if browser.state == releases.OWN:
-        return "The card has a SleekMenu of its own build: it is left as it is."
+        return "A custom build of SleekMenu is installed. It won't be replaced."
     if browser.state == releases.OTHER:
-        return f"{releases.ROM_NAME} on the card is not SleekMenu: it is left as it is."
-    now = (f"The card has SleekMenu {browser.version}" if browser.state == releases.OLDER and browser.version
-           else "SleekMenu is not on the card yet")
+        return f"The {releases.ROM_NAME} file on the card isn't SleekMenu, so it won't be replaced."
+    if browser.state == releases.OLDER and browser.version:
+        now, then = f"SleekMenu {browser.version} is installed", f"The next update will install {mine}."
+    else:
+        now, then = "SleekMenu isn't on the card yet", "The next update will install it."
     if offline:
-        return f"{now}. Downloads are off, so {mine} is not fetched."
-    return f"{now}; the next update puts {mine} on it."
+        return f"{now}. Downloads are off, so {mine} won't be installed."
+    return f"{now}. {then}"
 
 
 def card_status(card: Path | None, offline: bool = False, roms: list[str] | None = None,
@@ -212,34 +218,34 @@ def card_status(card: Path | None, offline: bool = False, roms: list[str] | None
     `browser` is the card's SleekMenu, when the caller has read it, and
     `keep` whether the next update brings it up to date."""
     if card is None:
-        return CardStatus("Pick your card", "Plug it in and press Refresh, or choose its folder.")
+        return CardStatus("Insert your SD card", "Then press Refresh, or click Choose… to find it.")
     if roms is None:
         try:
             roms = library.walk(card)
         except library.LibraryError:
-            return CardStatus("That is not a card", "Choose the card itself: the folder its games are in.")
+            return CardStatus(NOT_A_CARD, NOT_A_CARD_DETAIL)
     try:
         document = card_catalog.load(card)
     except card_catalog.CatalogJsonError:
         document = None
-    kept = " Downloads are off: only what is already on the card is used." if offline else ""
+    kept = " Downloads are off, so nothing new will be downloaded." if offline else ""
     if document is None:
         if not roms:
             return CardStatus("No games on this card yet",
-                              "Copy your games onto it, in any folders you like, then press Refresh.",
-                              SET_UP, "Makes the folders SleekMenu uses, and nothing else until there are games.",
+                              "Copy your games to the card (any folders are fine), then press Refresh.",
+                              SET_UP, "Creates the folders SleekMenu needs. Nothing else happens until you add games.",
                               ready=True)
         earlier = (card / card_layout.CARD_FOLDER / card_layout.CATALOG_NAME).is_file()
-        found = f"{plural(len(roms), 'game')} found on it. Nothing is moved or renamed."
+        found = f"{plural(len(roms), 'game')} found. Your files stay where they are."
         if earlier:
-            return CardStatus("Update this card", found + " It was prepared by an earlier version.", UPDATE,
-                              "Reads the games again, fetches their boxes and descriptions, and rewrites "
+            return CardStatus("Update this card", found + " This card was set up with an older version.", UPDATE,
+                              "Scans your games again, downloads their box art and descriptions, and rebuilds "
                               "the catalog." + kept, ready=True)
         return CardStatus("Set up this card", found, SET_UP,
-                          "Writes the catalog from what is already on the card. Downloads are off, so the "
-                          "games get no boxes or descriptions that are not there." if offline else
-                          "Fetches a box and a description for each game, then writes the catalog. Up to "
-                          "about 330 MB for a complete library, once. You can stop and carry on later.",
+                          "Builds the catalog from what's already on the card. Downloads are off, so games "
+                          "without box art or a description will stay that way." if offline else
+                          "Downloads box art and a description for each game, then builds the catalog. Up to "
+                          "330 MB the first time. You can stop and resume later.",
                           ready=True)
     games = document.get("games", [])
     new = len(newcomers(document, roms))
@@ -248,18 +254,18 @@ def card_status(card: Path | None, offline: bool = False, roms: list[str] | None
                   if str((game.get("sources") or {}).get("cover", provenance.NONE)) == provenance.NONE)
     parts = []
     if new:
-        parts.append(f"{new:,} added since the last update.")
+        parts.append(f"{plural(new, 'new game')} since the last update.")
     if boxless:
-        parts.append(f"{boxless:,} {'has' if boxless == 1 else 'have'} no box.")
+        parts.append(f"{plural(boxless, 'game')} {'has' if boxless == 1 else 'have'} no box art.")
     if behind:
-        parts.append(f"SleekMenu {version.VERSION} is ready to go on it.")
+        parts.append(f"SleekMenu {version.VERSION} is ready to install.")
     if new:
-        explain = (f"Adds the {plural(new, 'new game')} with {'its box and description' if new == 1 else 'their boxes and descriptions'}"
-                   ", then rewrites the catalog.")
+        explain = (f"Adds the {plural(new, 'new game')} with "
+                   f"{'its box art and description' if new == 1 else 'their box art and descriptions'}.")
     elif behind:
-        explain = f"Puts SleekMenu {version.VERSION} on the card, then rewrites the catalog."
+        explain = f"Installs SleekMenu {version.VERSION} on the card."
     else:
-        explain = "Nothing new on the card. Update after adding games or changing an option."
+        explain = "Nothing new. Update again after adding games or changing an option."
     built = when(str(document.get("built", "")))
     return CardStatus(f"{plural(len(games), 'game')} on this card", " ".join(parts) or "Everything is up to date.",
                       UPDATE, explain + kept, f"Last update: {built}" if built else "", ready=True)
@@ -269,7 +275,7 @@ def card_status(card: Path | None, offline: bool = False, roms: list[str] | None
 
 #: What a run does, as a person would say it. sleekmenu_prep.run() works in
 #: this order.
-STEPS = ("Read your games", "Fetch boxes and descriptions", "Build the catalog", "Write it to the card")
+STEPS = ("Scan your games", "Download box art and descriptions", "Build the catalog", "Save to the card")
 #: The run's passes, by the label their progress carries, and the step each
 #: belongs to.
 STEP_OF_PASS = {"scanning": 0, "checksums": 0, "fetching": 1, "boxes": 1, "cheats": 1, "screenshots": 1,
@@ -351,16 +357,14 @@ def browser_failure_line(failure: str, status: CardStatus, first: bool = True) -
     was not the reason: the card keeps the SleekMenu it had either way."""
     start = "Done, but " if first else ""
     name = f"SleekMenu {version.VERSION}"
+    kept = "Your current SleekMenu was kept."
     if failure == releases.NOT_RELEASED:
-        why = f"{name} is not on its release page yet"
-        then = f"press {status.action} again later"
+        text = f"{start}{name} isn't available for download yet. {kept} Try again later."
     elif failure == releases.WRONG_FILE:
-        why = f"the file on the release page is not {name}"
-        then = "please report it on GitHub"
+        text = f"{start}the SleekMenu download was the wrong file. {kept} Please report this on GitHub."
     else:
-        why = f"{name} could not be written to the card (is it full or locked?)"
-        then = f"free some room and press {status.action} again"
-    text = f"{start}{why}. SleekMenu on the card was not changed; {then}."
+        text = (f"{start}SleekMenu couldn't be saved to the card. Check that the card isn't full or locked, "
+                f"then try again. {kept}")
     return text[0].upper() + text[1:]
 
 
@@ -384,14 +388,14 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
     """One sentence for how a run ended. `direct` is a card whose console
     starts in SleekMenu, which changes what to do next."""
     if code == 3:
-        return f"Stopped. What was fetched is kept; press {status.action} to carry on."
+        return f"Stopped. Everything downloaded so far is kept. Press {status.action} to continue."
     if code != 0:
         return ""
     if not games_on_card:
         return "The folders are ready. Copy your games onto the card, then press Refresh."
     if outcome is not None and outcome.collection_failed:
-        return ("Done, but the boxes and descriptions could not be downloaded. Check the connection "
-                f"and press {status.action} again.")
+        return ("Done, but the box art and descriptions couldn't be downloaded. Check your internet "
+                "connection and try again.")
     unreached = [plural(count, one, many) for count, one, many in (
         (getattr(outcome, "boxes_unreached", 0), "box", "boxes"),
         (getattr(outcome, "cheats_unreached", 0), "cheat file", None),
@@ -401,15 +405,15 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
         unreached.append(f"SleekMenu {version.VERSION}")
     said = []
     if unreached:
-        said.append(f"Done, but {' and '.join(unreached)} could not be downloaded. "
-                    f"Press {status.action} again when the connection is back.")
+        said.append(f"Done, but {' and '.join(unreached)} couldn't be downloaded. "
+                    "Try again when you're back online.")
     if browser and browser != releases.CONNECTION:
         said.append(browser_failure_line(browser, status, first=not said))
     if said:
         return " ".join(said)
     if direct:
-        return "Done. Eject the card and switch the console on: it starts in SleekMenu."
-    return "Done. Eject the card and start SleekMenu64.z64 from the EverDrive menu."
+        return "Done. Eject the card and turn on your console. It will start in SleekMenu."
+    return "Done. Eject the card, then start SleekMenu64.z64 from the EverDrive menu."
 
 
 def megabytes(size: int) -> str:
@@ -536,10 +540,10 @@ def collection_status(card: Path | None, chosen: str = "", offline: bool = False
         try:
             boxes = count_boxes(path)
         except metadata_repo.RepoError as error:
-            return CollectionStatus(False, f"✗ {path.name} is not the collection: {error}")
+            return CollectionStatus(False, f"✗ {path.name} isn't the box art collection.")
         if not boxes:
-            return CollectionStatus(False, f"✗ {path.name} holds no boxes.")
-        return CollectionStatus(True, f"✓ Using {path.name}: {boxes} boxes.", path)
+            return CollectionStatus(False, f"✗ {path.name} has no box art in it.")
+        return CollectionStatus(True, f"✓ Using {path.name} ({plural(boxes, 'box', 'boxes')}).", path)
     if card is None:
         return CollectionStatus(False, "")
     found = metadata_repo.find_on_card(card)
@@ -547,18 +551,18 @@ def collection_status(card: Path | None, chosen: str = "", offline: bool = False
         try:
             boxes = count_boxes(found)
         except metadata_repo.RepoError as error:
-            return CollectionStatus(False, f"✗ {found.name} on the card will not open ({error}): "
-                                    + ("choose a copy (click here for GitHub)." if offline
-                                       else "it is fetched again at the next update."),
+            return CollectionStatus(False, "✗ The copy on the card is damaged. "
+                                    + ("Click here to get a new one from GitHub, then choose it." if offline
+                                       else "It will be downloaded again on the next update."),
                                     None, not offline)
-        where = found.relative_to(card).as_posix() if found.is_relative_to(card) else str(found)
         size = f", {megabytes(found.stat().st_size)}" if found.is_file() else ""
-        return CollectionStatus(True, f"✓ {where} is on the card: {boxes} boxes{size}.", found)
+        return CollectionStatus(True, f"✓ Box art and descriptions are on the card "
+                                      f"({plural(boxes, 'box', 'boxes')}{size}).", found)
     if offline:
-        return CollectionStatus(False, f"✗ Not on the card, and downloads are off: choose a copy of "
-                                       f"{metadata_repo.RELEASE_ZIP_NAME} (click here for GitHub).")
-    return CollectionStatus(False, "Not on the card yet: it is fetched the first time (about 52 MB, "
-                                   "from GitHub).", None, True)
+        return CollectionStatus(False, f"✗ Not on the card, and downloads are off. Click here to get "
+                                       f"{metadata_repo.RELEASE_ZIP_NAME} from GitHub, then choose it.")
+    return CollectionStatus(False, "Not on the card yet. It will be downloaded on the first update "
+                                   "(about 52 MB).", None, True)
 
 
 def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: bool = False,
@@ -764,14 +768,14 @@ def pending_line(pending) -> str:
     parts = []
     changed = [FIELD_LABELS[name].lower() for name in FIELDS if name in pending.fields]
     if pending.picture is not None:
-        changed.append("box")
+        changed.append("box art")
     changed += [FIELD_LABELS["shot_" + slot] for slot in getattr(pending, "shots", ())]
     if changed:
-        parts.append("Changed here, not on the card yet: " + ", ".join(changed) + ".")
+        parts.append("Not on the card yet: " + ", ".join(changed) + ".")
     if pending.removed:
         parts.append("Your " + ", ".join(FIELD_LABELS[name].lower() for name in pending.removed
                                          if name in FIELD_LABELS)
-                     + " was removed: the original comes back at the next update.")
+                     + " was removed. The original comes back on the next update.")
     return " ".join(parts)
 
 
@@ -813,15 +817,15 @@ def game_notes(game: dict) -> list[str]:
     notes = []
     identified = game.get("identified", "")
     if identified == "":
-        notes.append("Not recognised: nothing is known about it but its file name. Fill in what you like.")
+        notes.append("Not recognized. Only the file name is known. Add any details you like.")
     elif identified != "crc":
-        notes.append("Recognised by its game code, not as this exact file: the box, text and facts are "
-                     "the original game's.")
+        notes.append("Matched by its game code, not this exact file. The box art and details come from "
+                     "the original game.")
     cover = str((game.get("sources") or {}).get("cover", ""))
     if cover == provenance.COVER_COLLECTION_REGION:
-        notes.append("The box is another region's.")
+        notes.append("This box art is from another region.")
     elif cover == provenance.COVER_LIBRETRO_MODIFIED:
-        notes.append("The box was changed since the tool fetched it.")
+        notes.append("This box art was modified after it was downloaded.")
     return notes
 
 
@@ -912,12 +916,12 @@ class BoxPicker:
         choices = [] if tab.database is None else box_choices(tab.database(), game)
         offline = fetch.offline_by_request() or (tab.offline is not None and tab.offline())
         if offline or not choices:
-            self.note.set("Downloads are off: only a picture of your own can be chosen." if offline and choices
-                          else "libretro has no other box for this game.")
+            self.note.set("Downloads are off. You can only use your own picture." if offline and choices
+                          else "No other box art was found for this game.")
         else:
             for label, _names in choices:
                 self.add_tile(label, f"{label}: looking…", None)
-            self.note.set("The found boxes come from the libretro thumbnails project.")
+            self.note.set("Box art from the libretro thumbnails project.")
             threading.Thread(target=self.work, args=(choices,), name="sleekmenu-boxes", daemon=True).start()
             window.after(100, self.poll)
         ttk.Label(frame, textvariable=self.note, foreground=tab.colors["muted"], wraplength=540,
@@ -1017,7 +1021,7 @@ class BoxPicker:
         if self.tab.dropped(files):
             self.close()
         elif files:
-            self.note.set(f"{Path(files[0]).name} is not a PNG or JPEG.")
+            self.note.set(f"{Path(files[0]).name} isn't a PNG or JPEG image.")
 
     def own_picture(self) -> None:
         from tkinter import filedialog
@@ -1090,7 +1094,7 @@ class ShotsWindow:
                       justify="left").grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
             ttk.Button(pane, text="Choose…", command=lambda slot=slot: self.choose(slot)).grid(
                 row=3, column=0, sticky="w", pady=(6, 0))
-            remover = ttk.Button(pane, text="Remove mine", command=lambda slot=slot: self.remove(slot))
+            remover = ttk.Button(pane, text="Remove my picture", command=lambda slot=slot: self.remove(slot))
             remover.grid(row=3, column=1, sticky="e", pady=(6, 0))
             self.removers[slot] = remover
             if tab.drop_works:
@@ -1099,9 +1103,9 @@ class ShotsWindow:
         ttk.Label(frame, textvariable=self.note, foreground=tab.colors["muted"], wraplength=2 * width + 14,
                   justify="left").grid(row=2, column=0, columnspan=2, sticky="w", pady=(12, 0))
         if not self.note.get():
-            self.note.set("A PNG or JPEG of your own, any size" + (", chosen or dropped on its side" if
-                                                                  tab.drop_works else "")
-                          + ". Downloads never replace it.")
+            self.note.set("Use your own PNG or JPEG (any size)." + (" Choose it or drop it on a picture." if
+                                                                   tab.drop_works else "")
+                          + " Downloads won't replace it.")
         ttk.Button(frame, text="Close", command=self.close, default="active").grid(row=3, column=1, sticky="e",
                                                                                  pady=(14, 0))
         self.refresh()
@@ -1143,7 +1147,7 @@ class ShotsWindow:
             photo, words, text = None, "", ""
             if mine is not None and slot in waiting:
                 photo = self.own_photo(mine)
-                words = "Yours, not on the card yet: it is put there when this window closes."
+                words = "Your picture. It's saved to the card when you close this window."
             else:
                 pixels = self.tab.shots.pixels(self.game, slot) if self.tab.shots is not None else None
                 if pixels is not None:
@@ -1152,15 +1156,15 @@ class ShotsWindow:
                                                    data=make_sprite.to_ppm(width, height, rgb))
                     label = str(sources.get(slot, ""))
                     words = ("Yours." if provenance.is_yours(label) else
-                             "From libretro, changed since it was fetched." if label == provenance.COVER_LIBRETRO_MODIFIED
+                             "From libretro (modified after download)." if label == provenance.COVER_LIBRETRO_MODIFIED
                              else "From libretro.")
                 else:
                     text = "NONE"
-                    words = ("None. Hacks, translations and homebrew get only their owner's."
+                    words = ("None. Hacks, translations and homebrew only use screenshots you add."
                              if (self.game.get("kind") or kinds.RETAIL) != kinds.RETAIL else
-                             "None. Fetch screenshots on the Card tab, or choose one.")
+                             "None. Turn on Download screenshots on the Card tab, or add your own.")
             if mine is not None and mine.parent != custom_art.art_dir(card):
-                words += " Yours sits beside the ROM; to remove it, delete that file yourself."
+                words += " It's stored next to the ROM. Delete that file to remove it."
             self.photos[slot] = photo
             self.pictures[slot].configure(image=photo or self.blank, text=text)
             self.sources[slot].set(words)
@@ -1174,7 +1178,7 @@ class ShotsWindow:
         try:
             custom_art.save_shot(card, self.game, slot, path)
         except (custom_art.EditError, OSError) as error:
-            self.note.set(f"Not saved: {error}")
+            self.note.set(f"Couldn't save: {error}")
             return False
         self.changed.add(slot)
         self.note.set(f"{SHOT_LABELS[slot]}: saved.")
@@ -1194,7 +1198,7 @@ class ShotsWindow:
             return
         chosen = Path(files[0])
         if chosen.suffix.casefold() not in custom_art.ART_SUFFIXES:
-            self.note.set(f"{chosen.name} is not a PNG or JPEG.")
+            self.note.set(f"{chosen.name} isn't a PNG or JPEG image.")
             return
         self.take(slot, chosen)
 
@@ -1205,11 +1209,11 @@ class ShotsWindow:
         try:
             removed = custom_art.remove_shot(card, self.game, slot)
         except OSError as error:
-            self.note.set(f"Not removed: {error}")
+            self.note.set(f"Couldn't remove: {error}")
             return
         if removed:
             self.changed.add(slot)
-            self.note.set(f"{SHOT_LABELS[slot]}: yours is removed; what the card had before comes back.")
+            self.note.set(f"{SHOT_LABELS[slot]}: your picture was removed. The previous one comes back.")
         self.refresh()
 
     def close(self) -> None:
@@ -1392,7 +1396,7 @@ class GamesTab:
         self.show = tk.StringVar(value=SHOW_ALL)
         self.query = tk.StringVar()
         self.shown = tk.StringVar()
-        self.note = tk.StringVar(value="No card picked.")
+        self.note = tk.StringVar(value="No card selected.")
         # the panel: the selected game, every field as the console shows it
         self.file_name = tk.StringVar()
         self.title = tk.StringVar()
@@ -1576,7 +1580,7 @@ class GamesTab:
         card = self.card_of()
         self.document, self.covers, self.shots, self.games = None, None, None, {}
         if card is None:
-            self.note.set("No card picked.")
+            self.note.set("No card selected.")
         else:
             broken = None
             try:
@@ -1618,11 +1622,11 @@ class GamesTab:
             waiting = [name for name, edit in self.pending.items()]
             parts = []
             if waiting:
-                parts.append(f"{plural(len(waiting), 'edit')} not on the card yet: press Update card on the "
-                             "Card tab.")
+                parts.append(f"{plural(len(waiting), 'change')} {'isn' if len(waiting) == 1 else 'aren'}'t on "
+                             "the card yet. Press Update card on the Card tab.")
             if aside:
-                parts.append("1 file is not listed: it is not a ROM." if aside == 1 else
-                             f"{aside:,} files are not listed: they are not ROMs.")
+                parts.append("1 file isn't listed because it isn't a ROM." if aside == 1 else
+                             f"{aside:,} files aren't listed because they aren't ROMs.")
             self.note.set(" ".join(parts))
 
     def effective(self, game: dict) -> dict:
@@ -1760,9 +1764,9 @@ class GamesTab:
             self.photo = None
             if state == STATE_WAITING:
                 self.others.set(False)
-                self.notes.set("Not in the catalog yet: the browser lists it in its folder, without a "
-                               "box, and plays it. Give it a title, facts or a description and press "
-                               "Save, and the card is updated with them; its box comes with that update.")
+                self.notes.set("This game isn't in the catalog yet. SleekMenu still shows it in its "
+                               "folder and can play it, but without box art. Add details and press Save "
+                               "to include it. Its box art comes with that update.")
                 self.box.configure(image=self.placeholder, text="NOT YET", compound="center",
                                    foreground="#8291a0")
             else:
@@ -1774,7 +1778,7 @@ class GamesTab:
         card = self.card_of()
         own = self.own_text(game)
         for name in owned_fields(game, own, pending) & set(self.labels):
-            self.labels[name].configure(text=FIELD_LABELS[name] + " · yours", foreground=self.colors["info"])
+            self.labels[name].configure(text=FIELD_LABELS[name] + " · edited", foreground=self.colors["info"])
         # Others with this game's code: its revisions, and hacks built on it.
         count = custom_art.sharing_code(self.document["games"], game) - 1 if self.document else 0
         if count > 0:
@@ -1793,8 +1797,8 @@ class GamesTab:
         removable, beside = custom_art.edits_of(card, card, game) if card is not None else ([], [])
         self.undo_button.configure(state="normal" if removable else "disabled")
         if beside and not removable:
-            notes.append("This game's picture or text sits beside the ROM; to undo it, remove that file "
-                         "yourself.")
+            notes.append("This game's custom picture or text is stored next to the ROM. Delete that file "
+                         "to undo it.")
         self.notes.set("\n".join(notes))
         self.draw_box(game)
 
@@ -1838,7 +1842,7 @@ class GamesTab:
         problems: list[str] = []
         year = self.year.get().strip()
         if year and not (year.isdigit() and 1970 <= int(year) <= 2100):
-            problems.append("the year must be from 1970 to 2100")
+            problems.append("The year must be between 1970 and 2100.")
         players = self.players.get().strip()
         return ({"title": self.title.get(), "genre": self.genre.get(), "publisher": self.publisher.get(),
                  "year": int(year) if year.isdigit() else 0,
@@ -1879,7 +1883,7 @@ class GamesTab:
             return
         self.picture.set(path)
         self.draw_box(game)
-        self.edit_note.set("Press Save to put this box on the card.")
+        self.edit_note.set("Press Save to use this box art.")
 
     def dropped(self, files: list[str]) -> bool:
         """A file dropped on the panel: the selected game's new box, when
@@ -1888,11 +1892,11 @@ class GamesTab:
         if not files:
             return False
         if game is None or game.get("state"):
-            self.edit_note.set("Select a game in the list first, then drop its picture.")
+            self.edit_note.set("Select a game first, then drop its picture.")
             return False
         chosen = Path(files[0])
         if chosen.suffix.casefold() not in custom_art.ART_SUFFIXES:
-            self.edit_note.set(f"{chosen.name} is not a PNG or JPEG.")
+            self.edit_note.set(f"{chosen.name} isn't a PNG or JPEG image.")
             return False
         self.set_picture(str(chosen))
         return True
@@ -1903,7 +1907,7 @@ class GamesTab:
             return
         values, problems = self.form()
         if problems:
-            self.edit_note.set("Not saved: " + "; ".join(problems))
+            self.edit_note.set("Couldn't save. " + " ".join(problems))
             return
         picture = Path(self.picture.get().strip()) if self.picture.get().strip() else None
         title, description, facts = edit_values(game, self.own_text(game), values)
@@ -1911,11 +1915,11 @@ class GamesTab:
         try:
             touched = custom_art.save(card, game, picture, title, description, scope, facts)
         except (custom_art.EditError, OSError) as error:
-            self.edit_note.set(f"Not saved: {error}")
+            self.edit_note.set(f"Couldn't save: {error}")
             return
         path = str(game["path"])
         if not touched:
-            self.note_for = (path, "Nothing to save: every field says what the card already has.")
+            self.note_for = (path, "Nothing to save. You haven't changed anything.")
         else:
             self.note_for = (path, "Saved. " + self.put_on_card(path))
         self.redraw(path)
@@ -1926,10 +1930,8 @@ class GamesTab:
         a file saved and not applied changes nothing on the console."""
         answer = self.apply(path) if self.apply is not None else "no apply"
         if answer in ("started", "queued"):
-            return "Putting it on the card…"
-        if answer == "no collection":
-            return "The console shows it once the card is updated: press the button on the Card tab."
-        return "The console shows it once you press Update card."
+            return "Updating the card…"
+        return "Press Update card on the Card tab to see it on the console."
 
     def applied(self, path: str | None, code: int | None) -> None:
         """A run that put an edit on the card ended: read the catalog again,
@@ -1938,11 +1940,11 @@ class GamesTab:
         current = self.selected()
         keep = str(current["path"]) if current is not None else path
         if code == 0:
-            message = "On the card: SleekMenu shows it the next time it starts."
+            message = "Saved to the card. You'll see it the next time SleekMenu starts."
         elif code == 3:
-            message = "Saved, but putting it on the card was stopped: press Update card to finish."
+            message = "Saved, but the card update was stopped. Press Update card to finish."
         else:
-            message = "Saved, but the card was not updated: see the Card tab for why."
+            message = "Saved, but the card couldn't be updated. See the Log tab for details."
         if path is not None:
             self.note_for = (path, message)
         self.reload()
@@ -1975,11 +1977,11 @@ class GamesTab:
         try:
             removed = custom_art.remove(card, card, game)
         except OSError as error:
-            self.edit_note.set(f"Not undone: {error}")
+            self.edit_note.set(f"Couldn't undo: {error}")
             return
         path = str(game["path"])
-        self.note_for = (path, ("Your changes are removed. " + self.put_on_card(path)) if removed
-                         else "Nothing of yours to undo.")
+        self.note_for = (path, ("Your changes were removed. " + self.put_on_card(path)) if removed
+                         else "No changes to undo.")
         self.redraw(path)
 
 
@@ -2233,23 +2235,23 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     # one place: with downloads off there are no cheat codes to fetch, and
     # a collection already at hand is the way to do without the network.
     group(3, "Downloads")
-    cheats_check = option(4, cheats_var, "Fetch cheat codes", cheats_note)
-    shots_check = option(6, shots_var, "Fetch screenshots", shots_note)
-    option(8, offline_var, "Do not download anything", "Uses only what is already on the card.")
+    cheats_check = option(4, cheats_var, "Download cheat codes", cheats_note)
+    shots_check = option(6, shots_var, "Download screenshots", shots_note)
+    option(8, offline_var, "Don't download anything", "Only uses what's already on the card.")
     pack_row = ttk.Frame(options)
     pack_row.grid(row=10, column=0, sticky="ew", pady=(10, 0))
     pack_row.columnconfigure(0, weight=1)
     ttk.Label(pack_row, text="Boxes and descriptions").grid(row=0, column=0, sticky="w")
-    choose_pack = ttk.Button(pack_row, text="Use a zip you have…")
+    choose_pack = ttk.Button(pack_row, text="Use a downloaded zip…")
     choose_pack.grid(row=0, column=1, padx=(6, 0))
     forget_pack = ttk.Button(pack_row, text="Use the card's")
     note = hint(11, metadata_note, cursor="hand2")
 
     group(12, "Repairs")
-    option(13, fix_var, "Repair hacks that show a black screen on a console",
-           "Rewrites the checksum inside those files.")
-    option(15, rebuild_var, "Rebuild everything from scratch",
-           "Slower. For a card whose boxes or names look wrong.")
+    option(13, fix_var, "Fix hacks that boot to a black screen",
+           "Corrects the checksum in those ROM files.")
+    option(15, rebuild_var, "Rebuild everything",
+           "Slower. Use it if box art or names look wrong.")
 
     # What the console does with the card: the browser's colours. (Where it
     # starts is with the SleekMenu on the card, in the left column.)
@@ -2297,7 +2299,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         log.insert("end", line + "\n")
         log.see("end")
         log.configure(state="disabled")
-    say("Nothing has run yet. The report of each run shows here, as the command line prints it.")
+    say("Nothing to show yet. The details of each update appear here.")
 
     def current_card() -> Path | None:
         chosen = card_var.get().strip()
@@ -2362,7 +2364,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         pack = metadata_var.get().strip()
         begin(Runner(sleekmenu_prep.Options(card=chosen, metadata=Path(pack).expanduser() if pack else None,
                                             no_download=True), kind="apply"))
-        result_var.set("Putting your edit on the card…")
+        result_var.set("Updating the card…")
         return "started"
 
     def database() -> dict:
@@ -2394,7 +2396,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         status = (card_status(chosen, offline_var.get(), roms, browser, browser_var.get())
                   if chosen is not None and roms is not None
                   else card_status(None) if not typed else
-                  CardStatus("That is not a card", "Choose the card itself: the folder its games are in."))
+                  CardStatus(NOT_A_CARD, NOT_A_CARD_DETAIL))
         state["status"] = status
         headline_var.set(status.headline)
         detail_var.set(status.detail)
@@ -2472,8 +2474,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         raw = raw_folder(roms_var.get())
         if raw_folder(roms_shown.get()) != raw or not roms_shown.get().strip():
             roms_shown.set(shown_folder(raw))
-        roms_note.set(f"Only {shown_folder(raw)} is read, and the menu opens there." if raw else
-                      "Every game on the card, wherever it is.")
+        roms_note.set(f"Only games in {shown_folder(raw)} are included, and SleekMenu opens in that folder."
+                      if raw else "All games on the card, in any folder.")
 
     def on_roms_shown(*_args) -> None:
         raw = raw_folder(roms_shown.get())
@@ -2520,7 +2522,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         try:
             relative = Path(chosen).resolve().relative_to(chosen_card.resolve()).as_posix()
         except ValueError:
-            roms_note.set("That folder is not on the card; the games must be on the card to launch.")
+            roms_note.set("That folder isn't on the card. Choose a folder on the SD card.")
             return
         roms_var.set("" if relative == "." else relative)
 
@@ -2582,8 +2584,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             refresh(fresh=True)
             draw_steps()
             result.configure(foreground=colors["good"] if code == 0 else colors["warn"])
-            result_var.set("Your edit is on the card." if code == 0
-                           else "Your edit was saved but the card was not updated; the Log tab says why.")
+            result_var.set("Your change is on the card." if code == 0
+                           else "Saved, but the card couldn't be updated. See the Log tab for details.")
             catalog.applied(state.pop("apply_path", None), code)
             waiting = state.pop("apply_pending", None)
             if waiting is not None:
@@ -2601,8 +2603,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         plain = code == 0 and line.startswith("Done.")
         result.configure(foreground=colors["good"] if plain else colors["warn"])
         error = error.removeprefix("sleekmenu-catalog-manager: ")
-        result_var.set(line or (error + " The Log tab has the whole report." if error
-                                else "Something went wrong; the Log tab says what."))
+        result_var.set(line or (error + " See the Log tab for details." if error
+                                else "Something went wrong. See the Log tab for details."))
         if smoke:
             root.after(200, root.destroy)
 
@@ -2713,7 +2715,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
             root.after(500, show_newer)
             return
         if found:
-            newer_var.set(f"Game Catalog Manager {found} is out (this one is {version.VERSION}).")
+            newer_var.set(f"A new Game Catalog Manager is available: {found} (you have {version.VERSION}).")
             newer_link.bind("<Button-1>", lambda _event: webbrowser.open(releases.download_url(found)))
             newer_bar.grid(row=11, column=0, sticky="w", pady=(14, 0))
 

@@ -130,7 +130,7 @@ class CardStatusTests(unittest.TestCase):
 
     def test_no_card_and_an_empty_card(self):
         nothing = sleekmenu_gui.card_status(None)
-        self.assertEqual(nothing.headline, "Pick your card")
+        self.assertEqual(nothing.headline, "Insert your SD card")
         self.assertFalse(nothing.ready)
         with tempfile.TemporaryDirectory() as scratch:
             empty = sleekmenu_gui.card_status(Path(scratch))
@@ -144,18 +144,18 @@ class CardStatusTests(unittest.TestCase):
             write_rom(card / "Games" / "A.z64", 1, 2)
             status = sleekmenu_gui.card_status(card)
             self.assertEqual((status.headline, status.action), ("Set up this card", sleekmenu_gui.SET_UP))
-            self.assertEqual(status.detail, "1 game found on it. Nothing is moved or renamed.")
-            self.assertIn("Fetches a box and a description", status.explain)
+            self.assertEqual(status.detail, "1 game found. Your files stay where they are.")
+            self.assertIn("Downloads box art and a description for each game", status.explain)
             self.assertEqual(status.last, "")
             offline = sleekmenu_gui.card_status(card, offline=True)
             self.assertIn("Downloads are off", offline.explain)
-            self.assertNotIn("Fetches", offline.explain)
+            self.assertNotIn("Downloads box art", offline.explain)
             # the packed catalog of an earlier version, with nothing to read beside it
             (card / "sleekmenu").mkdir()
             (card / "sleekmenu" / "catalog.ebc").write_bytes(b"x")
             earlier = sleekmenu_gui.card_status(card)
             self.assertEqual((earlier.headline, earlier.action), ("Update this card", sleekmenu_gui.UPDATE))
-            self.assertIn("earlier version", earlier.detail)
+            self.assertIn("set up with an older version", earlier.detail)
 
     def test_a_set_up_card_counts_its_games_the_new_ones_and_the_ones_with_no_box(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -166,17 +166,17 @@ class CardStatusTests(unittest.TestCase):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card, roms=Path("ROMS"))), 0)
             status = sleekmenu_gui.card_status(card)
             self.assertEqual((status.headline, status.action), ("1 game on this card", sleekmenu_gui.UPDATE))
-            self.assertEqual(status.detail, "1 has no box.")
-            self.assertIn("Nothing new on the card", status.explain)
+            self.assertEqual(status.detail, "1 game has no box art.")
+            self.assertIn("Nothing new.", status.explain)
             self.assertRegex(status.last, r"^Last update: \d{1,2} \w{3} \d{4}, \d\d:\d\d$")
             write_rom(card / "ROMS" / "B.z64", 3, 4)
             write_rom(card / "Other" / "C.z64", 5, 6)     # outside the chosen folder: not counted
             status = sleekmenu_gui.card_status(card)
-            self.assertEqual(status.detail, "1 added since the last update. 1 has no box.")
+            self.assertEqual(status.detail, "1 new game since the last update. 1 game has no box art.")
             self.assertEqual(status.explain,
-                             "Adds the 1 new game with its box and description, then rewrites the catalog.")
+                             "Adds the 1 new game with its box art and description.")
             self.assertTrue(sleekmenu_gui.card_status(card, offline=True).explain.endswith(
-                "Downloads are off: only what is already on the card is used."))
+                "Downloads are off, so nothing new will be downloaded."))
 
     def test_the_last_update_is_said_in_this_computers_time(self):
         self.assertRegex(sleekmenu_gui.when("2026-09-20T02:52:10+00:00"), r"^(19|20) Sep 2026, \d\d:\d\d$")
@@ -246,18 +246,18 @@ class StepTests(unittest.TestCase):
         status = sleekmenu_gui.CardStatus("x", action=sleekmenu_gui.UPDATE, ready=True)
         line = sleekmenu_gui.finished_line
         self.assertTrue(line(0, sleekmenu_prep.Outcome(), status).startswith("Done. Eject the card"))
-        self.assertIn("press Update card to carry on", line(3, sleekmenu_prep.Outcome(), status))
-        self.assertIn("could not be downloaded. Check the connection",
+        self.assertIn("Press Update card to continue", line(3, sleekmenu_prep.Outcome(), status))
+        self.assertIn("couldn't be downloaded. Check your internet connection",
                       line(0, sleekmenu_prep.Outcome(collection_failed=True), status))
-        self.assertIn("2 boxes could not be downloaded", line(0, sleekmenu_prep.Outcome(boxes_unreached=2), status))
+        self.assertIn("2 boxes couldn't be downloaded", line(0, sleekmenu_prep.Outcome(boxes_unreached=2), status))
         self.assertIn("1 box could", line(0, sleekmenu_prep.Outcome(boxes_unreached=1), status))
-        self.assertIn("3 cheat files could not be downloaded",
+        self.assertIn("3 cheat files couldn't be downloaded",
                       line(0, sleekmenu_prep.Outcome(cheats_unreached=3), status))
-        self.assertIn("2 boxes and 1 cheat file could not be downloaded",
+        self.assertIn("2 boxes and 1 cheat file couldn't be downloaded",
                       line(0, sleekmenu_prep.Outcome(boxes_unreached=2, cheats_unreached=1), status))
         self.assertEqual(line(0, sleekmenu_prep.Outcome(), status, direct=True),
-                         "Done. Eject the card and switch the console on: it starts in SleekMenu.")
-        self.assertIn("could not be downloaded", line(0, sleekmenu_prep.Outcome(boxes_unreached=2), status,
+                         "Done. Eject the card and turn on your console. It will start in SleekMenu.")
+        self.assertIn("couldn't be downloaded", line(0, sleekmenu_prep.Outcome(boxes_unreached=2), status,
                                                       direct=True), "what went wrong comes first")
         self.assertIn("Copy your games onto the card", line(0, sleekmenu_prep.Outcome(), status, games_on_card=False))
         self.assertEqual(line(1, sleekmenu_prep.Outcome(), status), "", "the run's own error line says it")
@@ -327,7 +327,7 @@ class GamesLineTests(unittest.TestCase):
         self.assertEqual(sleekmenu_gui.owned_fields({"sources": {}}, own), {"description", "regions"})
         pending = custom_art.Pending({"year": 1996}, Path("box.png"), ())
         self.assertEqual(sleekmenu_gui.owned_fields({"sources": {}}, None, pending), {"year", "cover"})
-        self.assertEqual(sleekmenu_gui.pending_line(pending), "Changed here, not on the card yet: year, box.")
+        self.assertEqual(sleekmenu_gui.pending_line(pending), "Not on the card yet: year, box art.")
         self.assertIn("Your title was removed",
                       sleekmenu_gui.pending_line(custom_art.Pending({}, None, ("title",))))
 
@@ -347,10 +347,10 @@ class GamesLineTests(unittest.TestCase):
     def test_the_notes_under_a_game_say_how_sure_the_tool_is(self):
         notes = sleekmenu_gui.game_notes
         self.assertEqual(notes({"identified": "crc", "sources": {"cover": "libretro"}}), [])
-        self.assertIn("Recognised by its game code", notes({"identified": "serial"})[0])
-        self.assertIn("Not recognised", notes({"identified": ""})[0])
+        self.assertIn("Matched by its game code", notes({"identified": "serial"})[0])
+        self.assertIn("Not recognized", notes({"identified": ""})[0])
         self.assertEqual(notes({"identified": "crc", "sources": {"cover": "collection (another region's box)"}}),
-                         ["The box is another region's."])
+                         ["This box art is from another region."])
 
     def test_the_search_looks_at_more_than_the_title(self):
         game = {"title": "Kaizo", "path": "ROMS/Hacks/Kaizo.z64", "publisher": "Nintendo", "year": 1996,
@@ -376,7 +376,7 @@ class CollectionLineTests(unittest.TestCase):
                 chosen_offline = sleekmenu_gui.collection_status(card, offline=True)
             self.assertFalse(missing.ready)
             self.assertTrue(missing.downloadable)
-            self.assertIn("it is fetched the first time", missing.line)
+            self.assertIn("It will be downloaded on the first update", missing.line)
             self.assertFalse(chosen_offline.ready or chosen_offline.downloadable, "the owner's own choice")
             with mock.patch.dict(os.environ, {fetch.OFFLINE_VARIABLE: "1"}):
                 offline = sleekmenu_gui.collection_status(card)
@@ -393,10 +393,10 @@ class CollectionLineTests(unittest.TestCase):
             junk.write_bytes(b"not a zip")
             chosen = sleekmenu_gui.collection_status(card, str(junk))
             self.assertFalse(chosen.ready)
-            self.assertTrue(chosen.line.startswith("✗ junk.zip is not the collection"))
+            self.assertEqual(chosen.line, "✗ junk.zip isn't the box art collection.")
             chosen = sleekmenu_gui.collection_status(None, str(card / "release-metadata.zip"))
             self.assertTrue(chosen.ready)
-            self.assertEqual(chosen.line, "✓ Using release-metadata.zip: 2 boxes.")
+            self.assertEqual(chosen.line, "✓ Using release-metadata.zip (2 boxes).")
             # the card's own copy, cut short: the next update fetches it again
             (card / "release-metadata.zip").write_bytes(b"PK cut short")
             with mock.patch.dict(os.environ):
@@ -404,7 +404,7 @@ class CollectionLineTests(unittest.TestCase):
                 broken = sleekmenu_gui.collection_status(card)
             self.assertFalse(broken.ready)
             self.assertTrue(broken.downloadable)
-            self.assertIn("fetched again at the next update", broken.line)
+            self.assertIn("downloaded again on the next update", broken.line)
             # the zip chosen at the root, since moved into sleekmenu/ by a run
             write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
             chosen_root = str(card / "release-metadata.zip")
@@ -412,7 +412,7 @@ class CollectionLineTests(unittest.TestCase):
             moved = sleekmenu_gui.collection_status(card, chosen_root)
             self.assertTrue(moved.ready, moved.line)
             self.assertEqual(moved.path, card / "sleekmenu" / "release-metadata.zip")
-            self.assertIn("sleekmenu/release-metadata.zip is on the card", moved.line)
+            self.assertIn("Box art and descriptions are on the card", moved.line)
 
 
 class RunnerTests(unittest.TestCase):
@@ -578,7 +578,7 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(str(games.labels["title"].cget("text")), "Title", "nothing here is the owner's")
             self.assertIsNotNone(games.photo, "the box, decoded from covers-large.pak")
             self.assertEqual(games.photo.width(), 256)
-            self.assertIn("Recognised by its game code", games.notes.get())
+            self.assertIn("Matched by its game code", games.notes.get())
             self.assertEqual(str(games.undo_button.cget("state")), "disabled")
             # two games carry this code: an edit can reach the other one too
             self.assertTrue(games.others_check.winfo_manager())
@@ -634,7 +634,7 @@ class WindowTests(unittest.TestCase):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
             games.reload()
             self.assertEqual(str(games.show_buttons["new"].cget("text")), "New 0")
-            self.assertEqual(games.note.get(), "1 file is not listed: it is not a ROM.")
+            self.assertEqual(games.note.get(), "1 file isn't listed because it isn't a ROM.")
             self.assertEqual(games.tree.set("ROMS/Tools/IPL.z64", "status"), "Not a ROM")
             games.tree.selection_set("ROMS/Tools/IPL.z64")
             root.update()
@@ -690,7 +690,7 @@ class WindowTests(unittest.TestCase):
                 self.assertEqual(words["headline"].get(), "Set up this card")
                 self.assertEqual(str(buttons["action"].cget("text")), "Set up card")
                 self.assertEqual(str(buttons["action"].cget("state")), "normal", "no collection needed first")
-                self.assertIn("it is fetched the first time", words["pack"].get())
+                self.assertIn("It will be downloaded on the first update", words["pack"].get())
                 routes = {"/release-metadata.zip": (200, zipped), route("Super Mario 64 (USA)"): (200, box_png())}
                 with Server(routes) as server, \
                      mock.patch.object(fetch, "release_addresses", lambda: [server.url("/release-metadata.zip")]), \
@@ -713,7 +713,7 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(str(buttons["action"].cget("text")), "Update card")
             self.assertEqual(str(buttons["action"].cget("state")), "normal")
             self.assertTrue(words["last"].get().startswith("Last update: "))
-            self.assertTrue(words["pack"].get().startswith("✓ sleekmenu/release-metadata.zip is on the card: 1 boxes"))
+            self.assertTrue(words["pack"].get().startswith("✓ Box art and descriptions are on the card (1 box,"))
             self.assertIn("Super Mario 64", state["catalog"].tree.item("ROMS/Super Mario 64 (USA).z64", "text"))
             root.destroy()
 
@@ -733,7 +733,7 @@ class WindowTests(unittest.TestCase):
                         root.update()
             self.assertEqual(state["last_code"], 0)
             self.assertTrue(state["outcome"].collection_failed)
-            self.assertIn("could not be downloaded. Check the connection and press Update card again",
+            self.assertIn("couldn't be downloaded. Check your internet connection and try again",
                           state["words"]["result"].get())
             self.assertTrue((card / "sleekmenu" / "catalog.ebc").is_file())
             root.destroy()
@@ -748,7 +748,7 @@ class WindowTests(unittest.TestCase):
                 root.update()
                 state = root.sleekmenu_state
                 self.assertFalse(state["options"]["offline"].get())
-                self.assertIn("Fetches a box", state["words"]["explain"].get())
+                self.assertIn("Downloads box art", state["words"]["explain"].get())
                 notebook = state["notebook"]
                 self.assertEqual([notebook.tab(tab, "text") for tab in notebook.tabs()],
                                  ["Card", "Games", "Log"])
@@ -794,11 +794,11 @@ class WindowTests(unittest.TestCase):
                 root.update()
                 state = root.sleekmenu_state
                 button = state["buttons"]["action"]
-                self.assertEqual(state["words"]["headline"].get(), "Pick your card")
+                self.assertEqual(state["words"]["headline"].get(), "Insert your SD card")
                 self.assertFalse(button.winfo_ismapped(), "no card: nothing to set up")
                 state["fields"]["card"].set(str(Path(scratch) / "nowhere"))
                 root.update()
-                self.assertEqual(state["words"]["headline"].get(), "That is not a card")
+                self.assertEqual(state["words"]["headline"].get(), "Card not found")
                 self.assertFalse(button.winfo_ismapped())
                 state["fields"]["card"].set(str(card))
                 root.update()
@@ -1052,7 +1052,7 @@ class WindowTests(unittest.TestCase):
                     root.update()
                     state = root.sleekmenu_state
                     self.assertFalse(state["options"]["shots"].get(), "off by default")
-                    self.assertIn("0.4 MB a game", state["words"]["shots"].get())
+                    self.assertIn("0.4 MB per game", state["words"]["shots"].get())
                     state["options"]["offline"].set(True)
                     root.update()
                     self.assertEqual(str(state["buttons"]["shots"].cget("state")), "disabled")
@@ -1085,10 +1085,10 @@ class WindowTests(unittest.TestCase):
                     self.assertTrue(window.take("title", mine))
                     own = custom_art.art_dir(card) / "Super Mario 64 (USA).title.jpg"
                     self.assertTrue(own.is_file())
-                    self.assertIn("not on the card yet", window.sources["title"].get())
+                    self.assertIn("saved to the card when you close", window.sources["title"].get())
                     self.assertEqual(str(window.removers["title"].cget("state")), "normal")
                     self.assertFalse(window.take("snap", Path(scratch) / "missing.png"))
-                    self.assertIn("Not saved", window.note.get())
+                    self.assertIn("Couldn't save", window.note.get())
                     window.close()
                     root.update()
                     self.assertIsNone(games.shots_window)
@@ -1130,11 +1130,11 @@ class WindowTests(unittest.TestCase):
                     words = state["words"]
                     self.assertTrue(state["options"]["browser"].get(), "on unless unticked")
                     self.assertEqual(words["browser"].get(),
-                                     f"The card has SleekMenu 1.9.0; the next update puts {version.VERSION} on it.")
-                    self.assertIn(f"SleekMenu {version.VERSION} is ready to go on it.", words["detail"].get())
+                                     f"SleekMenu 1.9.0 is installed. The next update will install {version.VERSION}.")
+                    self.assertIn(f"SleekMenu {version.VERSION} is ready to install.", words["detail"].get())
                     state["options"]["browser"].set(False)
                     root.update()
-                    self.assertEqual(words["browser"].get(), "SleekMenu64.z64 on the card is left as it is.")
+                    self.assertEqual(words["browser"].get(), "SleekMenu on the card won't be changed.")
                     self.assertNotIn("ready to go", words["detail"].get())
                     state["options"]["browser"].set(True)
                     state["start"]()
@@ -1143,38 +1143,38 @@ class WindowTests(unittest.TestCase):
                     self.assertEqual(state["last_code"], 0)
                     self.assertEqual(rom.read_bytes(), mine)
                     self.assertTrue(words["result"].get().startswith("Done."), words["result"].get())
-                    self.assertIn("the release this Game Catalog Manager goes with", words["browser"].get())
+                    self.assertEqual(words["browser"].get(), f"SleekMenu {version.VERSION} is installed and up to date.")
                     # a newer Game Catalog Manager: said above the tabs, with its file
                     self.assertFalse(state["newer_bar"].winfo_ismapped())
                     state["newer"] = "99.0.0"
                     state["show_newer"]()
                     root.update()
                     self.assertTrue(state["newer_bar"].winfo_ismapped())
-                    self.assertIn("Game Catalog Manager 99.0.0 is out", words["newer"].get())
+                    self.assertIn("A new Game Catalog Manager is available: 99.0.0", words["newer"].get())
                     root.destroy()
         self.assertEqual(sleekmenu_gui.browser_line(releases.Browser(releases.NEWER, "99.0.0")),
-                         "The card has SleekMenu 99.0.0, newer than this Game Catalog Manager: "
-                         "get the newer Game Catalog Manager.")
+                         "SleekMenu 99.0.0 is installed, which is newer than this Catalog Manager. "
+                         "Download the latest Catalog Manager.")
         self.assertIn("Downloads are off", sleekmenu_gui.browser_line(releases.Browser(releases.MISSING),
                                                                       offline=True))
         status = sleekmenu_gui.CardStatus("x", ready=True)
         finished = lambda **failed: sleekmenu_gui.finished_line(0, sleekmenu_prep.Outcome(**failed), status)
         connection = finished(browser_failure=releases.CONNECTION)
-        self.assertIn(f"SleekMenu {version.VERSION} could not be downloaded", connection)
-        self.assertIn("when the connection is back", connection)
+        self.assertIn(f"SleekMenu {version.VERSION} couldn't be downloaded", connection)
+        self.assertIn("Try again when you're back online", connection)
         # anything else is not the connection, and is not called that
-        for failure, said in ((releases.NOT_RELEASED, "is not on its release page yet"),
-                              (releases.WRONG_FILE, f"the file on the release page is not SleekMenu {version.VERSION}"),
-                              (releases.CARD, "could not be written to the card")):
+        for failure, said in ((releases.NOT_RELEASED, "isn't available for download yet"),
+                              (releases.WRONG_FILE, "the SleekMenu download was the wrong file"),
+                              (releases.CARD, "SleekMenu couldn't be saved to the card")):
             with self.subTest(failure=failure):
                 line = finished(browser_failure=failure)
                 self.assertTrue(line.startswith("Done, but "), line)
                 self.assertIn(said, line)
-                self.assertIn("SleekMenu on the card was not changed", line)
+                self.assertIn("Your current SleekMenu was kept.", line)
                 self.assertNotIn("connection", line)
         both = finished(boxes_unreached=2, browser_failure=releases.WRONG_FILE)
-        self.assertTrue(both.startswith("Done, but 2 boxes could not be downloaded."), both)
-        self.assertIn("The file on the release page is not", both)
+        self.assertTrue(both.startswith("Done, but 2 boxes couldn't be downloaded."), both)
+        self.assertIn("The SleekMenu download was the wrong file.", both)
 
     def test_the_start_up_switch_is_there_for_an_x7_or_a_pro_card_and_does_what_it_says(self):
         from tests.test_direct_boot import browser, stock_os
@@ -1201,7 +1201,7 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(state["last_code"], 0)
             self.assertEqual((card / "ED64" / "menu.n64").read_bytes(), browser())
             self.assertFalse((card / "ED64" / "autoexec.v64").exists())
-            self.assertIn("it starts in SleekMenu", state["words"]["result"].get())
+            self.assertIn("It will start in SleekMenu", state["words"]["result"].get())
             root.destroy()
             (card / "ED64" / "menu.n64").unlink()
 
@@ -1222,7 +1222,7 @@ class WindowTests(unittest.TestCase):
                 root.update()
             self.assertEqual(state["last_code"], 0)
             self.assertEqual((card / "ED64" / "autoexec.v64").read_bytes(), browser())
-            self.assertIn("it starts in SleekMenu", state["words"]["result"].get())
+            self.assertIn("It will start in SleekMenu", state["words"]["result"].get())
             self.assertTrue(state["options"]["boot"].get(), "read back from the card after the run")
             root.destroy()
 
@@ -1494,7 +1494,7 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["kind"], "translation")
             self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["sources"]["kind"], "yours")
             self.assertEqual(games.kind.get(), "Translation")
-            self.assertEqual(str(games.labels["kind"].cget("text")), "Kind · yours")
+            self.assertEqual(str(games.labels["kind"].cget("text")), "Kind · edited")
 
     def test_a_save_is_put_on_the_card_at_once_and_a_second_one_waits_its_turn(self):
         """The console reads only the catalog, so a Save that stopped at the
@@ -1525,7 +1525,7 @@ class WindowTests(unittest.TestCase):
             games.genre.set("Platforms")
             games.save_edit()
             self.assertEqual(state["runner"].kind, "apply")
-            self.assertIn("Putting it on the card", games.edit_note.get())
+            self.assertIn("Updating the card", games.edit_note.get())
             self.assertEqual((card / "sleekmenu" / "art" / "Kaizo.txt").read_text(),
                              "Title: Kaizo Race\nGenre: Platforms\n", "only what was changed")
             # a second game saved while the first is going in (no event
@@ -1548,8 +1548,8 @@ class WindowTests(unittest.TestCase):
             self.assertIn(b"Kaizo Race", (card / "sleekmenu" / "catalog.ebc").read_bytes())
             self.assertEqual(games.pending, {})
             self.assertEqual(games.selected()["path"], "ROMS/Wave Race 64 (USA).z64", "the row stays")
-            self.assertEqual(games.edit_note.get(), "On the card: SleekMenu shows it the next time it starts.")
-            self.assertEqual(str(games.labels["description"].cget("text")), "Description · yours")
+            self.assertEqual(games.edit_note.get(), "Saved to the card. You'll see it the next time SleekMenu starts.")
+            self.assertEqual(str(games.labels["description"].cget("text")), "Description · edited")
             self.assertEqual(str(games.show_buttons["changed"].cget("text")), "Changed by me 2")
             self.assertEqual(games.tree.set("ROMS/Hacks/Kaizo.z64", "status"), "Changed by me")
             # a new box, on this card whose games folder is ROMS: on the
@@ -1562,13 +1562,13 @@ class WindowTests(unittest.TestCase):
                 root.update()
             self.assertEqual(games.pending, {})
             self.assertEqual(games.tree.set("ROMS/Wave Race 64 (USA).z64", "status"), "Changed by me")
-            self.assertEqual(str(games.labels["description"].cget("text")), "Description · yours")
+            self.assertEqual(str(games.labels["description"].cget("text")), "Description · edited")
             self.assertEqual(games.box.cget("text"), "")
             # and an Undo goes back the same way
             games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             root.update()
-            self.assertEqual(str(games.labels["title"].cget("text")), "Title · yours")
-            self.assertEqual(str(games.labels["genre"].cget("text")), "Genre · yours")
+            self.assertEqual(str(games.labels["title"].cget("text")), "Title · edited")
+            self.assertEqual(str(games.labels["genre"].cget("text")), "Genre · edited")
             self.assertEqual(str(games.labels["year"].cget("text")), "Year")
             games.remove_edit()
             while state["runner"] is not None:
@@ -1576,7 +1576,7 @@ class WindowTests(unittest.TestCase):
             on_card = {game["path"]: game for game in card_catalog.load(card)["games"]}
             self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["title"], "Kaizo")
             self.assertEqual(on_card["ROMS/Hacks/Kaizo.z64"]["genre"], "Racing")
-            self.assertEqual(games.edit_note.get(), "On the card: SleekMenu shows it the next time it starts.")
+            self.assertEqual(games.edit_note.get(), "Saved to the card. You'll see it the next time SleekMenu starts.")
             root.destroy()
 
     def test_the_panel_writes_and_removes_the_owners_files(self):
@@ -1608,7 +1608,7 @@ class WindowTests(unittest.TestCase):
             self.assertEqual((card / "sleekmenu" / "art" / "Kaizo.txt").read_text(),
                              "Title: Kaizo Race\nPlayers: 2\nRegions: USA, JAPAN\n\nHard.\n",
                              "the genre, publisher and year were left as the card has them")
-            self.assertIn("press the button on the Card tab", games.edit_note.get(), "no collection to apply with")
+            self.assertIn("Press Update card on the Card tab", games.edit_note.get(), "no collection to apply with")
             self.assertEqual(str(games.undo_button["state"]), "normal")
             # shown at once, as the next update will catalog it: the row,
             # the fields, the marks, and the count of what is waiting
@@ -1616,16 +1616,16 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(games.tree.set("ROMS/Hacks/Kaizo.z64", "status"), "Edit waiting")
             self.assertEqual(games.tree.item("ROMS/Hacks/Kaizo.z64", "tags"), ("pending",))
             self.assertEqual((games.title.get(), games.players.get()), ("Kaizo Race", "2"))
-            self.assertEqual(str(games.labels["players"].cget("text")), "Players · yours")
+            self.assertEqual(str(games.labels["players"].cget("text")), "Players · edited")
             self.assertEqual(str(games.labels["genre"].cget("text")), "Genre")
-            self.assertIn("Changed here, not on the card yet: title, players, region, description, box.",
+            self.assertIn("Not on the card yet: title, players, region, description, box art.",
                           games.notes.get())
-            self.assertIn("1 edit not on the card yet", games.note.get())
+            self.assertIn("1 change isn't on the card yet", games.note.get())
             self.assertEqual(games.box.cget("text"), "NOT ON THE CARD YET")
             # a bad year is refused before anything is written
             games.year.set("soon")
             games.save_edit()
-            self.assertTrue(games.edit_note.get().startswith("Not saved: the year"))
+            self.assertTrue(games.edit_note.get().startswith("Couldn't save. The year"))
             # and once updated, nothing is waiting and the values hold
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(sleekmenu_prep.run(sleekmenu_prep.Options(card=card)), 0)
@@ -1655,15 +1655,15 @@ class WindowTests(unittest.TestCase):
             games.remove_edit()
             self.assertFalse((card / "sleekmenu" / "art" / "Kaizo.png").exists())
             self.assertFalse((card / "sleekmenu" / "art" / "NWRE.txt").exists())
-            self.assertIn("Your changes are removed", games.edit_note.get())
+            self.assertIn("Your changes were removed", games.edit_note.get())
             games.set_picture(str(card / "ROMS" / "Hacks" / "Kaizo.z64"))
             games.save_edit()
-            self.assertTrue(games.edit_note.get().startswith("Not saved"), "a ROM is not a picture")
+            self.assertTrue(games.edit_note.get().startswith("Couldn't save"), "a ROM is not a picture")
             # a picture dropped on the panel is the same as choosing it; anything else is said
             games.tree.selection_set("ROMS/Hacks/Kaizo.z64")
             games.on_select()
             self.assertFalse(games.dropped([str(card / "ROMS" / "Hacks" / "Kaizo.z64")]))
-            self.assertEqual(games.edit_note.get(), "Kaizo.z64 is not a PNG or JPEG.")
+            self.assertEqual(games.edit_note.get(), "Kaizo.z64 isn't a PNG or JPEG image.")
             self.assertTrue(games.dropped([str(card / "box.png"), str(card / "other.png")]), "the first one dropped")
             self.assertEqual(games.picture.get(), str(card / "box.png"))
             self.assertEqual(games.box.cget("text"), "NOT SAVED YET")
@@ -1714,7 +1714,7 @@ class WindowTests(unittest.TestCase):
             games.applied(flappy, 0)
             self.assertFalse(games.tree.exists(flappy), "it has its box and a genre now")
             self.assertEqual(str(games.title_entry.cget("state")), "disabled")
-            self.assertEqual(games.edit_note.get(), "Flappy: On the card: SleekMenu shows it the next time it starts.")
+            self.assertEqual(games.edit_note.get(), "Flappy: Saved to the card. You'll see it the next time SleekMenu starts.")
             games.show.set(sleekmenu_gui.SHOW_CHANGED)
             games.fill()
             self.assertEqual(games.tree.set(flappy, "status"), "Changed by me")
@@ -1760,7 +1760,7 @@ class WindowTests(unittest.TestCase):
                 self.assertEqual(str(picker.tiles["Japan"].cget("state")), "disabled")
                 # a file dropped on the picker that is no picture is said there, and the picker stays
                 picker.dropped([str(card / "ROMS" / "Super Mario 64 (USA).z64")])
-                self.assertIn("is not a PNG or JPEG", picker.note.get())
+                self.assertIn("isn't a PNG or JPEG", picker.note.get())
                 self.assertIsNotNone(games.picker)
                 picker.choice.set("Europe")
                 self.assertEqual(str(picker.use.cget("state")), "normal")

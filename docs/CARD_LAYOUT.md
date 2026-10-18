@@ -321,7 +321,7 @@ it closes.
 
 ## Screenshots
 
-`--shots`, or Fetch screenshots in the window, fetches
+`--shots`, or Download screenshots in the window, fetches
 `Named_Titles/<No-Intro name>.png` and `Named_Snaps/<No-Intro name>.png`
 from libretro-thumbnails for every retail game on the card the database
 knows, into `sleekmenu/art/shots/<CODE>.title.png` and `<CODE>.snap.png`,

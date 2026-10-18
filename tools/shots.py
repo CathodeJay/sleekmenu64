@@ -5,7 +5,7 @@ libretro-thumbnails or from the card owner.
 libretro-thumbnails keeps two more pictures beside every box, under the
 same No-Intro names: `Named_Titles`, the title screen, and `Named_Snaps`,
 the game in play, most at the console's own 320x240. When the card asks
-for them (--shots, or Fetch screenshots in the window) both are fetched for
+for them (--shots, or Download screenshots in the window) both are fetched for
 every retail game on the card that the database knows, one pair per game
 code, into
 

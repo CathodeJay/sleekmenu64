@@ -121,14 +121,13 @@ def cart_of(card: Path | None) -> tuple[str, str]:
     told, why not."""
     firmware = find(card, card_layout.FIRMWARE_FOLDER)
     if firmware is None or not firmware.is_dir():
-        return "", "The card has no ED64 folder yet."
+        return "", "The card has no ED64 folder yet. Use it in your EverDrive once first."
     os_file = find(firmware, card_layout.FIRMWARE_OS)
     if os_file is not None and os_file.is_file():
         return X7, ""
     if find(find(firmware, "sysdata"), "config.ini") is not None:
         return PRO, ""
-    return "", ("The card has not been in an EverDrive yet: its ED64 folder has no EverDrive OS "
-                "(an X7's OS64.v64) and no Pro settings.")
+    return "", "Use this card in your EverDrive once first."
 
 
 def state(card: Path | None) -> State:
@@ -138,16 +137,16 @@ def state(card: Path | None) -> State:
         return State(why=why)
     firmware = find(card, card_layout.FIRMWARE_FOLDER)
     if cart == X7 and not has_hook(find(firmware, card_layout.FIRMWARE_OS)):
-        return State(X7, why="This EverDrive OS does not start a file by itself; a newer OS does.")
+        return State(X7, why="Your EverDrive OS is too old for this. Update it to use this option.")
     browser = find(card, card_layout.BROWSER_ROM)
     start = find(firmware, START_FILE[cart])
     if start is not None and start.is_file():
         if not is_browser(start):
-            return State(cart, why=f"{shown(cart)} is another program; it is left alone.")
+            return State(cart, why=f"{shown(cart)} already holds another program, so this option is off.")
         stale = browser is not None and browser.is_file() and digest(browser) != digest(start)
         return State(cart, available=True, on=True, stale=stale)
     if browser is None or not browser.is_file():
-        return State(cart, why=f"{card_layout.BROWSER_ROM} is not at the card root yet.")
+        return State(cart, why="Available once SleekMenu is on the card.")
     return State(cart, available=True)
 
 

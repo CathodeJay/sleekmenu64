@@ -60,27 +60,27 @@ only that. The card remembers the choice.
 
 **Downloads**
 
-- **Fetch cheat codes** fetches a file of GameShark codes for every game
+- **Download cheat codes** downloads a file of GameShark codes for every game
   the database knows, for the games the EverDrive's cheat pack does not
   cover; see [Cheat codes](#cheat-codes). Off until you tick it; the card
   remembers that too.
-- **Fetch screenshots** fetches the title screen and a moment of play for
+- **Download screenshots** downloads the title screen and a moment of play for
   every retail game the database knows, for the details screen and the box
   view; see [Screenshots](#screenshots). Off until you tick it, about
   0.4 MB a game on the card; the card remembers it.
-- **Do not download anything** uses only what is already on the card. No
+- **Don't download anything** uses only what is already on the card. No
   cheat codes or screenshots are fetched either, so those boxes are greyed
   while this one is ticked.
-- **Boxes and descriptions**: **Use a zip you have…** takes a
+- **Boxes and descriptions**: **Use a downloaded zip…** takes a
   `release-metadata.zip` you already have in place of the download; the
   line under it says which collection a run will read.
 
 **Repairs**
 
-- **Repair hacks that show a black screen on a console** rewrites a stale
+- **Fix hacks that boot to a black screen** rewrites a stale
   header checksum in the file itself. Hacks and homebrew are always
   checked (see [Hacks and homebrew](CONSOLE.md#hacks-and-homebrew)).
-- **Rebuild everything from scratch** reads every ROM and converts every
+- **Rebuild everything** reads every ROM and converts every
   box again, and asks libretro again for the boxes it did not have, for a
   card that looks wrong.
 
@@ -146,7 +146,7 @@ as a picture of your own: no later download replaces it.
 **Screenshots…** opens the game's two screenshots, the title screen and
 the game in play, as the box view draws them, with where each came from.
 **Choose…** takes a PNG or JPEG of yours for either one, or drop it on its
-side; **Remove mine** takes yours out again and brings back what was there
+side; **Remove my picture** takes yours out again and brings back what was there
 before. They are written into `sleekmenu/art/` straight away, and closing
 the window puts them on the card the way Save does. A hack, a translation
 or homebrew has only the screenshots you give it.
@@ -227,7 +227,7 @@ game code and puts them on the card as you save: see
 
 ## Screenshots
 
-Tick **Fetch screenshots** on the Card tab (`--shots` on the command line)
+Tick **Download screenshots** on the Card tab (`--shots` on the command line)
 and the next run fetches two pictures from
 [libretro-thumbnails](https://github.com/libretro-thumbnails/Nintendo_-_Nintendo_64)
 for every retail game on the card that the database knows: the title
@@ -301,7 +301,7 @@ file, like any fact. The Games tab's search finds games by kind too: type
 
 ## Cheat codes
 
-Tick **Fetch cheat codes** on the Card tab (`--cheats` on the command
+Tick **Download cheat codes** on the Card tab (`--cheats` on the command
 line) and the next run fetches a `.cht` file from
 [libretro-database](https://github.com/libretro/libretro-database) for
 every game on the card that the database knows by its checksum, most of
@@ -479,7 +479,7 @@ four things: an older `SleekMenu64.z64`, replaced by this release's unless
 you untick Keep SleekMenu on the card up to date; a `release-metadata.zip`
 at the card root, moved into `sleekmenu/` (or removed when `sleekmenu/`
 already has the very same file); a picture or text of your own in
-`sleekmenu/art/` when you press Undo my changes or Remove mine in the
+`sleekmenu/art/` when you press Undo my changes or Remove my picture in the
 window; and the start-up copy, `ED64/autoexec.v64` or `ED64/menu.n64`,
 when you untick Start the console in SleekMenu.
 
