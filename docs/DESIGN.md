@@ -156,15 +156,17 @@ add.
 CARD_LAYOUT.md), never creates, renames or deletes anything else, and uses
 the EverDrive menu's own save files and records so the two menus can be
 used interchangeably. The Game Catalog Manager writes inside the
-EverDrive's folder in one case, on request: `ED64/autoexec.v64`, the file
-an X7's stock OS starts by itself at power-on, as a copy of the browser
-(`tools/direct_boot.py`). The OS is not replaced and still runs first — it
-loads its FPGA cores and writes the last save out before it hands over,
-which is why starting this way changes nothing about saves — and it starts
-the file again after a reset only when the file was the last thing it
-launched, so a reset inside a game shows the EverDrive menu. The
-EverDrive-64 Pro's menu is firmware with no such file, and the switch is
-not offered there.
+EverDrive's folder in one case, on request: the file the cartridge starts
+by itself at power-on, as a copy of the browser (`tools/direct_boot.py`).
+On an X7 that is `ED64/autoexec.v64`. The OS is not replaced and still runs
+first — it loads its FPGA cores and writes the last save out before it
+hands over, which is why starting this way changes nothing about saves —
+and it starts the file again after a reset only when the file was the last
+thing it launched, so a reset inside a game shows the EverDrive menu. On
+the Pro it is `ED64/menu.n64`, which firmware 26.1014 and newer start in
+place of the Pro's own menu; the cartridge still writes the last save out
+at power-on, and what comes only with the Pro's menu — its in-game menu
+and save states — is not there while the browser replaces it.
 
 ## Art and metadata
 

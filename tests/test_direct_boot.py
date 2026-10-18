@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""The X7's start-up switch: what a card says about it, what turning it on
-and off writes, and what is left alone."""
+"""The start-up switch, on an X7 (ED64/autoexec.v64) and on a Pro
+(ED64/menu.n64): what a card says about it, what turning it on and off
+writes, and what is left alone."""
 
 import contextlib
 import io
@@ -42,6 +43,13 @@ class CardTests(unittest.TestCase):
         if at_root:
             (self.card / card_layout.BROWSER_ROM).write_bytes(browser())
 
+    def pro(self, at_root: bool = True) -> None:
+        """A card a Pro has been in: its settings under ED64/sysdata."""
+        (self.firmware / "sysdata").mkdir(exist_ok=True)
+        (self.firmware / "sysdata" / "config.ini").write_text("[options]\nsort_files=1\n")
+        if at_root:
+            (self.card / card_layout.BROWSER_ROM).write_bytes(browser())
+
     def test_the_name_looked_for_is_the_one_inside_the_os(self):
         self.assertEqual(direct_boot.HOOK, b"ED64/autoexec.v64")
         self.assertEqual(direct_boot.AUTOEXEC_SHOWN, "ED64/autoexec.v64")
@@ -53,12 +61,15 @@ class CardTests(unittest.TestCase):
         self.assertEqual(direct_boot.state(None).available, False)
         bare = direct_boot.state(self.card)
         self.assertEqual((bare.cart, bare.available), ("", False))
-        self.assertIn("no EverDrive OS", bare.why)
-        (self.firmware / "sysdata").mkdir()
-        (self.firmware / "sysdata" / "config.ini").write_text("[state]\n")
+        self.assertIn("has not been in an EverDrive yet", bare.why)
+        self.pro(at_root=False)
         pro = direct_boot.state(self.card)
         self.assertEqual((pro.cart, pro.available, pro.on), (direct_boot.PRO, False, False))
-        self.assertIn("Pro has no start-up file", pro.why)
+        self.assertEqual(pro.file, "ED64/menu.n64")
+        self.assertIn("SleekMenu64.z64 is not at the card root", pro.why)
+        self.x7()
+        self.assertEqual(direct_boot.state(self.card).file, "ED64/autoexec.v64",
+                         "the X7's OS on the card makes it an X7 card")
 
     def test_an_x7_card_has_the_switch_when_its_os_has_the_hook_and_the_browser_is_there(self):
         self.x7(hook=False)
@@ -158,16 +169,48 @@ class CardTests(unittest.TestCase):
             sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, direct_boot=False), log=log, fail=log)
             self.assertFalse(self.autoexec.exists())
 
-    def test_asked_for_on_a_pro_card_the_run_says_why_not_and_goes_on(self):
-        (self.firmware / "sysdata").mkdir()
-        (self.firmware / "sysdata" / "config.ini").write_text("[state]\n")
-        (self.card / card_layout.BROWSER_ROM).write_bytes(browser())
+    def test_on_a_pro_the_copy_is_its_menu(self):
+        """The Pro starts ED64/menu.n64 in place of its own menu: the same
+        switch, the same rules, another name."""
+        self.pro()
+        menu = self.firmware / "menu.n64"
+        ready = direct_boot.state(self.card)
+        self.assertEqual((ready.cart, ready.available, ready.on), (direct_boot.PRO, True, False))
         with contextlib.redirect_stdout(io.StringIO()):
             log = Log()
             code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, direct_boot=True), log=log, fail=log)
         self.assertEqual(code, 0, log.text())
-        self.assertIn("boot:     not changed. The EverDrive-64 Pro has no start-up file", log.text())
-        self.assertFalse(self.autoexec.exists())
+        self.assertIn("SleekMenu64.z64 copied to ED64/menu.n64", log.text())
+        self.assertEqual(menu.read_bytes(), browser())
+        self.assertFalse(self.autoexec.exists(), "the X7's name means nothing to a Pro")
+        # kept in step by an update, removed by off
+        (self.card / card_layout.BROWSER_ROM).write_bytes(browser(b"two"))
+        log = Log()
+        direct_boot.sync(self.card, None, log)
+        self.assertEqual(menu.read_bytes(), browser(b"two"))
+        self.assertIn("ED64/menu.n64 brought up to date", log.text())
+        log = Log()
+        direct_boot.sync(self.card, False, log)
+        self.assertFalse(menu.exists())
+        self.assertIn("ED64/menu.n64 removed", log.text())
+        # another menu there -- an N64FlashcartMenu, say -- is never touched
+        write_rom(menu, 1, 2, game_code="XX")
+        theirs = menu.read_bytes()
+        found = direct_boot.state(self.card)
+        self.assertEqual((found.available, found.on), (False, False))
+        self.assertIn("ED64/menu.n64 is another program", found.why)
+        for wanted in (True, False, None):
+            direct_boot.sync(self.card, wanted, Log())
+        self.assertEqual(menu.read_bytes(), theirs)
+
+    def test_an_x7_start_up_file_on_a_pro_card_is_not_the_switch(self):
+        """A card moved from an X7 to a Pro may still have autoexec.v64: the
+        Pro does nothing with it, and the switch reads only menu.n64."""
+        self.pro()
+        self.autoexec.write_bytes(browser())
+        self.assertEqual(direct_boot.state(self.card).on, False)
+        direct_boot.sync(self.card, False)
+        self.assertTrue(self.autoexec.exists(), "not the Pro's file: left as it is")
 
     def test_the_command_line_takes_on_and_off(self):
         with mock.patch.object(sleekmenu_prep, "run", return_value=0) as run:

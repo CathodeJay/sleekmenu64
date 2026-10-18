@@ -34,6 +34,7 @@ this is the reference.
 /sleekmenu/art/             your own box art and text (optional)  yours
 
 /ED64/autoexec.v64          a copy of the browser (X7, optional)  written by the tool (--direct-boot)
+/ED64/menu.n64              a copy of the browser (Pro, optional) written by the tool (--direct-boot)
 /ED64/CHEATS/               the Pro menu's cheat pack          the EverDrive's, read only
 /ED64/gamedata/             saves                              shared with the EverDrive menu
 /ED64/sysdata/registry.dat  which game is loaded, save type    shared with the EverDrive menu
@@ -69,7 +70,8 @@ folder and writes `catalog.ebc` and `covers.pak` into it, and fetches
 `release-metadata.zip` into it when the card has no collection; a
 `release-metadata.zip` at the card root, where versions before 2.2 put it,
 is moved in at the next run. Everything else it reads in place. One file of the tool's lives outside
-`sleekmenu/`, and only when asked for: `ED64/autoexec.v64`, below.
+`sleekmenu/`, and only when asked for: the start-up copy, `ED64/autoexec.v64`
+or `ED64/menu.n64`, below.
 
 ## Which SleekMenu
 
@@ -98,17 +100,20 @@ never chose has none.
 
 ## Starting in the browser
 
-An EverDrive-64 X7's stock OS starts `ED64/autoexec.v64` by itself at
-power-on when the file is there. `--direct-boot on`, or the switch on the
-window's Card tab, copies the card's `SleekMenu64.z64` to that name, byte
-for byte; `off` removes it. The tool offers this only where it can work and
-do no harm (`tools/direct_boot.py`): `ED64/OS64.v64` must be on the card and
-carry that file name inside it, which is how an OS with the feature is told
-from one without, whatever its version; and an `autoexec.v64` that is not
-the browser (its header title says) is another program's and is never
-overwritten or removed. A run told nothing leaves the switch where it is,
-and copies the browser again when the one at the root has been replaced. A
-card for the EverDrive-64 Pro has no `OS64.v64` and no such file.
+Each EverDrive starts a file in `ED64/` by itself at power-on when the file
+is there: an X7's stock OS starts `ED64/autoexec.v64`, and the Pro
+(firmware 26.1014 and newer) starts `ED64/menu.n64` in place of its own
+menu. `--direct-boot on`, or the switch on the window's Card tab, copies
+the card's `SleekMenu64.z64` to the name the card's EverDrive looks for,
+byte for byte; `off` removes it. Which EverDrive a card is for is read off
+`ED64/`: an X7 card has `OS64.v64`, a Pro card `sysdata/config.ini`
+(`tools/direct_boot.py`). The tool offers the switch only where it can
+work and do no harm: on an X7 card, `OS64.v64` must carry the file name
+inside it, which is how an OS with the feature is told from one without,
+whatever its version; and a start-up file that is not the browser (its
+header title says) is another program's and is never overwritten or
+removed. A run told nothing leaves the switch where it is, and copies the
+browser again when the one at the root has been replaced.
 
 ## Where every field came from
 

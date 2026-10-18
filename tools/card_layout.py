@@ -60,6 +60,9 @@ THEME_FILE = "theme.txt"
 #: (tools/direct_boot.py).
 FIRMWARE_OS = "OS64.v64"
 FIRMWARE_AUTOEXEC = "autoexec.v64"
+#: Under FIRMWARE_FOLDER on an EverDrive-64 Pro: the menu the cartridge
+#: starts at power-on in place of its own, when there is one.
+FIRMWARE_MENU = "menu.n64"
 
 #: Folder names the library scan never descends into, case-folded for
 #: comparison against a directory name from the card: the browser's own, the

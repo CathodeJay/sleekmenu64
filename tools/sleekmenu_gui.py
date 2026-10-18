@@ -364,6 +364,18 @@ def browser_failure_line(failure: str, status: CardStatus, first: bool = True) -
     return text[0].upper() + text[1:]
 
 
+def boot_line(boot: direct_boot.State) -> str:
+    """The note under Start the console in SleekMenu, for the card's
+    EverDrive: what the switch means there, or why it cannot be used."""
+    if not boot.available:
+        return boot.why
+    if boot.cart == direct_boot.PRO:
+        return ("EverDrive-64 Pro, firmware 26.1014 or newer. Replaces the Pro's menu, so no in-game menu "
+                "or save states; untick to have it back.")
+    return ("EverDrive-64 X7. A reset inside a game returns to the EverDrive menu; "
+            "untick to start in the EverDrive menu again.")
+
+
 def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: bool = True,
                   direct: bool = False) -> str:
     """One sentence for how a run ended. `direct` is a card whose console
@@ -566,8 +578,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
     complete on a card that already asked (`cheats_remembered`); unticked,
     the card is told to stop. Screenshots the same way (`shots`,
     `shots_remembered`). `browser` puts the SleekMenu this release goes
-    with on a card that has an older one or none. `direct_boot` is the X7's start-up switch as
-    the tab shows it, None on a card that has no such switch. `theme` is
+    with on a card that has an older one or none. `direct_boot` is the start-up switch as the
+    tab shows it, None on a card that has no such switch. `theme` is
     the id of the colours chosen for the browser."""
     return sleekmenu_prep.Options(
         card=Path(card) if card.strip() else None,
@@ -2222,8 +2234,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
     option(15, rebuild_var, "Rebuild everything from scratch",
            "Slower. For a card whose boxes or names look wrong.")
 
-    # What the console does with the card: the browser's colours, and on an
-    # X7 card the start-up switch, a row that is there only for one.
+    # What the console does with the card: the browser's colours, and on a
+    # card for an X7 or a Pro the start-up switch, a row that is there only
+    # for one of them.
     group(17, "Console")
     theme_row = ttk.Frame(options)
     theme_row.grid(row=18, column=0, sticky="w", pady=(6, 0))
@@ -2387,11 +2400,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = ""):
         roms_box.configure(values=[shown_folder("")] + [shown_folder(folder) for folder in folders])
         boot = direct_boot.state(chosen) if chosen is not None else direct_boot.State()
         state["boot"] = boot
-        if boot.cart == direct_boot.X7:
+        if boot.cart:
             boot_row.grid(row=19, column=0, sticky="ew")
             boot_check.configure(state="normal" if boot.available else "disabled")
-            boot_note.set("EverDrive-64 X7. A reset inside a game returns to the EverDrive menu; "
-                          "untick to start in the EverDrive menu again." if boot.available else boot.why)
+            boot_note.set(boot_line(boot))
         else:
             boot_row.grid_remove()
         # Nothing is fetched while downloads are off, cheat codes included:

@@ -113,34 +113,34 @@ initials under the shelf.
 
 ![The details: the box on the left; the title, year, publisher, genre, region, players, save type, cheats, size and needed accessories beside it; the description below, and the buttons under it](docs/screenshots/detail.png)
 
-## Starting the console in SleekMenu (X7 only)
+## Starting the console in SleekMenu
 
-An EverDrive-64 X7 can power on straight into SleekMenu, without a stop in
-the EverDrive menu. The X7's OS starts a file named `autoexec.v64` in the
-card's `ED64` folder by itself when there is one, so SleekMenu only has to
-be that file. Two ways to put it there:
+The console can power on straight into SleekMenu, without a stop in the
+EverDrive menu. Each EverDrive starts a file in the card's `ED64` folder by
+itself when there is one, so SleekMenu only has to be that file:
 
-- **By hand:** copy `SleekMenu64.z64` into the card's `ED64` folder and
-  rename the copy `autoexec.v64`. Only the name changes; nothing is
-  converted. Do it again when you install a newer SleekMenu.
+| EverDrive | The file | What changes |
+|---|---|---|
+| X7 (a recent OS; 3.11 has it) | `ED64/autoexec.v64` | A reset inside a game returns to the EverDrive menu, where `SleekMenu64.z64` is still at the card root. |
+| Pro (firmware 26.1014 or newer) | `ED64/menu.n64` | SleekMenu replaces the Pro's menu: games started from it have no in-game menu or save states. |
+
+Two ways to put it there:
+
 - **With the Game Catalog Manager:** tick **Start the console in
-  SleekMenu** on the Card tab and press Update card. It makes the same copy
-  and keeps it up to date when you replace `SleekMenu64.z64`.
+  SleekMenu** on the Card tab and press Update card. It makes the right
+  copy for your EverDrive and keeps it up to date when SleekMenu is
+  updated.
+- **By hand:** copy `SleekMenu64.z64` into the card's `ED64` folder and
+  rename the copy as in the table. Only the name changes; nothing is
+  converted. Do it again when you install a newer SleekMenu.
 
-From then on the console powers on in SleekMenu. A reset inside a game
-returns to the EverDrive menu, where `SleekMenu64.z64` is still at the card
-root to start again. To go back, delete `ED64/autoexec.v64`, or untick the
-box and update. It needs a recent X7 OS; 3.11 has it.
-
-**The EverDrive-64 Pro cannot do this.** Its menu is part of the
-cartridge's firmware and has no start-up file, so on a Pro SleekMenu is
-always started from the EverDrive menu. More in
+To go back, untick the box and update, or delete the file. More in
 [docs/CONSOLE.md](docs/CONSOLE.md#starting-the-console-in-sleekmenu).
 
 ## Good to know
 
-- **On the Pro,** let the EverDrive menu boot once after playing before you
-  pull the card: that is when the stock menu writes the save out.
+- **On the Pro,** let the console boot once after playing before you pull
+  the card: that is when the cartridge writes the save out.
 - **Hacks** that black-screen on a console because of a stale header
   checksum are fixed as they launch.
 - **Hacks, translations and homebrew** are told apart from retail games by

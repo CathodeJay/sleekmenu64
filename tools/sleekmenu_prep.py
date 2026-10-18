@@ -322,8 +322,8 @@ class Options:
                                     # card remembers (it asked before: keep them complete)
     shots: bool | None = None       # fetch screenshots: True asks, False stops, None is as the
                                     # card remembers (it asked before: keep them complete)
-    direct_boot: bool | None = None  # an X7 starts in SleekMenu: True, False, or None to leave
-                                     # the card as it is and keep the copy in step
+    direct_boot: bool | None = None  # the console starts in SleekMenu: True, False, or None to
+                                     # leave the card as it is and keep the copy in step
     theme: str | None = None        # the browser's colours, by a theme's id; None leaves the card's
     browser: bool = False           # put this release's SleekMenu64.z64 on a card with an older one
                                     # or none (the command line and the window ask for it unless told
@@ -395,7 +395,7 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         if settled.moved_from is not None and source is not None and not source.exists():
             source = settled.moved_to
         # The browser this release goes with, at the card's root, before
-        # the X7's start-up copy is brought into step with it.
+        # the start-up copy is brought into step with it.
         if options.browser:
             outcome.browser_failure = releases.update_card(
                 card, log, offline=options.no_download or fetch.offline_by_request()).failure
@@ -585,8 +585,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-shots", action="store_true",
                         help="stop fetching screenshots for this card; the pictures already there stay")
     parser.add_argument("--direct-boot", choices=("on", "off"), default=None,
-                        help="EverDrive-64 X7: start the console in SleekMenu (on copies the card's "
-                             f"{card_layout.BROWSER_ROM} to {direct_boot.AUTOEXEC_SHOWN}, off removes it)")
+                        help="start the console in SleekMenu: on copies the card's "
+                             f"{card_layout.BROWSER_ROM} to {direct_boot.AUTOEXEC_SHOWN} on an EverDrive-64 X7, "
+                             f"to {direct_boot.MENU_SHOWN} on a Pro (firmware 26.1014 or newer, in place of "
+                             "the Pro's menu); off removes the copy")
     parser.add_argument("--keep-browser", action="store_true",
                         help=f"leave {card_layout.BROWSER_ROM} on the card as it is (by default an older one, "
                              f"or none, is replaced by SleekMenu {version.VERSION}, the release this tool "

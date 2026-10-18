@@ -123,18 +123,27 @@ launched; `SleekMenu64.z64` is still at the card root to pick from there,
 and the next power-on is SleekMenu again. To go back for good, untick the
 switch and update the card, or delete `ED64/autoexec.v64`.
 
-**EverDrive-64 Pro.** The Pro's menu is part of its firmware and has no
-start-up file, so the console always powers on in the Pro's menu. Start
-there opens Recently played, where SleekMenu stays first: games started
-from SleekMenu are not added to that list.
+**EverDrive-64 Pro.** Firmware 26.1014 and newer start `ED64/menu.n64` in
+place of the Pro's own menu. The same switch in the Game Catalog Manager
+puts SleekMenu there, or by hand it is a copy of `SleekMenu64.z64` in the
+`ED64` folder, renamed `menu.n64`. SleekMenu is then the cartridge's menu:
+the console powers on in it, and the cartridge still writes the last
+game's save to the card at power-on. What the Pro's menu brings with it is
+gone while SleekMenu replaces it: games started from SleekMenu have no
+in-game menu and no save states. To have the Pro's menu again, untick the
+switch and update the card, or delete `ED64/menu.n64`.
+
+Without it, the console powers on in the Pro's menu. Start there opens
+Recently played, where SleekMenu stays first: games started from SleekMenu
+are not added to that list.
 
 ## Saves
 
 Written to `ED64/gamedata/` under the EverDrive's own file names. On the X7
 the save is moved to the card the next time a menu boots. On the Pro the
-cartridge handles saves itself and the stock menu writes them out at its
-next boot — so after playing from SleekMenu, let the EverDrive menu boot
-once before pulling the card.
+cartridge handles saves itself and writes them out at the next power-on,
+whichever menu comes up — so after playing, let the console boot once
+before pulling the card.
 
 ## Clock
 

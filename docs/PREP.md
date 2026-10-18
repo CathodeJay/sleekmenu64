@@ -368,7 +368,7 @@ preparing it, never simply the newest.
   card when the card has an older one, or none. It is fetched from this
   release's page on GitHub, checked to be that SleekMenu, and written by
   way of a temporary file, so a card pulled out halfway still has the old
-  one. On an X7 that starts in SleekMenu, the copy in `ED64/` follows.
+  one. On a card that starts in SleekMenu, the copy in `ED64/` follows.
 - A SleekMenu newer than the Game Catalog Manager is left alone, and the
   tab says to get the newer Game Catalog Manager. So is one of your own
   build, and a file of that name that is not SleekMenu at all.
@@ -381,19 +381,22 @@ preparing it, never simply the newest.
 
 ## Starting the console in SleekMenu
 
-On an EverDrive-64 X7 the stock OS starts the file `ED64/autoexec.v64` by
-itself at power-on, when there is one. The switch on the Card tab
-(`--direct-boot on`) copies the card's `SleekMenu64.z64` there, and the
+Each EverDrive starts a file in the card's `ED64` folder by itself at
+power-on, when there is one: an X7's stock OS starts `ED64/autoexec.v64`,
+and the Pro (firmware 26.1014 and newer) starts `ED64/menu.n64` in place of
+its own menu. The switch on the Card tab (`--direct-boot on`) copies the
+card's `SleekMenu64.z64` to the file for the card's EverDrive, and the
 console starts in SleekMenu; unticking it (`--direct-boot off`) removes the
 copy, and the console starts in the EverDrive menu again. An update keeps
 the copy in step when you replace `SleekMenu64.z64` with a newer one. Leave
 `SleekMenu64.z64` at the card root: it is what the copy is made from.
 
-The switch shows only for a card with an X7's OS on it, and is greyed, with
-the reason, when it cannot act: the OS is too old to have the feature,
-`SleekMenu64.z64` is not on the card yet, or `ED64/autoexec.v64` is some
-other program, which is never replaced or removed. What it means on the
-console, and why the EverDrive-64 Pro has no such switch, is in
+Which EverDrive a card is for is read off its `ED64` folder: the X7's OS
+(`OS64.v64`), or the Pro's settings (`sysdata/config.ini`). The switch shows
+only for one of those, and is greyed, with the reason, when it cannot act:
+an X7 OS too old to have the feature, `SleekMenu64.z64` not on the card
+yet, or a start-up file that is some other program, which is never
+replaced or removed. What it means on the console is in
 [CONSOLE.md](CONSOLE.md#starting-the-console-in-sleekmenu).
 
 ## The command line
@@ -461,6 +464,7 @@ What the tool writes, and what it leaves alone:
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump, when asked for
 /sleekmenu/theme.txt       the browser's theme, when you chose one
 /ED64/autoexec.v64         a copy of SleekMenu64.z64, when an X7 starts in it
+/ED64/menu.n64             a copy of SleekMenu64.z64, when a Pro starts in it
 /sleekmenu/favorites.txt   written by the browser as you star games
 /sleekmenu/history.txt     the last fifteen games you launched
 /sleekmenu/cheats.txt      which cheats are on, per game
@@ -470,11 +474,13 @@ What the tool writes, and what it leaves alone:
 Both the catalog and the covers are optional: with no catalog the browser
 scans the card and shows filenames, with no covers it draws a placeholder.
 The tool never moves, renames or deletes anything on the card, apart from
-three things: an older `SleekMenu64.z64`, replaced by this release's unless
-you untick Keep SleekMenu on the card up to date; a picture or text of your
-own in `sleekmenu/art/` when you press Undo my changes or Remove mine in
-the window; and `ED64/autoexec.v64` when you untick Start the console in
-SleekMenu.
+four things: an older `SleekMenu64.z64`, replaced by this release's unless
+you untick Keep SleekMenu on the card up to date; a `release-metadata.zip`
+at the card root, moved into `sleekmenu/` (or removed when `sleekmenu/`
+already has the very same file); a picture or text of your own in
+`sleekmenu/art/` when you press Undo my changes or Remove mine in the
+window; and the start-up copy, `ED64/autoexec.v64` or `ED64/menu.n64`,
+when you untick Start the console in SleekMenu.
 
 Every file, who writes it and how a game is matched to its box is in
 [CARD_LAYOUT.md](CARD_LAYOUT.md).

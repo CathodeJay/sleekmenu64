@@ -1175,7 +1175,7 @@ class WindowTests(unittest.TestCase):
         self.assertTrue(both.startswith("Done, but 2 boxes could not be downloaded."), both)
         self.assertIn("The file on the release page is not", both)
 
-    def test_the_start_up_switch_is_there_for_an_x7_card_only_and_does_what_it_says(self):
+    def test_the_start_up_switch_is_there_for_an_x7_or_a_pro_card_and_does_what_it_says(self):
         from tests.test_direct_boot import browser, stock_os
         from tools import direct_boot
         with tempfile.TemporaryDirectory() as scratch:
@@ -1188,9 +1188,20 @@ class WindowTests(unittest.TestCase):
             root = sleekmenu_gui.build(card=str(card))
             state = root.sleekmenu_state
             root.update()
-            self.assertFalse(state["boot_row"].winfo_ismapped(), "a Pro card has no such switch")
-            self.assertFalse(state["boot"].available)
+            self.assertTrue(state["boot_row"].winfo_ismapped(), "a Pro card has the switch too")
+            self.assertTrue(state["boot"].available)
+            self.assertIn("Replaces the Pro's menu", state["boot_note"].get())
+            self.assertIn("no in-game menu or save states", state["boot_note"].get())
+            state["options"]["boot"].set(True)
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(state["last_code"], 0)
+            self.assertEqual((card / "ED64" / "menu.n64").read_bytes(), browser())
+            self.assertFalse((card / "ED64" / "autoexec.v64").exists())
+            self.assertIn("it starts in SleekMenu", state["words"]["result"].get())
             root.destroy()
+            (card / "ED64" / "menu.n64").unlink()
 
             (card / "ED64" / "sysdata" / "config.ini").unlink()
             (card / "ED64" / "OS64.v64").write_bytes(stock_os())

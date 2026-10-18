@@ -1,20 +1,27 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Starting the console in SleekMenu, on an EverDrive-64 X7.
+"""Starting the console in SleekMenu, on an EverDrive-64 X7 or Pro.
 
-The X7's stock OS has a start-up file: when ED64/autoexec.v64 exists, the
-OS starts it by itself at power-on, after its own start-up work -- the same
-launch as choosing the file in its menu, with the last game's save already
-written to the card. A copy of the browser under that name is the whole
-switch, and removing the copy is the way back. Nothing of the OS is touched.
+Each EverDrive has a file it starts by itself at power-on, and a copy of
+the browser under that name is the whole switch; removing the copy is the
+way back. Nothing of the firmware is touched.
 
-Two things follow from the OS, not from the browser. A reset inside a game
-returns to the EverDrive menu, because the OS starts the file again only
-when the file was the last thing it launched. And the EverDrive-64 Pro has
-no such file: its menu is firmware, so the switch is not offered there.
+  - The X7's stock OS starts ED64/autoexec.v64, after its own start-up
+    work -- the same launch as choosing the file in its menu, with the last
+    game's save already written to the card. A reset inside a game returns
+    to the EverDrive menu, because the OS starts the file again only when
+    it was the last thing it launched. An OS too old to know the file does
+    not get the switch: the name is looked for inside the OS itself.
+  - The Pro starts ED64/menu.n64 in place of its own menu (firmware 26.1014
+    and newer). The cartridge writes the last game's save to the card at
+    power-on whichever menu comes up. Games started from SleekMenu then
+    have no in-game menu and no save states: those come with the Pro's
+    menu, which unticking the switch brings back.
 
-The copy is the browser at the card root, byte for byte; an update keeps it
-in step when the one at the root is replaced. A start-up file that is some
-other program is never overwritten or removed.
+Which EverDrive a card is for is read off its ED64 folder: the X7's OS file,
+or the Pro's settings. The copy is the browser at the card root, byte for
+byte; an update keeps it in step when the one at the root is replaced. A
+start-up file that is some other program -- another menu, say -- is never
+overwritten or removed.
 """
 
 from __future__ import annotations
@@ -26,16 +33,24 @@ from pathlib import Path
 
 from tools import card_layout
 
-#: The name the OS looks for, as it appears inside the OS itself. An OS
-#: that carries it has the feature, whatever its version says.
+#: The name the X7's OS looks for, as it appears inside the OS itself. An
+#: OS that carries it has the feature, whatever its version says.
 HOOK = (card_layout.FIRMWARE_FOLDER + "/" + card_layout.FIRMWARE_AUTOEXEC).encode("ascii")
 #: The browser's title in its ROM header, at 0x20.
 BROWSER_TITLE = b"SleekMenu 64"
 TITLE_AT = 0x20
-AUTOEXEC_SHOWN = card_layout.FIRMWARE_FOLDER + "/" + card_layout.FIRMWARE_AUTOEXEC
 
 X7 = "x7"
 PRO = "pro"
+#: Each EverDrive's start-up file, in its ED64 folder.
+START_FILE = {X7: card_layout.FIRMWARE_AUTOEXEC, PRO: card_layout.FIRMWARE_MENU}
+AUTOEXEC_SHOWN = card_layout.FIRMWARE_FOLDER + "/" + card_layout.FIRMWARE_AUTOEXEC
+MENU_SHOWN = card_layout.FIRMWARE_FOLDER + "/" + card_layout.FIRMWARE_MENU
+
+
+def shown(cart: str) -> str:
+    """The start-up file of an EverDrive, as the card shows it."""
+    return card_layout.FIRMWARE_FOLDER + "/" + START_FILE[cart]
 
 
 @dataclass(frozen=True)
@@ -46,6 +61,11 @@ class State:
     on: bool = False            # the start-up file is the browser
     stale: bool = False         # ...but not the copy at the card root
     why: str = ""               # when not available: the reason, in a sentence
+
+    @property
+    def file(self) -> str:
+        """The start-up file this card's EverDrive looks for, "" for none."""
+        return shown(self.cart) if self.cart else ""
 
 
 _facts: dict[tuple[str, int, int], object] = {}
@@ -96,35 +116,48 @@ def digest(path: Path) -> str:
     return str(_remembered(path, "sha", lambda target: hashlib.sha256(target.read_bytes()).hexdigest()) or "")
 
 
-def state(card: Path | None) -> State:
-    """Read the card: which EverDrive it is for, and where the switch stands."""
+def cart_of(card: Path | None) -> tuple[str, str]:
+    """Which EverDrive a card's ED64 folder is for, and when it cannot be
+    told, why not."""
     firmware = find(card, card_layout.FIRMWARE_FOLDER)
     if firmware is None or not firmware.is_dir():
-        return State(why="The card has no ED64 folder yet.")
+        return "", "The card has no ED64 folder yet."
     os_file = find(firmware, card_layout.FIRMWARE_OS)
-    if os_file is None or not os_file.is_file():
-        if find(find(firmware, "sysdata"), "config.ini") is not None:
-            return State(PRO, why="The EverDrive-64 Pro has no start-up file; its menu always comes first.")
-        return State(why="The card has no EverDrive OS (ED64/OS64.v64).")
-    if not has_hook(os_file):
+    if os_file is not None and os_file.is_file():
+        return X7, ""
+    if find(find(firmware, "sysdata"), "config.ini") is not None:
+        return PRO, ""
+    return "", ("The card has not been in an EverDrive yet: its ED64 folder has no EverDrive OS "
+                "(an X7's OS64.v64) and no Pro settings.")
+
+
+def state(card: Path | None) -> State:
+    """Read the card: which EverDrive it is for, and where the switch stands."""
+    cart, why = cart_of(card)
+    if not cart:
+        return State(why=why)
+    firmware = find(card, card_layout.FIRMWARE_FOLDER)
+    if cart == X7 and not has_hook(find(firmware, card_layout.FIRMWARE_OS)):
         return State(X7, why="This EverDrive OS does not start a file by itself; a newer OS does.")
     browser = find(card, card_layout.BROWSER_ROM)
-    autoexec = find(firmware, card_layout.FIRMWARE_AUTOEXEC)
-    if autoexec is not None and autoexec.is_file():
-        if not is_browser(autoexec):
-            return State(X7, why=f"{AUTOEXEC_SHOWN} is another program; it is left alone.")
-        stale = browser is not None and browser.is_file() and digest(browser) != digest(autoexec)
-        return State(X7, available=True, on=True, stale=stale)
+    start = find(firmware, START_FILE[cart])
+    if start is not None and start.is_file():
+        if not is_browser(start):
+            return State(cart, why=f"{shown(cart)} is another program; it is left alone.")
+        stale = browser is not None and browser.is_file() and digest(browser) != digest(start)
+        return State(cart, available=True, on=True, stale=stale)
     if browser is None or not browser.is_file():
-        return State(X7, why=f"{card_layout.BROWSER_ROM} is not at the card root yet.")
-    return State(X7, available=True)
+        return State(cart, why=f"{card_layout.BROWSER_ROM} is not at the card root yet.")
+    return State(cart, available=True)
 
 
 def turn_on(card: Path) -> None:
-    """The browser at the card root, copied as the start-up file."""
+    """The browser at the card root, copied as the start-up file of the
+    card's EverDrive."""
+    cart, _ = cart_of(card)
     firmware = find(card, card_layout.FIRMWARE_FOLDER)
     browser = find(card, card_layout.BROWSER_ROM)
-    target = find(firmware, card_layout.FIRMWARE_AUTOEXEC) or firmware / card_layout.FIRMWARE_AUTOEXEC
+    target = find(firmware, START_FILE[cart]) or firmware / START_FILE[cart]
     part = target.with_name(target.name + ".part")
     try:
         part.write_bytes(browser.read_bytes())
@@ -135,9 +168,12 @@ def turn_on(card: Path) -> None:
 
 
 def turn_off(card: Path) -> None:
-    autoexec = find(find(card, card_layout.FIRMWARE_FOLDER), card_layout.FIRMWARE_AUTOEXEC)
-    if autoexec is not None and is_browser(autoexec):
-        autoexec.unlink()
+    cart, _ = cart_of(card)
+    if not cart:
+        return
+    start = find(find(card, card_layout.FIRMWARE_FOLDER), START_FILE[cart])
+    if start is not None and is_browser(start):
+        start.unlink()
 
 
 def sync(card: Path, wanted: bool | None, log=None) -> State:
@@ -149,7 +185,7 @@ def sync(card: Path, wanted: bool | None, log=None) -> State:
     if wanted is None:
         if now.on and now.stale:
             turn_on(card)
-            log(f"boot:     {AUTOEXEC_SHOWN} brought up to date with {card_layout.BROWSER_ROM}")
+            log(f"boot:     {now.file} brought up to date with {card_layout.BROWSER_ROM}")
         return state(card)
     if wanted:
         if not now.available:
@@ -157,9 +193,9 @@ def sync(card: Path, wanted: bool | None, log=None) -> State:
         elif not now.on or now.stale:
             turn_on(card)
             log(f"boot:     the console now starts in SleekMenu ({card_layout.BROWSER_ROM} copied to "
-                f"{AUTOEXEC_SHOWN})" if not now.on else
-                f"boot:     {AUTOEXEC_SHOWN} brought up to date with {card_layout.BROWSER_ROM}")
+                f"{now.file})" if not now.on else
+                f"boot:     {now.file} brought up to date with {card_layout.BROWSER_ROM}")
     elif now.on:
         turn_off(card)
-        log(f"boot:     the console starts in the EverDrive menu again ({AUTOEXEC_SHOWN} removed)")
+        log(f"boot:     the console starts in the EverDrive menu again ({now.file} removed)")
     return state(card)
