@@ -12,7 +12,7 @@ descriptions and filters for your N64 library, and the game you pick boots
 straight from it. It is an ordinary ROM on the card, started from the
 EverDrive's own menu, which stays where it is; saves go to the same
 `ED64/gamedata/` folder, so a game carries its save between the two menus.
-On an X7 the console can start straight in it.
+The console can also start straight in it, on the X7 and on the Pro.
 
 ![The list view, in the Grape theme: the genre tabs across the top, the games on the left, and on the right the selected game's box, year, publisher, genre, region, save type, accessories and size; the buttons and what they do along the bottom](docs/screenshots/list.png)
 
@@ -61,18 +61,18 @@ puts the SleekMenu of the same release on the card. The two always go
 together, so a card is never left with a SleekMenu its catalog does not
 suit.
 
-**Starting the console in SleekMenu:** an X7 can power on straight into
-it; see [below](#starting-the-console-in-sleekmenu-x7-only).
+**Starting the console in SleekMenu:** the X7 and the Pro can both power
+on straight into it; see [below](#starting-the-console-in-sleekmenu).
 
 **Themes:** the browser comes in ten sets of colours: Midnight, Charcoal,
 the six Funtastic colours (Jungle, Grape, Fire, Ice, Smoke, Watermelon),
 Atomic Purple and Gold. Change it on the console (Z, then the THEME row)
 or under **Theme** on the Game Catalog Manager's Card tab.
 
-**Music:** choose a song under **Theme** in the Game Catalog Manager
-(WAV, MP3, FLAC or OGG) and SleekMenu plays it on a loop while you browse.
-It fades out when a game starts. Turn it on or off on the console with Z,
-then the MUSIC row.
+**Music:** choose a song under **Theme** on the Game Catalog Manager's
+Card tab (MP3, WAV, FLAC or OGG) and SleekMenu plays it on a loop while
+you browse. It fades out when a game starts. Turn it on or off on the
+console with Z, then the MUSIC row.
 
 The Game Catalog Manager also shows your card the way the console will, and
 lets you give any game your own picture, description or facts; see
