@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.2.2
+
+**Upgrading from 2.2.1:** download the new Game Catalog Manager and press
+**Update card**. It puts SleekMenu 2.2.2 on the card.
+
+- **A game started after the music finds the audio as it is at power-on.**
+  On some setups, some games started with a loud noise when the music had
+  been playing in SleekMenu. SleekMenu now lets the audio finish what it
+  was playing before it closes it, and leaves nothing waiting for the game.
+- **X7: a verified load works with .v64 games.** Every byteswapped (.v64)
+  game failed a verified load with "SDRAM MISMATCH at 0x00000000", even
+  though it was loaded correctly.
+- **Analogue 3D: no more black bands over the box art in the grid.** The
+  descriptions on a game's details and in coverflow are now drawn the same
+  way, and the grid draws faster on every console.
+- **The Game Catalog Manager picks your EverDrive's card** when several
+  disks are connected: the one with SleekMenu or your EverDrive's folder on
+  it, otherwise the only one with games, otherwise the only disk. Time
+  Machine snapshots are no longer listed.
+- **The Games tab's two panels can be resized** by dragging the line
+  between them.
+
+Thanks to acdvorak for the Analogue 3D fix, the card picking and the
+resizable Games tab.
+
 ## 2.2.1
 
 **Upgrading from 2.2.0:** download the new Game Catalog Manager and press
