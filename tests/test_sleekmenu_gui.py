@@ -943,6 +943,46 @@ class WindowTests(unittest.TestCase):
             self.assertTrue(str(games.text.cget("yscrollcommand")))
             root.destroy()
 
+    def test_the_games_details_keep_the_dragged_width_when_the_window_resizes(self):
+        root = sleekmenu_gui.build(card="")
+        state = root.sleekmenu_state
+        state["notebook"].select(state["pages"]["games"])
+        games = state["catalog"]
+        root.update()
+
+        sash = games.panes.sashpos(0)
+        default_width = games.detail.winfo_width()
+        games.panes.sashpos(0, sash - 80)
+        root.update()
+        self.assertEqual(games.panes.sashpos(0), sash - 80)
+        chosen_width = games.detail.winfo_width()
+        self.assertNotEqual(chosen_width, default_width)
+
+        def resized(width: int) -> int:
+            window_width = root.winfo_width()
+            pane_width = games.panes.winfo_width()
+            list_width = games.tree.master.winfo_width()
+            root.geometry(f"{width}x{root.winfo_height()}")
+            # Window managers apply geometry changes asynchronously.
+            until = time.monotonic() + 2.0
+            while time.monotonic() < until:
+                root.update()
+                if abs(root.winfo_width() - width) <= 1:
+                    break
+                time.sleep(0.02)
+            root.update()
+            if root.winfo_width() == window_width:
+                root.destroy()
+                self.skipTest("the window manager did not allow the window width to change")
+            change = games.panes.winfo_width() - pane_width
+            self.assertEqual(games.detail.winfo_width(), chosen_width, width)
+            self.assertEqual(games.tree.master.winfo_width() - list_width, change, width)
+            return change
+
+        self.assertGreater(resized(1240), 0, "the window grew")
+        self.assertLess(resized(1040), 0, "the window shrank")
+        root.destroy()
+
     def test_the_window_settles_at_every_width(self):
         """The Card tab's text wraps at its column's width. When the column's
         width also came from its text, a line that filled it to the pixel

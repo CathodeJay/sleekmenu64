@@ -1463,7 +1463,7 @@ class GamesTab:
 
         # -- search and the Show choice --------------------------------------
         top = ttk.Frame(frame)
-        top.grid(row=0, column=0, columnspan=2, sticky="ew")
+        top.grid(row=0, column=0, sticky="ew")
         ttk.Label(top, text="Search").pack(side="left")
         search = ttk.Entry(top, textvariable=self.query, width=26)
         search.pack(side="left", padx=(6, 0))
@@ -1478,11 +1478,18 @@ class GamesTab:
         ttk.Label(top, textvariable=self.shown, foreground=muted).pack(side="left", padx=(12, 0))
         ttk.Button(top, text="Reload", command=self.reload).pack(side="right")
         note = ttk.Label(frame, textvariable=self.note, foreground=self.colors["warn"], justify="left")
-        note.grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 6))
+        note.grid(row=1, column=0, sticky="w", pady=(6, 6))
+
+        # The horizontal split has a vertical sash, widened for an easier grab.
+        ttk.Style(frame).configure("Games.TPanedwindow.Vertical.Sash", sashthickness=12)
+        self.panes = ttk.Panedwindow(frame, orient="horizontal", style="Games.TPanedwindow")
+        self.panes.grid(row=2, column=0, sticky="nsew")
 
         # -- the list ----------------------------------------------------------
-        left = ttk.Frame(frame)
-        left.grid(row=2, column=0, sticky="nsew")
+        left = ttk.Frame(self.panes)
+        # Only the list absorbs window resizing; the details keep the width
+        # chosen by dragging the divider.
+        self.panes.add(left, weight=1)
         left.rowconfigure(0, weight=1)
         left.columnconfigure(0, weight=1)
         self.tree = ttk.Treeview(left, columns=("genre", "year", "status"), selectmode="browse")
@@ -1505,8 +1512,8 @@ class GamesTab:
         # The box and the facts side by side, and under them the description
         # with all the height that is left: it is the one field that is a
         # paragraph, and a paragraph is edited in a box that shows it.
-        right = ttk.Frame(frame, padding=(14, 0, 0, 0), width=self.DETAIL_WIDTH)
-        right.grid(row=2, column=1, sticky="nsew")
+        right = ttk.Frame(self.panes, padding=(14, 0, 0, 0), width=self.DETAIL_WIDTH)
+        self.panes.add(right, weight=0)
         right.grid_propagate(False)
         right.columnconfigure(0, weight=1)
         right.rowconfigure(2, weight=1)
