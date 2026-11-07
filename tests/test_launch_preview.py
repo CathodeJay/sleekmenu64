@@ -942,6 +942,7 @@ class SafetyGateTests(unittest.TestCase):
         self.assertEqual(positions, sorted(positions), "teardown order is wrong")
         self.assertIn("params.cheat_list = (uint32_t *)cheats;", boot)
         self.assertIn("params.detect_cic_seed = true;", boot)
+        self.assertIn("params.clear_rdram = false;", boot)
 
     def test_probe_path_has_no_writes_saves_or_boot(self):
         source = ((ROOT / "src/x7_probe.c").read_text(encoding="utf-8")
@@ -1016,7 +1017,7 @@ class VendoredBootTests(unittest.TestCase):
         self.assertIn("GNU AFFERO GENERAL PUBLIC LICENSE", licence)
         vendored = (self.VENDOR / "VENDORED.md").read_text(encoding="utf-8")
         self.assertIn("AGPL-3.0", vendored)
-        self.assertIn("6407ab15f6c19d1bf9ded5104c1c8b3c36471379", vendored)
+        self.assertIn("7fcef17d92eef786482673d55b0a8bf7894f8a31", vendored)
 
     def test_compat_shim_matches_libdragon_preview_values(self):
         """boot.c needs three C0_STATUS bits that trunk libdragon lacks. The
