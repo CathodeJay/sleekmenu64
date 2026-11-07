@@ -179,7 +179,7 @@ class VolumeTests(unittest.TestCase):
             self.assertIsNone(sleekmenu_gui.preferred_card([first, second]))
 
     def test_games_at_root_or_in_the_first_two_subdirectories_select_a_card(self):
-        for rom in ("Game.z64", "ROMS/Game.n64", "ROMS/N64/Game.Z64"):
+        for rom in ("Game.z64", "ROMS/Game.n64", "ROMS/N64/Game.Z64", "Game.v64", "ROMS/Disk.ndd"):
             with self.subTest(rom=rom), tempfile.TemporaryDirectory() as scratch:
                 empty, games = Path(scratch) / "A", Path(scratch) / "B"
                 empty.mkdir()
@@ -318,7 +318,13 @@ class CardStatusTests(unittest.TestCase):
     def test_an_unreadable_browser_is_reported_without_promising_replacement(self):
         browser = releases.Browser(releases.UNKNOWN)
         self.assertEqual(sleekmenu_gui.browser_line(browser),
-                         "SleekMenu on the card couldn't be inspected, so it won't be replaced.")
+                         "SleekMenu on the card couldn't be read, so it won't be replaced.")
+
+    def test_a_card_whose_sleekmenu_could_not_be_read_is_not_blamed_on_space(self):
+        line = sleekmenu_gui.browser_failure_line(releases.UNREADABLE, sleekmenu_gui.card_status(None))
+        self.assertEqual(line, "Done, but SleekMenu on the card couldn't be read, so it was left as it is. "
+                               "Check that the card is still in, then try again.")
+        self.assertNotIn("full", line)
 
     def test_no_card_and_an_empty_card(self):
         nothing = sleekmenu_gui.card_status(None)

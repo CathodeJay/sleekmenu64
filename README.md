@@ -38,8 +38,8 @@ Anyway in System Settings → Privacy & Security (earlier macOS: right-click
 → Open). On Windows: More info → Run anyway. On Linux: `chmod +x
 SleekMenu-Catalog-Manager-linux` first.
 
-**3. Set up the card.** It is picked for you when it is the only removable
-disk. Press **Set up card**: it puts `SleekMenu64.z64` at the root of the
+**3. Set up the card.** It is picked for you when it is the only card with
+your EverDrive's folder on it, or the only removable disk. Press **Set up card**: it puts `SleekMenu64.z64` at the root of the
 card, fetches a box and a description for each of your games, then writes
 the catalog. Up to about 330 MB for a complete library, once; you can stop
 and carry on later. (On a computer without internet, download

@@ -3,10 +3,11 @@
 """The Game Catalog Manager's window: the same run as
 sleekmenu-catalog-manager.pyz, without a terminal.
 
-Pick the card (selected automatically by its installed menu, then games,
-then being the only card), read what is on it, press the one button -- Set up
-card the first time, Update card after -- and watch the run go through its four
-steps, with a Stop if it is taking too long. What the card lacks is fetched by
+Pick the card (chosen for you when it is the only one with SleekMenu or an
+EverDrive's folder on it, else the only one with games, else the only card),
+read what is on it, press the one button -- Set up card the first time,
+Update card after -- and watch the run go through its four steps, with a
+Stop if it is taking too long. What the card lacks is fetched by
 the run itself; the choices most people never change sit beside the button.
 Nothing here decides anything about the card: the window collects a handful of
 answers and hands them to tools/sleekmenu_prep.run(), which is what the command
@@ -146,7 +147,7 @@ def has_games(card: Path) -> bool | None:
         depth = len(Path(directory).relative_to(card).parts)
         subdirs[:] = ([] if depth >= 2 else
                       [name for name in subdirs if not card_layout.excluded_directory(name)])
-        if any(not card_layout.hidden(name) and Path(name).suffix.casefold() in (".z64", ".n64")
+        if any(not card_layout.hidden(name) and Path(name).suffix.casefold() in library.LIBRARY_SUFFIXES
                for name in files):
             return True
     return None if scan_errors else False
@@ -237,7 +238,7 @@ def browser_line(browser: releases.Browser, keep: bool = True, offline: bool = F
     if not keep:
         return "SleekMenu on the card won't be changed."
     if browser.state == releases.UNKNOWN:
-        return "SleekMenu on the card couldn't be inspected, so it won't be replaced."
+        return "SleekMenu on the card couldn't be read, so it won't be replaced."
     if browser.state == releases.CURRENT:
         return f"SleekMenu {mine} is installed and up to date."
     if browser.state == releases.NEWER:
@@ -408,6 +409,9 @@ def browser_failure_line(failure: str, status: CardStatus, first: bool = True) -
         text = f"{start}{name} isn't available for download yet. {kept} Try again later."
     elif failure == releases.WRONG_FILE:
         text = f"{start}the SleekMenu download was the wrong file. {kept} Please report this on GitHub."
+    elif failure == releases.UNREADABLE:
+        text = (f"{start}SleekMenu on the card couldn't be read, so it was left as it is. "
+                "Check that the card is still in, then try again.")
     else:
         text = (f"{start}SleekMenu couldn't be saved to the card. Check that the card isn't full or locked, "
                 f"then try again. {kept}")

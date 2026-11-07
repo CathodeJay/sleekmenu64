@@ -67,7 +67,7 @@ CURRENT = "current"       # this release
 NEWER = "newer"           # a later release than this tool
 OWN = "own"               # a SleekMenu no release page had: the owner's build
 OTHER = "other"           # a file at that name that is not SleekMenu
-UNKNOWN = "unknown"       # the card or ROM could not be inspected
+UNKNOWN = "unknown"       # SleekMenu64.z64 or the card root could not be read
 
 
 #: Why this release's SleekMenu could not be put on a card, so the window
@@ -76,6 +76,7 @@ CONNECTION = "connection"       # the release page could not be reached
 NOT_RELEASED = "not released"   # the release page has no SleekMenu64.z64
 WRONG_FILE = "wrong file"       # what the release page has is not this release's SleekMenu
 CARD = "card"                   # the card would not take the file
+UNREADABLE = "unreadable"       # the SleekMenu on the card could not be read, so it was left
 
 
 class ReleaseError(Exception):
@@ -100,7 +101,7 @@ class Browser:
         if self.state == MISSING:
             return "not on the card"
         if self.state == UNKNOWN:
-            return "could not be inspected"
+            return "couldn't be read"
         if self.state == OTHER:
             return f"{ROM_NAME} on the card is not SleekMenu"
         if self.state == OWN:
@@ -232,8 +233,8 @@ def update_card(card: Path, log=print, offline: bool = False, url: str | None = 
     found = card_browser(card)
     mine = version.VERSION
     if found.state == UNKNOWN:
-        log("sleekmenu: the card's SleekMenu could not be inspected; left as it is")
-        return Updated(found, CARD)
+        log(f"sleekmenu: {ROM_NAME} couldn't be read; left as it is")
+        return Updated(found, UNREADABLE)
     if found.state == CURRENT:
         return Updated(found)
     if found.state == NEWER:

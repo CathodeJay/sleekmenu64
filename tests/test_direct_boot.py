@@ -84,7 +84,7 @@ class CardTests(unittest.TestCase):
             with self.subTest(path=unreadable), mock.patch.object(direct_boot.os, "listdir", side_effect=inspect):
                 cart, why = direct_boot.cart_of(self.card)
                 self.assertIsNone(cart)
-                self.assertIn("could not be inspected", why)
+                self.assertEqual(why, "The card couldn't be read. Check that it's still in, then press Refresh.")
                 self.assertFalse(direct_boot.state(self.card).available)
 
     def test_failed_firmware_metadata_inspection_is_unknown(self):
@@ -99,7 +99,7 @@ class CardTests(unittest.TestCase):
             with self.subTest(path=unreadable), mock.patch.object(Path, "stat", inspect):
                 cart, why = direct_boot.cart_of(self.card)
                 self.assertIsNone(cart)
-                self.assertIn("could not be inspected", why)
+                self.assertEqual(why, "The card couldn't be read. Check that it's still in, then press Refresh.")
                 self.assertFalse(direct_boot.state(self.card).available)
 
     def test_an_x7_card_has_the_switch_when_its_os_has_the_hook_and_the_browser_is_there(self):

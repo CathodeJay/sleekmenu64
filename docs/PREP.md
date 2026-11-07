@@ -18,8 +18,11 @@ click the first time. With Python and Tk installed,
 `python3 sleekmenu-catalog-manager.pyz --gui` opens the same window.
 
 The card is chosen in the row above the tabs, and is the same one on every
-tab: it is picked for you when it is the only removable disk; Choose and
-Refresh otherwise.
+tab. It is picked for you when only one card has SleekMenu or an
+EverDrive's `ED64` folder on it; failing that, when only one has games on
+it (at the root or up to two folders down); failing that, when it is the
+only removable disk. Otherwise use Choose or Refresh. Time Machine
+snapshots are never listed.
 
 ### Card
 

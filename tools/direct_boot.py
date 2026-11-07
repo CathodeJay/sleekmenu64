@@ -120,7 +120,8 @@ def digest(path: Path) -> str:
 
 def cart_of(card: Path | None) -> tuple[str | None, str]:
     """Which EverDrive a card's ED64 folder is for, and when it cannot be
-    told, why not. None means inspection failed; "" means neither is installed."""
+    told, why not. None when the card could not be read; "" when it has
+    neither EverDrive's folder."""
     try:
         firmware = find(card, card_layout.FIRMWARE_FOLDER, strict=True)
         if firmware is None or not stat.S_ISDIR(firmware.stat().st_mode):
@@ -131,8 +132,8 @@ def cart_of(card: Path | None) -> tuple[str | None, str]:
         sysdata = find(firmware, "sysdata", strict=True)
         if find(sysdata, "config.ini", strict=True) is not None:
             return PRO, ""
-    except OSError as error:
-        return None, f"The card's EverDrive installation could not be inspected: {error}"
+    except OSError:
+        return None, "The card couldn't be read. Check that it's still in, then press Refresh."
     return "", "Use this card in your EverDrive once first."
 
 

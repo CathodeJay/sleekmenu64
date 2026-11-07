@@ -116,11 +116,11 @@ class CardTests(unittest.TestCase):
                 self.assertEqual(found.state, releases.UNKNOWN)
                 self.assertEqual(found.path, self.rom)
                 self.assertFalse(found.wants_update)
-                self.assertIn("could not be inspected", found.describe())
+                self.assertIn("couldn't be read", found.describe())
                 log = Log()
                 done = releases.update_card(self.card, log)
-                self.assertEqual((done.browser.state, done.failure), (releases.UNKNOWN, releases.CARD))
-                self.assertIn("could not be inspected", log.text())
+                self.assertEqual((done.browser.state, done.failure), (releases.UNKNOWN, releases.UNREADABLE))
+                self.assertIn("couldn't be read", log.text())
                 fetch_rom.assert_not_called()
                 install.assert_not_called()
             self.assertEqual(self.rom.read_bytes(), data)
@@ -132,7 +132,7 @@ class CardTests(unittest.TestCase):
              mock.patch.object(releases, "install") as install:
             self.assertEqual(self.state().state, releases.UNKNOWN)
             done = releases.update_card(self.card, Log())
-            self.assertEqual((done.browser.state, done.failure), (releases.UNKNOWN, releases.CARD))
+            self.assertEqual((done.browser.state, done.failure), (releases.UNKNOWN, releases.UNREADABLE))
             fetch_rom.assert_not_called()
             install.assert_not_called()
 
