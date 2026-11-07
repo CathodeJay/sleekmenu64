@@ -148,6 +148,8 @@ bool launch_resolve_paths(const char *path, sm_launch_paths_t *paths) {
 static sm_ui_t ui;
 static sm_layout_t layout;
 static uint16_t screen_pixels[320 * 240];
+/* A line of the launch card's description, as ui.c spaces them. */
+#define DESC_TEST_LINE 9
 
 static void layout_ntsc(void) {
     memset(&layout, 0, sizeof(layout));
@@ -1501,6 +1503,27 @@ int main(void) {
         draw();
         assert(sm_test_drew(" play"));            /* the prompts are untouched */
         assert(sm_test_box_count > 0);            /* the bar at the edge */
+
+        /* The paragraph reaches the screen from its own surface pixel for
+           pixel, at an odd column, through the same row copy as the grid. */
+        {
+            int left = layout.safe_left + 3, width = ui.desc_surface.width, top = -1;
+            assert(left & 1);
+            for (int y = 0; y < ui.desc_surface.height; y++) {
+                uint16_t *row = (uint16_t *)((uint8_t *)ui.desc_surface.buffer + (size_t)y * ui.desc_surface.stride);
+                for (int x = 0; x < width; x++) row[x] = (uint16_t)(0x8001u + (unsigned)x * 7u + (unsigned)y * 131u);
+            }
+            draw_clean();
+            for (int y = 0; y < 240 && top < 0; y++)
+                if (!memcmp(screen_pixels + (size_t)y * 320 + left, ui.desc_surface.buffer, (size_t)width * 2u))
+                    top = y;
+            assert(top > 0);
+            for (int y = 0; y < 3 * DESC_TEST_LINE; y++) {
+                const uint16_t *want = (const uint16_t *)((const uint8_t *)ui.desc_surface.buffer +
+                    (size_t)y * ui.desc_surface.stride);
+                assert(!memcmp(screen_pixels + (size_t)(top + y) * 320 + left, want, (size_t)width * 2u));
+            }
+        }
 
         /* Left alone: nothing for two seconds, then a pixel every four
            frames, up to the end, a hold, and back to the top. */

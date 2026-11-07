@@ -762,20 +762,38 @@ static void load_slot_step(sm_ui_t *ui, const sm_catalog_t *catalog) {
             if (make_tile(ui, slot)) return;
 }
 
-/* Copy a cached grid tile to the uncached framebuffer, one 16-bit pixel at
-   a time. At the grid's odd x coordinates, memcpy compiles to unaligned
-   64-bit stores that produce vertical bands on Analogue 3D. The volatile
-   destination prevents the compiler from replacing these pixel writes
-   with memcpy or wider stores. */
+/* A row of pixels onto the screen. The screen is uncached memory, and a
+   row that starts at an odd pixel is not 8-byte aligned, so memcpy writes
+   its ends with partial stores (swl, or sdl/sdr when it is inlined). The
+   Analogue 3D gets those wrong and draws vertical bands. So the pixels up
+   to the first 8-byte boundary and after the last one are written two
+   bytes at a time, and the rest eight bytes at a time, aligned: about as
+   many stores as an aligned memcpy, and no partial ones. The volatile
+   pointers keep the compiler from turning this back into memcpy. */
+static inline __attribute__((always_inline)) void put_pixels(surface_t *s, int x, int y,
+    const uint16_t *src, int count) {
+    volatile uint16_t *out = (volatile uint16_t *)((uint8_t *)s->buffer + (size_t)y * s->stride) + x;
+    int i = 0;
+    while (i < count && ((uintptr_t)(out + i) & 7u)) { out[i] = src[i]; i++; }
+    for (; i + 4 <= count; i += 4) {
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+        uint64_t four = (uint64_t)src[i] << 48 | (uint64_t)src[i + 1] << 32 |
+            (uint64_t)src[i + 2] << 16 | src[i + 3];
+#else
+        uint64_t four = (uint64_t)src[i + 3] << 48 | (uint64_t)src[i + 2] << 32 |
+            (uint64_t)src[i + 1] << 16 | src[i];
+#endif
+        *(volatile uint64_t *)(out + i) = four;
+    }
+    for (; i < count; i++) out[i] = src[i];
+}
+
+/* A tile made by make_tile, copied as it is. */
 static void draw_tile(surface_t *dst, int x, int y, const uint16_t *tile) {
     if (surface_get_format(dst) != FMT_RGBA16) return;
     if (x < 0 || y < 0 || x + SM_UI_TILE_WIDTH > dst->width || y + SM_UI_TILE_HEIGHT > dst->height) return;
-    for (int row = 0; row < SM_UI_TILE_HEIGHT; row++) {
-        volatile uint16_t *out = (volatile uint16_t *)((uint8_t *)dst->buffer +
-            (size_t)(y + row) * dst->stride) + x;
-        const uint16_t *in = tile + (size_t)row * SM_UI_TILE_WIDTH;
-        for (int col = 0; col < SM_UI_TILE_WIDTH; col++) out[col] = in[col];
-    }
+    for (int row = 0; row < SM_UI_TILE_HEIGHT; row++)
+        put_pixels(dst, x, y + row, tile + (size_t)row * SM_UI_TILE_WIDTH, SM_UI_TILE_WIDTH);
 }
 
 /* The first character of an item's title, folded and reduced to a bucket:
@@ -1513,13 +1531,11 @@ static void draw_description(surface_t *s, const sm_layout_t *l, const sm_ui_t *
         int width = ui->desc_surface.width;
         const uint8_t *src = (const uint8_t *)ui->desc_surface.buffer +
             (size_t)ui->desc_offset * ui->desc_surface.stride;
-        uint8_t *dst = (uint8_t *)s->buffer + (size_t)top * s->stride + (size_t)(l->safe_left + 3) * 2u;
         if (rows > height) rows = height;
         if (rows > ui->desc_surface.height - ui->desc_offset) rows = ui->desc_surface.height - ui->desc_offset;
         for (int r = 0; r < rows; r++) {
-            memcpy(dst, src, (size_t)width * 2u);
+            put_pixels(s, l->safe_left + 3, top + r, (const uint16_t *)src, width);
             src += ui->desc_surface.stride;
-            dst += s->stride;
         }
     }
     max = desc_max_offset(ui, l);
@@ -2585,15 +2601,12 @@ static void draw_coverflow(surface_t *s, const sm_layout_t *l, const sm_catalog_
                 int width = ui->desc_surface.width;
                 const uint8_t *src = (const uint8_t *)ui->desc_surface.buffer +
                     (size_t)ui->flow_desc_offset * ui->desc_surface.stride;
-                uint8_t *dst = (uint8_t *)s->buffer + (size_t)(y + 22) * s->stride +
-                    (size_t)(l->safe_left + 6) * 2u;
                 if (rows > ui->desc_surface.height - ui->flow_desc_offset)
                     rows = ui->desc_surface.height - ui->flow_desc_offset;
                 if (width > l->safe_right - (l->safe_left + 6)) width = l->safe_right - (l->safe_left + 6);
                 for (int r = 0; r < rows; r++) {
-                    memcpy(dst, src, (size_t)width * 2u);
+                    put_pixels(s, l->safe_left + 6, y + 22 + r, (const uint16_t *)src, width);
                     src += ui->desc_surface.stride;
-                    dst += s->stride;
                 }
             } else if (room > 0) {
                 graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
