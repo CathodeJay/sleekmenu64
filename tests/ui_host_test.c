@@ -304,6 +304,55 @@ int main(void) {
         assert(sm_test_sprite_loads == 1);
     }
 
+    /* ---- every cached grid tile fills its odd-column destination ---- */
+    {
+        static const row_t rows[] = {
+            {"a.z64", "A", "Racing", 0, "", 0, NULL}, {"b.z64", "B", "Racing", 0, "", 0, NULL},
+            {"c.z64", "C", "Racing", 0, "", 0, NULL}, {"d.z64", "D", "Racing", 0, "", 0, NULL},
+        };
+        const uint16_t untouched = 0xA5A5u;
+        start(rows, 4u);
+        frame(PRESS(toggle_view));
+        idle(40);
+        for (int slot = 0; slot < SM_UI_GRID_COLUMNS; slot++) {
+            surface_t pixels;
+            assert(ui.slot_sprites[slot] && ui.slot_tiles[slot]);
+            pixels = sprite_get_pixels(ui.slot_sprites[slot]);
+            assert(pixels.width == 96 && pixels.height == 72);
+            /* Each 3x3 source block becomes exactly 2x2 tile pixels. Vary
+               both axes and the slot so missing columns, wrong strides and
+               a tile copied from its neighbour all show up. */
+            for (int y = 0; y < pixels.height; y++) {
+                uint16_t *row = (uint16_t *)((uint8_t *)pixels.buffer + (size_t)y * pixels.stride);
+                for (int x = 0; x < pixels.width; x++)
+                    row[x] = rgba16_of((unsigned)(x / 3) * 8u, (unsigned)(y / 3) * 8u, (unsigned)slot * 64u);
+            }
+            free(ui.slot_tiles[slot]);
+            ui.slot_tiles[slot] = NULL;
+        }
+        idle(SM_UI_GRID_COLUMNS);             /* rebuild through make_tile */
+        memset(screen_pixels, 0xA5, sizeof(screen_pixels));
+        draw();
+        for (int slot = 0; slot < SM_UI_GRID_COLUMNS; slot++) {
+            int left = layout.safe_left + 3 + slot * (SM_UI_TILE_WIDTH + 4);
+            int top = layout.tabs_top;
+            assert(left & 1);                  /* the console's real alignment */
+            assert(ui.slot_tiles[slot]);
+            for (int y = 0; y < SM_UI_TILE_HEIGHT; y++) {
+                const uint16_t *row = screen_pixels + (size_t)(top + y) * 320;
+                assert(row[left - 1] == untouched);
+                assert(row[left + SM_UI_TILE_WIDTH] == untouched);
+                for (int x = 0; x < SM_UI_TILE_WIDTH; x++)
+                    assert(row[left + x] == rgba16_of((unsigned)(x / 2) * 8u,
+                        (unsigned)(y / 2) * 8u, (unsigned)slot * 64u));
+            }
+            for (int x = 0; x < SM_UI_TILE_WIDTH; x++) {
+                assert(screen_pixels[(size_t)(top - 1) * 320 + left + x] == untouched);
+                assert(screen_pixels[(size_t)(top + SM_UI_TILE_HEIGHT) * 320 + left + x] == untouched);
+            }
+        }
+    }
+
     /* ---- scrolling the grid keeps what it already has --------------- */
     {
         static row_t rows[24];

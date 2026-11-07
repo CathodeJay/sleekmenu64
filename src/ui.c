@@ -762,13 +762,20 @@ static void load_slot_step(sm_ui_t *ui, const sm_catalog_t *catalog) {
             if (make_tile(ui, slot)) return;
 }
 
-/* A tile made by make_tile, copied as it is. */
+/* Copy a cached grid tile to the uncached framebuffer, one 16-bit pixel at
+   a time. At the grid's odd x coordinates, memcpy compiles to unaligned
+   64-bit stores that produce vertical bands on Analogue 3D. The volatile
+   destination prevents the compiler from replacing these pixel writes
+   with memcpy or wider stores. */
 static void draw_tile(surface_t *dst, int x, int y, const uint16_t *tile) {
     if (surface_get_format(dst) != FMT_RGBA16) return;
     if (x < 0 || y < 0 || x + SM_UI_TILE_WIDTH > dst->width || y + SM_UI_TILE_HEIGHT > dst->height) return;
-    for (int row = 0; row < SM_UI_TILE_HEIGHT; row++)
-        memcpy((uint8_t *)dst->buffer + (size_t)(y + row) * dst->stride + (size_t)x * 2u,
-            tile + (size_t)row * SM_UI_TILE_WIDTH, (size_t)SM_UI_TILE_WIDTH * 2u);
+    for (int row = 0; row < SM_UI_TILE_HEIGHT; row++) {
+        volatile uint16_t *out = (volatile uint16_t *)((uint8_t *)dst->buffer +
+            (size_t)(y + row) * dst->stride) + x;
+        const uint16_t *in = tile + (size_t)row * SM_UI_TILE_WIDTH;
+        for (int col = 0; col < SM_UI_TILE_WIDTH; col++) out[col] = in[col];
+    }
 }
 
 /* The first character of an item's title, folded and reduced to a bucket:
