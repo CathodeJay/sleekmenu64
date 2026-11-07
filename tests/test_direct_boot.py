@@ -71,6 +71,37 @@ class CardTests(unittest.TestCase):
         self.assertEqual(direct_boot.state(self.card).file, "ED64/autoexec.v64",
                          "the X7's OS on the card makes it an X7 card")
 
+    def test_failed_directory_inspection_is_unknown(self):
+        self.assertEqual(direct_boot.cart_of(self.card)[0], "")
+        self.pro(at_root=False)
+        listdir = direct_boot.os.listdir
+        for unreadable in (self.card, self.firmware, self.firmware / "sysdata"):
+            def inspect(path):
+                if Path(path) == unreadable:
+                    raise OSError(5, "Input/output error")
+                return listdir(path)
+
+            with self.subTest(path=unreadable), mock.patch.object(direct_boot.os, "listdir", side_effect=inspect):
+                cart, why = direct_boot.cart_of(self.card)
+                self.assertIsNone(cart)
+                self.assertIn("could not be inspected", why)
+                self.assertFalse(direct_boot.state(self.card).available)
+
+    def test_failed_firmware_metadata_inspection_is_unknown(self):
+        self.x7(at_root=False)
+        original_stat = Path.stat
+        for unreadable in (self.firmware, self.firmware / "OS64.v64"):
+            def inspect(path, *args, **kwargs):
+                if path == unreadable:
+                    raise PermissionError(13, "Permission denied")
+                return original_stat(path, *args, **kwargs)
+
+            with self.subTest(path=unreadable), mock.patch.object(Path, "stat", inspect):
+                cart, why = direct_boot.cart_of(self.card)
+                self.assertIsNone(cart)
+                self.assertIn("could not be inspected", why)
+                self.assertFalse(direct_boot.state(self.card).available)
+
     def test_an_x7_card_has_the_switch_when_its_os_has_the_hook_and_the_browser_is_there(self):
         self.x7(hook=False)
         old = direct_boot.state(self.card)

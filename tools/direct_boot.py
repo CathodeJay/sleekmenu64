@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -87,8 +88,8 @@ def _remembered(path: Path, what: str, compute):
     return _facts[key]
 
 
-def find(folder: Path | None, name: str) -> Path | None:
-    """`name` in `folder` as the card spells it; None when it is not there."""
+def find(folder: Path | None, name: str, *, strict: bool = False) -> Path | None:
+    """`name` as the card spells it; strict probes preserve inspection errors."""
     if folder is None:
         return None
     try:
@@ -96,7 +97,8 @@ def find(folder: Path | None, name: str) -> Path | None:
             if card_layout.same_name(entry, name):
                 return folder / card_layout.card_name(entry)
     except OSError:
-        pass
+        if strict:
+            raise
     return None
 
 
@@ -116,17 +118,21 @@ def digest(path: Path) -> str:
     return str(_remembered(path, "sha", lambda target: hashlib.sha256(target.read_bytes()).hexdigest()) or "")
 
 
-def cart_of(card: Path | None) -> tuple[str, str]:
+def cart_of(card: Path | None) -> tuple[str | None, str]:
     """Which EverDrive a card's ED64 folder is for, and when it cannot be
-    told, why not."""
-    firmware = find(card, card_layout.FIRMWARE_FOLDER)
-    if firmware is None or not firmware.is_dir():
-        return "", "The card has no ED64 folder yet. Use it in your EverDrive once first."
-    os_file = find(firmware, card_layout.FIRMWARE_OS)
-    if os_file is not None and os_file.is_file():
-        return X7, ""
-    if find(find(firmware, "sysdata"), "config.ini") is not None:
-        return PRO, ""
+    told, why not. None means inspection failed; "" means neither is installed."""
+    try:
+        firmware = find(card, card_layout.FIRMWARE_FOLDER, strict=True)
+        if firmware is None or not stat.S_ISDIR(firmware.stat().st_mode):
+            return "", "The card has no ED64 folder yet. Use it in your EverDrive once first."
+        os_file = find(firmware, card_layout.FIRMWARE_OS, strict=True)
+        if os_file is not None and stat.S_ISREG(os_file.stat().st_mode):
+            return X7, ""
+        sysdata = find(firmware, "sysdata", strict=True)
+        if find(sysdata, "config.ini", strict=True) is not None:
+            return PRO, ""
+    except OSError as error:
+        return None, f"The card's EverDrive installation could not be inspected: {error}"
     return "", "Use this card in your EverDrive once first."
 
 

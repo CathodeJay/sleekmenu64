@@ -14,6 +14,7 @@ import io
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import unittest.mock
@@ -23,7 +24,7 @@ from unittest import mock
 from tests.rom_fixtures import write_rom
 from tests.test_custom_art import picture
 from tests.test_sleekmenu_prep import stay_offline, write_collection
-from tools import custom_art, fetch, hires, metadata_repo, releases, sleekmenu_gui, sleekmenu_prep, version
+from tools import card_layout, custom_art, fetch, hires, metadata_repo, releases, sleekmenu_gui, sleekmenu_prep, version
 
 
 class VolumeTests(unittest.TestCase):
@@ -45,6 +46,169 @@ class VolumeTests(unittest.TestCase):
         found = sleekmenu_gui.removable_volumes(
             "darwin", listdir=lambda p: listed.get(p, []), is_root=lambda p: p.name == "Macintosh HD")
         self.assertEqual(found, [Path("/Volumes/Untitled")])
+
+    def test_macos_never_offers_time_machine_system_volumes(self):
+        found = sleekmenu_gui.removable_volumes(
+            "darwin", listdir=lambda p: ["CARD", "com.apple.TimeMachine.localsnapshots",
+                                        "COM.APPLE.TIMEMACHINE.2026-10-29", ".timemachine"],
+            is_root=lambda p: False)
+        self.assertEqual(found, [Path("/Volumes/CARD")])
+
+    def test_only_one_card_with_sleekmenu_is_selected_even_among_other_volumes(self):
+        from tests.test_releases import sleekmenu
+        with tempfile.TemporaryDirectory() as scratch:
+            first, installed, last = [Path(scratch) / name for name in ("A", "B", "C")]
+            for card in (first, installed, last):
+                card.mkdir()
+            (installed / "sleekmenu64.Z64").write_bytes(sleekmenu("", b"custom build"))
+            self.assertEqual(sleekmenu_gui.preferred_card([first, installed, last]), installed)
+            self.assertEqual(sleekmenu_gui.preferred_card([installed]), installed)
+            (installed / "ED64").mkdir()
+            (installed / "ED64" / "OS64.v64").write_bytes(b"stock OS")
+            self.assertEqual(sleekmenu_gui.preferred_card([first, installed, last]), installed,
+                             "SleekMenu and EverDrive on one card count as one matching path")
+
+    def test_only_one_card_with_everdrive_is_selected_even_among_other_volumes(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            empty, x7, pro = [Path(scratch) / name for name in ("A", "B", "C")]
+            for card in (empty, x7, pro):
+                (card / "ed64").mkdir(parents=True)
+            (empty / card_layout.BROWSER_ROM).write_bytes(b"not SleekMenu")
+            (x7 / "ed64" / "os64.V64").write_bytes(b"stock OS")
+            (pro / "ed64" / "sysdata").mkdir()
+            (pro / "ed64" / "sysdata" / "config.ini").write_text("[options]\n")
+            self.assertEqual(sleekmenu_gui.preferred_card([empty, x7]), x7)
+            self.assertEqual(sleekmenu_gui.preferred_card([pro, empty]), pro)
+
+    def test_multiple_installations_are_not_selected_or_scanned_for_games(self):
+        from tests.test_releases import sleekmenu
+        with tempfile.TemporaryDirectory() as scratch:
+            empty, first, second, x7, pro = [Path(scratch) / name for name in ("A", "B", "C", "D", "E")]
+            for card in (empty, first, second, x7, pro):
+                card.mkdir()
+            for card in (first, second):
+                (card / card_layout.BROWSER_ROM).write_bytes(sleekmenu())
+            (x7 / "ED64").mkdir()
+            (x7 / "ED64" / "OS64.v64").write_bytes(b"stock OS")
+            (pro / "ED64" / "sysdata").mkdir(parents=True)
+            (pro / "ED64" / "sysdata" / "config.ini").write_text("[options]\n")
+            with mock.patch.object(sleekmenu_gui, "has_games") as has_games:
+                for cards in ([first, second], [x7, pro], [first, x7], [pro, first],
+                              [empty, first, second, x7, pro]):
+                    with self.subTest(cards=cards):
+                        self.assertIsNone(sleekmenu_gui.preferred_card(cards))
+                has_games.assert_not_called()
+
+    def test_an_unreadable_browser_prevents_selection_before_the_game_scan(self):
+        from tests.test_releases import sleekmenu
+        with tempfile.TemporaryDirectory() as scratch:
+            unreadable, installed, empty = [Path(scratch) / name for name in ("A", "B", "C")]
+            for card in (unreadable, installed, empty):
+                card.mkdir()
+            for card in (unreadable, installed):
+                (card / card_layout.BROWSER_ROM).write_bytes(sleekmenu())
+            read_bytes = Path.read_bytes
+
+            def read(path):
+                if path == unreadable / card_layout.BROWSER_ROM:
+                    raise OSError(5, "cannot read ROM")
+                return read_bytes(path)
+
+            releases._read.clear()
+            with mock.patch.object(Path, "read_bytes", read), \
+                 mock.patch.object(sleekmenu_gui, "has_games", return_value=False) as has_games:
+                for cards in ([unreadable, installed], [installed, unreadable],
+                              [unreadable], [unreadable, empty]):
+                    with self.subTest(cards=cards):
+                        self.assertIsNone(sleekmenu_gui.preferred_card(cards))
+                has_games.assert_not_called()
+
+    def test_unreadable_installation_folders_prevent_selection_before_the_game_scan(self):
+        from tests.test_releases import sleekmenu
+        for folder in ("", "ED64", "ED64/sysdata"):
+            with self.subTest(folder=folder), tempfile.TemporaryDirectory() as scratch:
+                unreadable, installed = Path(scratch) / "A", Path(scratch) / "B"
+                (unreadable / "ED64" / "sysdata").mkdir(parents=True)
+                (unreadable / "ED64" / "sysdata" / "config.ini").write_text("[options]\n")
+                installed.mkdir()
+                (installed / card_layout.BROWSER_ROM).write_bytes(sleekmenu())
+                listdir = os.listdir
+
+                def listing(path):
+                    if Path(path) == unreadable / folder:
+                        raise OSError(5, "cannot read directory")
+                    return listdir(path)
+
+                with mock.patch.object(os, "listdir", side_effect=listing), \
+                     mock.patch.object(sleekmenu_gui, "has_games", return_value=False) as has_games:
+                    for cards in ([unreadable, installed], [installed, unreadable], [unreadable]):
+                        with self.subTest(cards=cards):
+                            self.assertIsNone(sleekmenu_gui.preferred_card(cards))
+                    has_games.assert_not_called()
+
+    def test_uninspectable_firmware_metadata_prevents_selection(self):
+        from tests.test_releases import sleekmenu
+        for target in ("ED64", "ED64/OS64.v64"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as scratch:
+                unreadable, installed = Path(scratch) / "A", Path(scratch) / "B"
+                (unreadable / "ED64").mkdir(parents=True)
+                (unreadable / "ED64" / "OS64.v64").write_bytes(b"stock OS")
+                installed.mkdir()
+                (installed / card_layout.BROWSER_ROM).write_bytes(sleekmenu())
+                stat = Path.stat
+
+                def metadata(path, *args, **kwargs):
+                    if path == unreadable / target:
+                        raise OSError(5, "cannot inspect firmware")
+                    return stat(path, *args, **kwargs)
+
+                with mock.patch.object(Path, "stat", metadata), \
+                     mock.patch.object(sleekmenu_gui, "has_games", return_value=False) as has_games:
+                    for cards in ([unreadable, installed], [installed, unreadable], [unreadable]):
+                        with self.subTest(cards=cards):
+                            self.assertIsNone(sleekmenu_gui.preferred_card(cards))
+                    has_games.assert_not_called()
+
+    def test_without_an_installation_or_games_only_a_single_card_is_selected(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            first, second = Path(scratch) / "A", Path(scratch) / "B"
+            first.mkdir()
+            second.mkdir()
+            self.assertIsNone(sleekmenu_gui.preferred_card([]))
+            self.assertEqual(sleekmenu_gui.preferred_card([first]), first)
+            self.assertIsNone(sleekmenu_gui.preferred_card([first, second]))
+
+    def test_games_at_root_or_in_the_first_two_subdirectories_select_a_card(self):
+        for rom in ("Game.z64", "ROMS/Game.n64", "ROMS/N64/Game.Z64"):
+            with self.subTest(rom=rom), tempfile.TemporaryDirectory() as scratch:
+                empty, games = Path(scratch) / "A", Path(scratch) / "B"
+                empty.mkdir()
+                path = games / rom
+                path.parent.mkdir(parents=True)
+                path.touch()
+                self.assertEqual(sleekmenu_gui.preferred_card([empty, games]), games)
+
+    def test_game_search_never_enters_the_third_subdirectory_level(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            empty, games = Path(scratch) / "A", Path(scratch) / "B"
+            empty.mkdir()
+            too_deep = games / "ROMS" / "N64" / "More"
+            too_deep.mkdir(parents=True)
+            (too_deep / "Game.n64").touch()
+            with mock.patch.object(sleekmenu_gui.os, "scandir", wraps=os.scandir) as scandir:
+                self.assertIsNone(sleekmenu_gui.preferred_card([empty, games]))
+            self.assertNotIn(too_deep, [Path(call.args[0]) for call in scandir.call_args_list])
+
+    def test_multiple_cards_with_games_are_not_selected(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            first, second = Path(scratch) / "A", Path(scratch) / "B"
+            first.mkdir()
+            second.mkdir()
+            (first / "One.z64").touch()
+            (first / "Two.n64").touch()
+            self.assertEqual(sleekmenu_gui.preferred_card([first, second]), first)
+            (second / "Game.N64").touch()
+            self.assertIsNone(sleekmenu_gui.preferred_card([first, second]))
 
     def test_linux_lists_the_media_folders(self):
         listed = {"/media": ["jerome"], "/media/jerome": ["CARD", "Backup"],
@@ -150,6 +314,11 @@ class FieldTests(unittest.TestCase):
 
 class CardStatusTests(unittest.TestCase):
     """What the Card tab says about a card, and what its button is called."""
+
+    def test_an_unreadable_browser_is_reported_without_promising_replacement(self):
+        browser = releases.Browser(releases.UNKNOWN)
+        self.assertEqual(sleekmenu_gui.browser_line(browser),
+                         "SleekMenu on the card couldn't be inspected, so it won't be replaced.")
 
     def test_no_card_and_an_empty_card(self):
         nothing = sleekmenu_gui.card_status(None)
@@ -547,6 +716,16 @@ class WindowTests(unittest.TestCase):
         # loop". Collect them here, on the thread that made them.
         gc.collect()
 
+    def wait_for(self, root, condition):
+        deadline = time.monotonic() + 3
+        while not condition() and time.monotonic() < deadline:
+            root.update()
+            time.sleep(0.005)
+        self.assertTrue(condition(), "the window did not finish updating")
+
+    def wait_for_card_probe(self, root):
+        self.wait_for(root, lambda: root.sleekmenu_state["card_probe"] is None)
+
     def test_the_window_opens_and_closes(self):
         root = sleekmenu_gui.build(smoke=True)
         root.mainloop()
@@ -839,6 +1018,174 @@ class WindowTests(unittest.TestCase):
                 root.update()
                 self.assertFalse(button.winfo_ismapped(), "and gone again with the card")
                 root.destroy()
+
+    def test_card_autoselection_keeps_dropdown_order_and_respects_a_chosen_path(self):
+        from tests.test_releases import sleekmenu
+        self.card_browser_patch.stop()
+        with tempfile.TemporaryDirectory() as scratch:
+            empty, installed = Path(scratch) / "A", Path(scratch) / "B"
+            empty.mkdir()
+            installed.mkdir()
+            (installed / card_layout.BROWSER_ROM).write_bytes(sleekmenu())
+            with mock.patch.object(sleekmenu_gui, "removable_volumes", return_value=[empty, installed]):
+                root = sleekmenu_gui.build()
+                self.wait_for_card_probe(root)
+                state = root.sleekmenu_state
+                field = state["fields"]["card"]
+                self.assertEqual(tuple(state["picker"]["values"]), (str(empty), str(installed)))
+                self.assertEqual(field.get(), str(installed))
+                refresh = state["buttons"]["refresh"]
+                field.set(str(empty))
+                refresh.invoke()
+                self.wait_for_card_probe(root)
+                self.assertEqual(field.get(), str(empty), "Refresh keeps a manual selection")
+                field.set("")
+                refresh.invoke()
+                self.wait_for_card_probe(root)
+                self.assertEqual(field.get(), str(installed), "Refresh picks a card when none is selected")
+                with mock.patch.object(sleekmenu_gui, "preferred_card") as preferred:
+                    explicit = sleekmenu_gui.build(card=str(empty))
+                    self.wait_for_card_probe(explicit)
+                    preferred.assert_not_called()
+                self.assertEqual(explicit.sleekmenu_state["fields"]["card"].get(), str(empty))
+                (empty / "ED64").mkdir()
+                (empty / "ED64" / "OS64.v64").write_bytes(b"stock OS")
+                field.set("")
+                refresh.invoke()
+                self.wait_for_card_probe(root)
+                self.assertEqual(field.get(), "", "Refresh leaves multiple matching cards unselected")
+                ambiguous = sleekmenu_gui.build()
+                self.wait_for_card_probe(ambiguous)
+                self.assertEqual(ambiguous.sleekmenu_state["fields"]["card"].get(), "",
+                                 "startup leaves multiple matching cards unselected")
+
+    def test_card_probes_leave_startup_and_refresh_responsive_and_apply_on_tks_thread(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch)
+            entered, release = threading.Event(), threading.Event()
+            probe_threads = []
+            listing_threads = []
+            tk_thread = threading.get_ident()
+
+            def volumes():
+                listing_threads.append(threading.get_ident())
+                return [card]
+
+            def preferred(cards):
+                probe_threads.append(threading.get_ident())
+                entered.set()
+                release.wait(5)
+                return cards[0]
+
+            self.addCleanup(release.set)
+            with mock.patch.object(sleekmenu_gui, "removable_volumes", side_effect=volumes), \
+                 mock.patch.object(sleekmenu_gui, "preferred_card", side_effect=preferred):
+                root = sleekmenu_gui.build()
+                state = root.sleekmenu_state
+                field = state["fields"]["card"]
+                applied_threads = []
+                field.trace_add("write", lambda *_args: applied_threads.append(threading.get_ident()))
+                for phase in ("startup", "Refresh"):
+                    with self.subTest(phase=phase):
+                        if phase == "Refresh":
+                            field.set("")
+                            entered.clear()
+                            release.clear()
+                            state["buttons"]["refresh"].invoke()
+                        self.assertTrue(entered.wait(3), "the card probe did not start")
+                        self.assertEqual(field.get(), "", "no result while the probe is blocked")
+                        heartbeat = []
+                        root.after(0, lambda: heartbeat.append(True))
+                        root.update()
+                        self.assertEqual(heartbeat, [True], "Tk still handles events during the probe")
+                        self.assertNotEqual(probe_threads[-1], tk_thread)
+                        self.assertNotEqual(listing_threads[-1], tk_thread)
+                        release.set()
+                        self.wait_for_card_probe(root)
+                        self.assertEqual(field.get(), str(card))
+                self.assertTrue(applied_threads)
+                self.assertEqual(set(applied_threads), {tk_thread})
+
+    def test_a_pending_card_probe_keeps_a_manual_selection(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            detected, manual = [Path(scratch) / name for name in ("detected", "manual")]
+            detected.mkdir()
+            manual.mkdir()
+            entered, release = threading.Event(), threading.Event()
+
+            def preferred(_cards):
+                entered.set()
+                release.wait(5)
+                return detected
+
+            self.addCleanup(release.set)
+            with mock.patch.object(sleekmenu_gui, "removable_volumes", return_value=[detected]), \
+                 mock.patch.object(sleekmenu_gui, "preferred_card", side_effect=preferred):
+                root = sleekmenu_gui.build()
+                state = root.sleekmenu_state
+                self.assertTrue(entered.wait(3))
+                state["fields"]["card"].set(str(manual))
+                release.set()
+                self.wait_for_card_probe(root)
+                self.assertEqual(state["fields"]["card"].get(), str(manual))
+                self.assertEqual(tuple(state["picker"]["values"]), (str(detected),))
+
+    def test_an_old_refresh_cannot_select_a_card_or_replace_the_current_dropdown(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            old, new = [Path(scratch) / name for name in ("old", "new")]
+            old.mkdir()
+            new.mkdir()
+            entered, release = threading.Event(), threading.Event()
+            workers = []
+
+            def volumes():
+                workers.append(threading.current_thread())
+                if len(workers) == 1:
+                    entered.set()
+                    release.wait(5)
+                    return [old]
+                return [new]
+
+            self.addCleanup(release.set)
+            with mock.patch.object(sleekmenu_gui, "removable_volumes", side_effect=volumes), \
+                 mock.patch.object(sleekmenu_gui, "preferred_card", side_effect=lambda cards: cards[0]):
+                root = sleekmenu_gui.build()
+                state = root.sleekmenu_state
+                self.assertTrue(entered.wait(3))
+                state["buttons"]["refresh"].invoke()
+                self.wait_for_card_probe(root)
+                self.assertEqual(state["fields"]["card"].get(), str(new))
+                state["fields"]["card"].set("")
+                release.set()
+                workers[0].join(3)
+                self.assertFalse(workers[0].is_alive())
+                settled = []
+                root.after(150, lambda: settled.append(True))
+                self.wait_for(root, lambda: bool(settled))
+                self.assertEqual(state["fields"]["card"].get(), "")
+                self.assertEqual(tuple(state["picker"]["values"]), (str(new),))
+
+    def test_the_window_can_close_while_a_card_probe_is_pending(self):
+        entered, release = threading.Event(), threading.Event()
+        workers = []
+
+        def preferred(_cards):
+            workers.append(threading.current_thread())
+            entered.set()
+            release.wait(5)
+            return None
+
+        self.addCleanup(release.set)
+        with mock.patch.object(sleekmenu_gui, "removable_volumes", return_value=[]), \
+             mock.patch.object(sleekmenu_gui, "preferred_card", side_effect=preferred), \
+             mock.patch.object(threading, "excepthook") as thread_error:
+            root = sleekmenu_gui.build()
+            self.assertTrue(entered.wait(3))
+            root.destroy()
+            release.set()
+            workers[0].join(3)
+            self.assertFalse(workers[0].is_alive())
+            thread_error.assert_not_called()
 
     def test_where_the_games_are_is_a_path_from_the_cards_root(self):
         with tempfile.TemporaryDirectory() as scratch:

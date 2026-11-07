@@ -103,6 +103,39 @@ class CardTests(unittest.TestCase):
             self.rom.write_bytes(old)
             self.assertEqual((self.state().state, self.state().version), (releases.OLDER, "2.0.0"))
 
+    def test_failed_rom_inspection_is_unknown_and_never_replaced(self):
+        data = sleekmenu()
+        self.rom.write_bytes(data)
+        for operation in ("stat", "read_bytes"):
+            releases._read.clear()
+            with self.subTest(operation=operation), \
+                 mock.patch.object(Path, operation, side_effect=OSError(5, "Input/output error")), \
+                 mock.patch.object(releases, "fetch_rom") as fetch_rom, \
+                 mock.patch.object(releases, "install") as install:
+                found = self.state()
+                self.assertEqual(found.state, releases.UNKNOWN)
+                self.assertEqual(found.path, self.rom)
+                self.assertFalse(found.wants_update)
+                self.assertIn("could not be inspected", found.describe())
+                log = Log()
+                done = releases.update_card(self.card, log)
+                self.assertEqual((done.browser.state, done.failure), (releases.UNKNOWN, releases.CARD))
+                self.assertIn("could not be inspected", log.text())
+                fetch_rom.assert_not_called()
+                install.assert_not_called()
+            self.assertEqual(self.rom.read_bytes(), data)
+            self.assertEqual(self.state().state, releases.CURRENT, "a failed inspection can be retried")
+
+    def test_failed_root_listing_is_unknown_and_never_installed_over(self):
+        with mock.patch.object(direct_boot.os, "listdir", side_effect=PermissionError(13, "Permission denied")), \
+             mock.patch.object(releases, "fetch_rom") as fetch_rom, \
+             mock.patch.object(releases, "install") as install:
+            self.assertEqual(self.state().state, releases.UNKNOWN)
+            done = releases.update_card(self.card, Log())
+            self.assertEqual((done.browser.state, done.failure), (releases.UNKNOWN, releases.CARD))
+            fetch_rom.assert_not_called()
+            install.assert_not_called()
+
     def test_an_older_one_or_none_is_replaced_by_this_release_and_nothing_else_is(self):
         mine = sleekmenu(version.VERSION, b"release")
         route = f"/download/v{version.VERSION}/{card_layout.BROWSER_ROM}"

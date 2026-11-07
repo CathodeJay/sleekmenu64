@@ -67,6 +67,7 @@ CURRENT = "current"       # this release
 NEWER = "newer"           # a later release than this tool
 OWN = "own"               # a SleekMenu no release page had: the owner's build
 OTHER = "other"           # a file at that name that is not SleekMenu
+UNKNOWN = "unknown"       # the card or ROM could not be inspected
 
 
 #: Why this release's SleekMenu could not be put on a card, so the window
@@ -98,6 +99,8 @@ class Browser:
         """The card's SleekMenu in a few words, for a report or a window."""
         if self.state == MISSING:
             return "not on the card"
+        if self.state == UNKNOWN:
+            return "could not be inspected"
         if self.state == OTHER:
             return f"{ROM_NAME} on the card is not SleekMenu"
         if self.state == OWN:
@@ -147,13 +150,14 @@ def card_browser(card: Path | None) -> Browser:
     """Which SleekMenu the card has at its root, against this tool's release."""
     if card is None:
         return Browser(MISSING)
-    path = direct_boot.find(card, ROM_NAME)
-    if path is None:
-        return Browser(MISSING)
+    path = None
     try:
+        path = direct_boot.find(card, ROM_NAME, strict=True)
+        if path is None:
+            return Browser(MISSING)
         sleekmenu, found = _rom_on_card(path)
     except OSError:
-        return Browser(OTHER, path=path)
+        return Browser(UNKNOWN, path=path)
     if not sleekmenu:
         return Browser(OTHER, path=path)
     if not found:
@@ -227,6 +231,9 @@ def update_card(card: Path, log=print, offline: bool = False, url: str | None = 
     none, and say what was done, or why not."""
     found = card_browser(card)
     mine = version.VERSION
+    if found.state == UNKNOWN:
+        log("sleekmenu: the card's SleekMenu could not be inspected; left as it is")
+        return Updated(found, CARD)
     if found.state == CURRENT:
         return Updated(found)
     if found.state == NEWER:

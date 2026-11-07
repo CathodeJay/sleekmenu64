@@ -3,13 +3,13 @@
 """The Game Catalog Manager's window: the same run as
 sleekmenu-catalog-manager.pyz, without a terminal.
 
-Pick the card (found on its own when it is the only removable disk), read
-what is on it, press the one button -- Set up card the first time, Update
-card after -- and watch the run go through its four steps, with a Stop if
-it is taking too long. What the card lacks is fetched by the run itself;
-the choices most people never change sit beside the button. Nothing here
-decides anything about the card: the window collects a handful of answers
-and hands them to tools/sleekmenu_prep.run(), which is what the command
+Pick the card (selected automatically by its installed menu, then games,
+then being the only card), read what is on it, press the one button -- Set up
+card the first time, Update card after -- and watch the run go through its four
+steps, with a Stop if it is taking too long. What the card lacks is fetched by
+the run itself; the choices most people never change sit beside the button.
+Nothing here decides anything about the card: the window collects a handful of
+answers and hands them to tools/sleekmenu_prep.run(), which is what the command
 line runs. The downloadable builds are this file frozen with its Python;
 from a checkout it is `python3 tools/sleekmenu_gui.py`, or
 `python3 sleekmenu-catalog-manager.pyz --gui`.
@@ -96,7 +96,8 @@ def removable_volumes(platform: str = sys.platform, listdir=os.listdir, is_root=
     if platform == "darwin":
         for name in sorted(_listing(listdir, "/Volumes")):
             path = Path("/Volumes") / name
-            if name.lower() not in MAC_SYSTEM_VOLUMES and not is_root(path):
+            if (name.lower() not in MAC_SYSTEM_VOLUMES
+                    and not name.lower().startswith("com.apple.timemachine.") and not is_root(path)):
                 found.append(path)
     elif platform == "win32":
         found.extend(_windows_removable())
@@ -108,6 +109,47 @@ def removable_volumes(platform: str = sys.platform, listdir=os.listdir, is_root=
         for name in sorted(_listing(listdir, "/mnt")):
             found.append(Path("/mnt") / name)
     return found
+
+
+def preferred_card(cards: list[Path]) -> Path | None:
+    """Pick a unique installation, then a unique card with games, then the
+    only listed card. Stop at an unknown result or either ambiguous tier."""
+    matching = []
+    for card in cards:
+        browser = releases.card_browser(card)
+        if browser.state == releases.UNKNOWN:
+            return None
+        cart, _ = direct_boot.cart_of(card)
+        if cart is None:
+            return None
+        if browser.state not in (releases.MISSING, releases.OTHER) or cart:
+            matching.append(card)
+    if len(matching) > 1:
+        return None
+    if len(matching) == 1:
+        return matching[0]
+    scanned = [(card, has_games(card)) for card in cards]
+    if any(result is None for _, result in scanned):
+        return None
+    with_games = [card for card, result in scanned if result]
+    if len(with_games) > 1:
+        return None
+    if len(with_games) == 1:
+        return with_games[0]
+    return cards[0] if len(cards) == 1 else None
+
+
+def has_games(card: Path) -> bool | None:
+    """Look for games at the root or two folders below; None means an incomplete scan."""
+    scan_errors: list[OSError] = []
+    for directory, subdirs, files in os.walk(card, onerror=scan_errors.append):
+        depth = len(Path(directory).relative_to(card).parts)
+        subdirs[:] = ([] if depth >= 2 else
+                      [name for name in subdirs if not card_layout.excluded_directory(name)])
+        if any(not card_layout.hidden(name) and Path(name).suffix.casefold() in (".z64", ".n64")
+               for name in files):
+            return True
+    return None if scan_errors else False
 
 
 def _listing(listdir, path: str) -> list[str]:
@@ -194,6 +236,8 @@ def browser_line(browser: releases.Browser, keep: bool = True, offline: bool = F
     mine = version.VERSION
     if not keep:
         return "SleekMenu on the card won't be changed."
+    if browser.state == releases.UNKNOWN:
+        return "SleekMenu on the card couldn't be inspected, so it won't be replaced."
     if browser.state == releases.CURRENT:
         return f"SleekMenu {mine} is installed and up to date."
     if browser.state == releases.NEWER:
@@ -2098,8 +2142,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     colors = palette(root, tk, ttk)
     edit_menu = EditMenu(root)
 
-    state: dict = {"runner": None, "steps": Steps(), "status": card_status(None), "walk": None}
-    card_var = tk.StringVar()
+    state: dict = {"runner": None, "steps": Steps(), "status": card_status(None), "walk": None,
+                   "card_refresh": 0, "card_probe": None}
+    card_var = tk.StringVar(value=card)
     roms_var = tk.StringVar()               # "" is the whole card
     roms_shown = tk.StringVar(value=shown_folder(""))
     roms_note = tk.StringVar()
@@ -2630,10 +2675,38 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
             stop.pack_forget()
 
     def refresh_cards() -> None:
-        found = removable_volumes()
-        card_box["values"] = [str(p) for p in found]
-        if len(found) == 1 and not card_var.get():
-            card_var.set(str(found[0]))
+        state["card_refresh"] += 1
+        request = state["card_refresh"]
+        select = not card_var.get()
+        results: queue.Queue = queue.Queue()
+        state["card_probe"] = results
+
+        def probe() -> None:
+            # Even a shallow search can stall on an unrelated drive. Keep
+            # every discovery probe off Tk's thread, and never touch Tk here.
+            found = removable_volumes()
+            results.put((found, None, not select))
+            if select:
+                results.put((found, preferred_card(found), True))
+
+        def show_cards() -> None:
+            if request != state["card_refresh"]:
+                return
+            try:
+                found, chosen, complete = results.get_nowait()
+            except queue.Empty:
+                root.after(100, show_cards)
+                return
+            card_box["values"] = [str(p) for p in found]
+            if complete:
+                state["card_probe"] = None
+                if not card_var.get() and chosen is not None:
+                    card_var.set(str(chosen))
+            else:
+                root.after(100, show_cards)
+
+        threading.Thread(target=probe, name="sleekmenu-cards", daemon=True).start()
+        root.after(100, show_cards)
         state["shown_card"] = None          # read the card again, even the same one
         state["walk"] = None
         on_card_change()
@@ -2791,7 +2864,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
         result_var.set("Stopping…")
 
     ttk.Button(card_buttons, text="Choose…", command=browse_card).pack(side="left")
-    ttk.Button(card_buttons, text="Refresh", command=refresh_cards).pack(side="left", padx=(6, 0))
+    refresh_button = ttk.Button(card_buttons, text="Refresh", command=refresh_cards)
+    refresh_button.pack(side="left", padx=(6, 0))
     choose_roms.configure(command=browse_roms)
     choose_pack.configure(command=browse_metadata)
     forget_pack.configure(command=lambda: metadata_var.set(""))
@@ -2811,8 +2885,6 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     on_roms_change()
     read_music()
     refresh_cards()
-    if card:
-        card_var.set(card)
     if metadata:
         metadata_var.set(metadata)
     state["last_code"] = None
@@ -2836,6 +2908,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     state["start"] = start
     state["stop"] = ask_stop
     state["buttons"] = {"action": action, "stop": stop, "coffee": coffee, "boot": boot_check,
+                        "refresh": refresh_button,
                         "cheats": cheats_check, "shots": shots_check, "browser": browser_check,
                         "music": choose_music, "music_remove": remove_music}
     state["notebook"] = notebook
