@@ -17,6 +17,9 @@
 #define MUSIC_BUFFERS 4
 #define MUSIC_FADE_MS 250u
 #define MUSIC_TAIL_MS 100u          /* the two queued buffers, played out */
+/* The longest the hardware is given to play out what it has queued when
+   the music stops: two buffers take 80 ms. */
+#define MUSIC_DRAIN_MS 200u
 
 static sm_music_info_t track;
 static char track_path[256];
@@ -161,9 +164,28 @@ static bool start(uint32_t from) {
     return true;
 }
 
+/* The audio interface's status register, which libdragon keeps to itself:
+   bit 31 says both queue places are taken, bit 30 that a buffer is
+   playing. Any write clears its interrupt. */
+#define AI_STATUS ((volatile uint32_t *)0xA450000Cu)
+#define AI_STATUS_FULL (1u << 31)
+#define AI_STATUS_BUSY (1u << 30)
+
+/* Stopping leaves the audio hardware as it is at power-on, because a game
+   may be started next and expects it so. Nothing more is queued, and what
+   is already queued is played out before the audio is closed: closed with
+   buffers still in line, the hardware can keep them, pointing at memory
+   that is freed and then filled by the game, and play them as noise when
+   the game turns its audio on. The interrupt for the last of them is cleared,
+   so the game does not find one waiting either. */
 static void stop(void) {
+    uint64_t began;
     audio_set_buffer_callback(NULL);
+    began = get_ticks_ms();
+    while ((*AI_STATUS & (AI_STATUS_FULL | AI_STATUS_BUSY)) &&
+           get_ticks_ms() - began < MUSIC_DRAIN_MS) {}
     audio_close();
+    *AI_STATUS = 0;
     close(track_fd);
     track_fd = -1;
 }

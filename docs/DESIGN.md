@@ -398,19 +398,22 @@ start at the end, which is the loop; the audio interrupt copies from it
 into each buffer as the hardware takes it, both channels the same. So a
 frame that works for a while -- a game's details reading its pictures and
 header off the Pro -- is not heard: the interrupt plays on from what was
-read. A block is under the Pro file driver's 16 KB
-read-ahead window, so on the Pro it is served by the fast transfer. While a
-folder is being listed the card is the listing's, as it is for the covers,
-and nothing is read; a listing longer than the read-ahead is a moment of
-silence, not a listing disturbed. Mono halves what is read while the
-browser draws. The music starts after the catalog and the cheat pack are
-read, and it stops before a game is loaded: the load needs the card to
-itself, and the game's boot code expects the audio interface idle. It
-fades over a quarter of a second, heard within the two buffers the
-hardware has queued. A launch that comes back without booting starts it
-again where it was. The MUSIC row of the filter page turns it on and
-off like the theme row, at once, and writes `sleekmenu/music.txt` when the
-page is left.
+read. A block is under the Pro file driver's 16 KB read-ahead window, so on
+the Pro it is served by the fast transfer. While a folder is being listed
+the card is the listing's, as it is for the covers, and nothing is read; a
+listing longer than the read-ahead is a moment of silence, not a listing
+disturbed. Mono halves what is read while the browser draws. The music
+starts after the catalog and the cheat pack are read, and it stops before a
+game is loaded: the load needs the card to itself, and the game's boot code
+expects the audio interface idle. It fades over a quarter of a second,
+heard within the two buffers the hardware has queued. Then nothing more is
+queued, and what is queued plays out before the audio is closed: closed
+with buffers still in line, the hardware can keep them, and a game that
+turns its audio on then plays them from memory it has since filled. The last buffer's
+interrupt is cleared too, so a game finds the audio as it is at power-on. A
+launch that comes back without booting starts it again where it was. The
+MUSIC row of the filter page turns it on and off like the theme row, at
+once, and writes `sleekmenu/music.txt` when the page is left.
 
 **On the Pro, a DMA never shares a cache line.** Everything the Pro's MCU
 says comes back over the PI by DMA, which writes RDRAM behind the CPU's

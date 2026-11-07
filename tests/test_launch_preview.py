@@ -152,6 +152,29 @@ class HostModuleTests(unittest.TestCase):
             build_and_run("music-test", ["src/music.c", "tests/stubs/libdragon_stub.c", "tests/music_test.c"],
                           ["-Itests/stubs"], [scratch])
 
+    def test_the_music_leaves_the_audio_idle_when_it_stops(self):
+        """A game started next expects the audio as it is at power-on. The
+        console build stops queuing, lets the hardware play out what it has
+        queued (with a time limit), closes the audio, then clears the last
+        buffer's interrupt."""
+        source = strip_comments((ROOT / "src/music.c").read_text(encoding="utf-8"))
+        console = source[source.index("#ifdef __mips__"):source.index("#else")]
+        stop = console[console.index("static void stop(void)"):]
+        stop = stop[:stop.index("\n}") + 2]
+        order = ["audio_set_buffer_callback(NULL);",
+                 "(AI_STATUS_FULL | AI_STATUS_BUSY)",
+                 "get_ticks_ms() - began < MUSIC_DRAIN_MS",
+                 "audio_close();",
+                 "*AI_STATUS = 0;",
+                 "close(track_fd);"]
+        at = [stop.index(step) for step in order]
+        self.assertEqual(at, sorted(at))
+        self.assertIn("#define AI_STATUS ((volatile uint32_t *)0xA450000Cu)", source)
+        self.assertIn("#define MUSIC_DRAIN_MS 200u", source)
+        # and every way the music stops goes through it
+        fade = console[console.index("void sm_music_fade_out(void)"):]
+        self.assertIn("stop();", fade[:fade.index("\n}")])
+
     def test_host_theme_module(self):
         with tempfile.TemporaryDirectory() as scratch:
             build_and_run("theme-test", ["src/theme.c", "tests/stubs/libdragon_stub.c", "tests/theme_test.c"],
