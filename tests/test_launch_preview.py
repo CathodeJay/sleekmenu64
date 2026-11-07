@@ -693,6 +693,20 @@ class RomLoadTests(unittest.TestCase):
         # and nothing widens it again on the way to the comparison
         self.assertNotIn("obj.objsize = (FSIZE_t)", self.load[restore:verify])
 
+    def test_a_byteswapped_dump_is_compared_as_the_cartridge_holds_it(self):
+        """The cartridge un-swaps a .v64 only on its way into SDRAM; the
+        verify pass reads the file back into RDRAM as it is on the card, so
+        each piece is swapped after it is read and before it is compared."""
+        source = strip_comments(self.load)
+        verify = source.index("f_read(file, load_file_chunk, want, &got)")
+        swap = source.index("if (byteswap) sm_load_swap16(load_file_chunk, want);", verify)
+        compare = source.index("memcmp(load_file_chunk, load_cart_chunk, want)", verify)
+        crc = source.index("launch_crc32_update(local.crc, load_file_chunk, want)", verify)
+        self.assertLess(swap, compare)
+        self.assertLess(swap, crc)
+        # and the flag still reaches the cartridge for the load itself
+        self.assertIn("cart_card_byteswap = byteswap ? 1 : 0;", source)
+
     def test_cart_image_loss_is_latched_and_respected(self):
         """Both backends overwrite the browser's own image at offset 0, and
         both must say so before the first byte lands, because the latch is

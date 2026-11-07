@@ -52,6 +52,15 @@ void sm_load_format(const sm_load_report_t *r, char *out, size_t out_size) {
     out[out_size - 1u] = '\0';
 }
 
+void sm_load_swap16(uint8_t *bytes, size_t length) {
+    if (!bytes) return;
+    for (size_t i = 0; i + 1u < length; i += 2u) {
+        uint8_t first = bytes[i];
+        bytes[i] = bytes[i + 1u];
+        bytes[i + 1u] = first;
+    }
+}
+
 #ifdef __mips__
 #include "flashcart.h"
 #include "launch.h"
@@ -156,7 +165,10 @@ sm_load_step_t sm_rom_load(FIL *file, uint32_t bytes, bool byteswap, bool verify
 
     /* Verification: re-read the file into RDRAM and pull the same range back
        out of SDRAM over PI, comparing byte for byte. memcmp decides pass or
-       fail; the CRC is only there to give the status line a number. */
+       fail; the CRC is only there to give the status line a number. The
+       cartridge un-swaps a byteswapped dump only on its way into SDRAM, and
+       a read into RDRAM comes back as the file has it, so for such a dump
+       each piece read is swapped before it is compared. */
     fr = f_lseek(file, 0);
     if (fr != FR_OK) {
         local.fatfs_rc = (int)fr;
@@ -179,6 +191,7 @@ sm_load_step_t sm_rom_load(FIL *file, uint32_t bytes, bool byteswap, bool verify
             if (report) *report = local;
             return local.step;
         }
+        if (byteswap) sm_load_swap16(load_file_chunk, want);
         data_cache_hit_writeback_invalidate(load_cart_chunk, aligned);
         dma_read(load_cart_chunk, SM_LOAD_CART_PHYS + offset, aligned);
         data_cache_hit_invalidate(load_cart_chunk, aligned);

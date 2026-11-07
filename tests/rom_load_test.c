@@ -19,6 +19,21 @@ int main(void) {
     /* Never wrap: a size that cannot be padded is returned unchanged. */
     assert(sm_load_padded_size(0xFFFFFFFFu) == 0xFFFFFFFFu);
 
+    /* A byteswapped dump compared against what the cartridge holds: the
+       file's 37 80 40 12 is the cartridge's 80 37 12 40, pair by pair, and
+       swapping twice gives the file back. An odd last byte stays. */
+    {
+        uint8_t v64[] = {0x37, 0x80, 0x40, 0x12, 0x00, 0x0F, 0xAB};
+        static const uint8_t z64[] = {0x80, 0x37, 0x12, 0x40, 0x0F, 0x00, 0xAB};
+        sm_load_swap16(v64, sizeof(v64));
+        assert(!memcmp(v64, z64, sizeof(z64)));
+        sm_load_swap16(v64, sizeof(v64));
+        assert(v64[0] == 0x37 && v64[1] == 0x80 && v64[6] == 0xAB);
+        sm_load_swap16(v64, 0);
+        sm_load_swap16(NULL, 4);
+        assert(v64[0] == 0x37);
+    }
+
     /* A verified load names its CRC; an unverified one must not, because
        there is no CRC to name and a stale zero would read as a real number. */
     memset(&r, 0, sizeof(r));

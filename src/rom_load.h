@@ -29,7 +29,7 @@ typedef struct {
     sm_load_step_t step;
     uint32_t bytes;         /* real payload size */
     uint32_t padded_bytes;  /* rounded up to a whole sector for FatFs */
-    uint32_t crc;           /* CRC32 of the file stream, 0 when not verified */
+    uint32_t crc;           /* CRC32 of the ROM as the cartridge holds it, 0 when not verified */
     bool verified;          /* the SDRAM was read back and compared */
     uint32_t first_diff;    /* byte offset of the first mismatch, else UINT32_MAX */
     uint8_t file_byte;
@@ -47,12 +47,20 @@ uint32_t sm_load_padded_size(uint32_t bytes);
 
 void sm_load_format(const sm_load_report_t *report, char *out, size_t out_size);
 
+/* Swap each pair of bytes in place, turning a byteswapped (.v64) stretch
+   into the order the cartridge holds after loading it, or back. An odd
+   last byte is left alone. */
+void sm_load_swap16(uint8_t *bytes, size_t length);
+
 #ifdef __mips__
 #include "ff.h"
 
 /* Load the whole ROM into cartridge SDRAM at offset 0. With verify set, read
    the range back out over PI and compare it byte for byte against the file,
-   which costs a second full pass and roughly doubles the wall clock.
+   which costs a second full pass and roughly doubles the wall clock. A
+   byteswapped dump (byteswap set) is un-swapped by the cartridge on the way
+   in, so each piece of the file is swapped the same way before the
+   comparison.
 
    Verification earned its keep while the SD transport was unproven. Now that
    it is, a corrupt load shows up as a game that crashes rather than as a
