@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* dir_findfirst/dir_findnext over POSIX, with "sd:/" mapped onto the scratch
    root. One open directory at a time is what the scan needs: it lists a

@@ -138,6 +138,9 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
     covers = {key.casefold(): value for key, value in (covers or {}).items()}
     origins = {key.casefold(): value for key, value in (cover_origins or {}).items()}
     root = relative_root(roms, sd_root)
+    # Compare resolved roots so aliases such as /var and /private/var share
+    # the same catalog prefix. Keep the I/O paths unchanged for header reuse.
+    prefix = roms.resolve().relative_to(root) if sd_root is not None else Path()
 
     if rom_paths is None:
         rom_paths = library.walk(roms)
@@ -158,7 +161,7 @@ def build(roms: Path, sd_root: Path | None = None, coverdb_path: Path | None = D
     art_index = custom_art.Index()
     for rom_path in rom_paths:
         path = roms / rom_path
-        relative = PurePosixPath(path.relative_to(root).as_posix())
+        relative = PurePosixPath((prefix / rom_path).as_posix())
         if library.is_disk(rom_path):
             # A 64DD image has no cartridge header and no game code, so no
             # database and no collection know it: the name is the record.

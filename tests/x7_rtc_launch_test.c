@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Exercise the actual backend's ordering, with hardware dependencies stubbed.
-   Unused SD/probe functions are discarded by --gc-sections. */
+   Unused SD/probe functions are discarded by the host linker. */
 #include "../src/flashcart_x7.c"
 #include <assert.h>
 

@@ -488,7 +488,14 @@ def display_available() -> bool:
         return False
     try:
         import tkinter
-        tkinter.Tk().destroy()
+        root = tkinter.Tk()
+        try:
+            # macOS Tk queues showing its first root as idle work. Finish
+            # that work before destroying the probe, or the next window's
+            # event loop can dereference the destroyed root and segfault.
+            root.update_idletasks()
+        finally:
+            root.destroy()
     except Exception:  # noqa: BLE001 -- any failure means no usable display
         return False
     return True

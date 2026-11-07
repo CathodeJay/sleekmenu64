@@ -3,6 +3,7 @@ import os
 import pathlib
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -60,9 +61,10 @@ class HostModuleTests(unittest.TestCase):
                       ["-D__mips__", "-Itests/stubs/x7"])
 
     def test_x7_rtc_launch_order(self):
+        discard_unused = "-Wl,-dead_strip" if sys.platform == "darwin" else "-Wl,--gc-sections"
         build_and_run("x7-rtc-launch-test", ["tests/x7_rtc_launch_test.c"],
                       ["-D__mips__", "-Itests/stubs/x7", "-ffunction-sections",
-                       "-fdata-sections", "-Wl,--gc-sections"])
+                       "-fdata-sections", discard_unused])
 
     def test_host_policy_module(self):
         build_and_run("launch-policy-test",
