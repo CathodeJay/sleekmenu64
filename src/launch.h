@@ -175,6 +175,8 @@ bool launch_cheats_possible(void);
 sm_cheats_hook_t launch_cheats_hook(void);
 sm_checksum_state_t launch_checksum_state(void);
 bool launch_cheat_toggle(uint32_t index);
+/* Switch every entry off. Like a toggle, it is written by the next save. */
+void launch_cheats_all_off(void);
 bool launch_cheats_save(void);
 
 #endif

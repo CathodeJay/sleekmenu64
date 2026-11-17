@@ -121,6 +121,9 @@ bool launch_cheat_toggle(uint32_t index) {
     fake_cheats.cheats[index].enabled = !fake_cheats.cheats[index].enabled;
     return true;
 }
+void launch_cheats_all_off(void) {
+    for (uint32_t i = 0; i < fake_cheats.count; i++) fake_cheats.cheats[i].enabled = false;
+}
 bool launch_cheats_save(void) { fake_cheat_saves++; return true; }
 sm_save_type_t launch_save_type(void) { return SM_SAVE_OFF; }
 /* launch_policy.c owns these two, and it drags in the rest of the launcher. */
@@ -1686,6 +1689,28 @@ int main(void) {
         assert(fake_cheat_saves == 1);
         draw();
         assert(sm_test_drew("1 of 3 on"));
+
+        /* Z turns them all off in one press, and leaving writes it. */
+        frame(PRESS(favorite));
+        assert(ui.screen == SM_SCREEN_CHEATS);
+        frame(PRESS(down));
+        frame(PRESS(down));
+        frame(PRESS(select));                     /* the third one on too */
+        draw();
+        assert(sm_test_drew("2 of 3 on"));
+        assert(sm_test_drew("ALL OFF") && drew_button(SM_BUTTON_Z));
+        fake_cheat_saves = 0;
+        frame(PRESS(filter));
+        assert(ui.screen == SM_SCREEN_CHEATS);
+        assert(!fake_cheats.cheats[0].enabled && !fake_cheats.cheats[2].enabled);
+        assert(ui.status && !strcmp(ui.status, "All cheats off"));
+        draw();
+        assert(sm_test_drew("0 of 3 on"));
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS);
+        assert(fake_cheat_saves == 1);
+        draw();
+        assert(sm_test_drew("0 of 3 on"));
         frame(PRESS(back));
         assert(ui.screen == SM_SCREEN_LIBRARY);
         fake_cheats_available = false;

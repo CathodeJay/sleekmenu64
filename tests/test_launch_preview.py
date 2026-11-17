@@ -656,6 +656,17 @@ class AssetLoadTests(unittest.TestCase):
         self.assertLess(source.index("sm_history_save("), source.index("cart->boot("))
         self.assertLess(source.index("sm_history_record("), source.index("sm_history_save("))
 
+    def test_all_off_clears_every_cheat_and_is_saved(self):
+        """Z on the cheats page switches every entry off. The record is only
+        written when the set is marked changed, so a version that forgot the
+        mark would show none on and bring them back on the next visit. launch.c
+        cannot be built on the host; ui_host_test.c drives the page."""
+        source = strip_comments((ROOT / "src/launch.c").read_text(encoding="utf-8"))
+        start = source.index("void launch_cheats_all_off(void)")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertRegex(body, r"for \(i = 0; i < cheats\.count; i\+\+\) cheats\.cheats\[i\]\.enabled = false;")
+        self.assertIn("cheats_dirty = true;", body)
+
     def test_every_genre_on_the_card_can_be_selected(self):
         """Eight tabs is what the strip can draw. Building only eight meant a
         genre past the eighth existed on the card and could be reached from

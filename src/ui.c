@@ -1819,6 +1819,10 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
                 if (!launch_cheat_toggle(ui->cheat_row))
                     ui->status = "This entry needs a value the file does not give";
             }
+            if (actions.filter) {
+                launch_cheats_all_off();
+                ui->status = "All cheats off";
+            }
             if (ui->cheat_row < ui->cheat_first) ui->cheat_first = ui->cheat_row;
             if (ui->cheat_row >= ui->cheat_first + rows) ui->cheat_first = ui->cheat_row + 1u - rows;
         }
@@ -3251,7 +3255,7 @@ static void draw_cheats(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui) {
         graphics_draw_text(s, l->safe_left + 3, y, "The file holds no usable entries");
     }
 
-    draw_help(s, l, "{A}TOGGLE {L}{R}PAGE {B}BACK");
+    draw_help(s, l, "{A}TOGGLE {Z}ALL OFF {L}{R}PAGE {B}BACK");
 }
 
 void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm_ui_t *ui) {

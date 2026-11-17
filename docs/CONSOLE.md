@@ -223,8 +223,8 @@ region. Where the pack has the game for your cartridge's region, its
 shorter list is the one used.
 
 **To use them:** open a game's details, press C-down, tick the codes you
-want, press B. Your choices are remembered per game in
-`sleekmenu/cheats.txt`. Cheats need an Expansion Pak.
+want, press B. Z turns them all off at once. Your choices are remembered
+per game in `sleekmenu/cheats.txt`. Cheats need an Expansion Pak.
 
 **Which file a game gets.** The pack names its files with short region tags
 — `F-Zero X (U).cht`, `F-Zero X (E).cht` — while ROMs are usually named

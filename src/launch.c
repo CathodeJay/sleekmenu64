@@ -511,6 +511,13 @@ bool launch_cheat_toggle(uint32_t index) {
     return true;
 }
 
+void launch_cheats_all_off(void) {
+    uint32_t i;
+    if (!cheats_available) return;
+    for (i = 0; i < cheats.count; i++) cheats.cheats[i].enabled = false;
+    cheats_dirty = true;
+}
+
 bool launch_cheats_save(void) {
     if (!cheats_available || !cheats_dirty) return true;
     if (!sm_cheats_save_state(selected, &cheats)) return false;
