@@ -450,8 +450,9 @@ libdragon refuses the combination.
 
 `launch_prepare` reads the first 4 KiB of the ROM (header plus boot code),
 normalises byte order, checks magic, size and the boot code's CRC, resolves
-the save type (header override, then the card's `save_db.txt`, then the
-built-in table generated from the ares emulator), and looks for cheats. Start
+the save type (header override, then the card's `save_db.txt`, read once a
+session, then the built-in table generated from the ares emulator), and
+looks for cheats. Start
 then hands everything to the cartridge backend: the X7 streams the ROM into
 its SDRAM through libcart; the Pro asks its MCU to copy the file into
 cartridge memory. Either can verify the copy afterwards (C-up on the card

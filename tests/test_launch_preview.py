@@ -525,6 +525,21 @@ class DetailsCardReadsTests(unittest.TestCase):
         self.assertIn("if (launch_prepare(game->path) == SM_LAUNCH_OK) {", card)
         self.assertIn("launch_note_sibling_disk(catalog_sibling_disk(catalog, game->path));", card)
 
+    def test_the_save_database_is_read_once(self):
+        """ED64/save_db.txt is opened in one place, and only while the
+        outcome of the first try is not known: not read, absent or loaded."""
+        source = self.read("src/launch.c")
+        self.assertEqual(source.count("fopen(SM_SAVE_DB_PATH"), 1)
+        self.assertRegex(source, r"static enum \{ SAVE_DB_UNREAD, SAVE_DB_ABSENT, SAVE_DB_LOADED \} save_db_state;")
+        read = self.body("src/launch.c", "static const char *read_save_db(void)")
+        guard = read.index("if (save_db_state == SAVE_DB_UNREAD) {")
+        self.assertLess(guard, read.index("save_db_state = SAVE_DB_ABSENT;"))
+        self.assertLess(read.index("save_db_state = SAVE_DB_ABSENT;"), read.index("fopen(SM_SAVE_DB_PATH"))
+        self.assertLess(read.index("fopen(SM_SAVE_DB_PATH"), read.index("save_db_state = SAVE_DB_LOADED;"))
+        self.assertIn("return save_db_state == SAVE_DB_LOADED ? save_db : NULL;", read)
+        # Nothing else changes the outcome once it is known.
+        self.assertEqual(source.count("save_db_state = "), 2)
+
 
 class RetiredModuleTests(unittest.TestCase):
     """The hand-rolled X7 register driver and the FAT chain planner are gone.

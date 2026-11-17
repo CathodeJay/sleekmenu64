@@ -73,19 +73,28 @@ void launch_set_boot_mode(sm_boot_mode_t mode) {
 }
 sm_boot_mode_t launch_boot_mode(void) { return boot_mode; }
 
-/* krikzz's per-ROM override database. Read-only, and absent on most cards. */
+/* krikzz's per-ROM override database. Read-only, and absent on most cards.
+   It is read the first time a game is prepared and the outcome kept for the
+   session: nothing writes it while SleekMenu runs. */
 #define SM_SAVE_DB_PATH "sd:/ED64/save_db.txt"
 #define SM_SAVE_DB_MAX 32768u
 static char save_db[SM_SAVE_DB_MAX];
+static enum { SAVE_DB_UNREAD, SAVE_DB_ABSENT, SAVE_DB_LOADED } save_db_state;
 
 static const char *read_save_db(void) {
-    FILE *file = fopen(SM_SAVE_DB_PATH, "rb");
+    FILE *file;
     size_t read;
-    if (!file) return NULL;
-    read = fread(save_db, 1, sizeof(save_db) - 1u, file);
-    fclose(file);
-    save_db[read] = '\0';
-    return read ? save_db : NULL;
+    if (save_db_state == SAVE_DB_UNREAD) {
+        save_db_state = SAVE_DB_ABSENT;
+        file = fopen(SM_SAVE_DB_PATH, "rb");
+        if (file) {
+            read = fread(save_db, 1, sizeof(save_db) - 1u, file);
+            fclose(file);
+            save_db[read] = '\0';
+            if (read) save_db_state = SAVE_DB_LOADED;
+        }
+    }
+    return save_db_state == SAVE_DB_LOADED ? save_db : NULL;
 }
 
 static void describe_save(void) {
