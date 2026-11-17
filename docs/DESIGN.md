@@ -343,10 +343,13 @@ by dropping pixels, every frame, lost one column and one row in three. A cover s
 waiting: it is carried across as pending, not as read. Covers live in a single `covers.pak` because opening a file by name on a
 FAT card walks the folder from the start, and with long names that is over
 100 KB of reading per picture. The packs -- the covers, the large covers and
-the two of screenshots -- share one open file: reading from another closes
-the one that is open. The X7's SD driver has four file slots in all, and
-the ROM, a game's header, a save, the record the EverDrive menu reads and
-the music each need one; a launch closes it first.
+the two of screenshots -- keep one open file on the X7 and up to four on the
+Pro. On the X7 reading from another pack closes the one that is open: its
+SD driver has four file slots in all, and the ROM, a game's header, a save,
+the record the EverDrive menu reads and the music each need one. The Pro's
+driver has eight handles, enough for the four packs, the music and two
+files opened and closed again, so a game's details do not close one pack
+to open another. A launch closes them all first.
 
 **The box, full screen.** A on the launch card opens `SM_SCREEN_BOX`: the
 game's cover from `covers-large.pak`, 256×180, centred between the title

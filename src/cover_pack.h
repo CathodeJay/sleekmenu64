@@ -16,11 +16,14 @@
    open while it is read from, so a run of covers costs no directory work at
    all.
 
-   Only one pack's file is open at a time, whichever was read last: reading
-   from another closes it and opens that one. The X7's SD driver has four
-   file slots in all, and a browser that kept its four packs open had none
-   left for a ROM to start, a game's header, a save or the music.
-   sm_cover_pack_let_go closes it before a game is loaded.
+   How many packs keep their file open is set once the cartridge is known
+   (sm_cover_pack_set_open_limit). On the X7 it is one, whichever was read
+   last: reading from another closes it and opens that one. The X7's SD
+   driver has four file slots in all, and a browser that kept its four packs
+   open had none left for a ROM to start, a game's header, a save or the
+   music. The Pro's driver has eight handles, so there all four stay open
+   and a game's details do not close one pack to open another.
+   sm_cover_pack_let_go closes them all before a game is loaded.
 
    Written by tools/cover_pack.py, which documents the layout. Only the header
    is checked here: the pack is ten megabytes and verifying its CRC at startup
@@ -70,10 +73,13 @@ void sm_cover_pack_close(sm_cover_pack_t *pack);
 static inline bool sm_cover_pack_ready(const sm_cover_pack_t *pack) {
     return pack && pack->entries && pack->count;
 }
-/* Close the one pack file that is open, if any. The next read opens it
-   again. */
+/* Up to this many packs keep their file open, from 1 (the default) to
+   SM_COVER_PACK_OPEN_MAX. Past it, the one read from longest ago is closed. */
+#define SM_COVER_PACK_OPEN_MAX 4u
+void sm_cover_pack_set_open_limit(unsigned limit);
+/* Close every pack file that is open. The next read opens one again. */
 void sm_cover_pack_let_go(void);
-/* Whether a pack file is open now, for the tests. */
+/* Whether any pack file is open now, for the tests. */
 bool sm_cover_pack_holding(void);
 
 /* The sprite bytes for a cover, malloc'd, or NULL. The caller owns the buffer;

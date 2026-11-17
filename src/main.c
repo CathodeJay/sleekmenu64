@@ -1,11 +1,13 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 #include "card_paths.h"
 #include "catalog.h"
+#include "cover_pack.h"
 #include "display.h"
 #include "flashcart.h"
 #include "input.h"
 #include "launch.h"
 #include "music.h"
+#include "pro/pro_fs.h"
 #include "ui.h"
 #include "save_sync.h"
 #include "theme.h"
@@ -94,6 +96,13 @@ int main(void) {
     /* Which EverDrive this is decides how every byte reaches the console;
        nothing else in the browser needs to know. */
     const sm_flashcart_t *cart = sm_flashcart_detect();
+    /* The picture packs keep their files open where there are handles to
+       spare. The X7's SD driver has four files: one for the packs. The
+       Pro's driver has eight: the four packs, the song, and two files
+       opened and closed again (a game's header, a save) make seven. */
+    _Static_assert(SM_COVER_PACK_OPEN_MAX + 1u + 2u <= SM_PRO_FS_HANDLES,
+        "the packs, the song and two short-lived files must fit the Pro's handles");
+    sm_cover_pack_set_open_limit(sm_flashcart()->kind == SM_FLASHCART_PRO ? SM_COVER_PACK_OPEN_MAX : 1u);
     scan_display.phase = "Loading catalog";
     scan_display.note = cart->name;
     draw_scan_now(&scan_display, NULL);

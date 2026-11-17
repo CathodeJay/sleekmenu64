@@ -57,24 +57,78 @@ int32_t sm_cover_pack_find(const sm_cover_entry_t *entries, uint32_t count, uint
     return -1;
 }
 
-/* The one pack whose file is open, and the file. */
-static const sm_cover_pack_t *open_pack;
-static FILE *open_file;
+/* The packs whose file is open, each with when it was last read from, and
+   how many may be open at once. */
+static struct {
+    const sm_cover_pack_t *pack;
+    FILE *file;
+    uint32_t used;
+} held[SM_COVER_PACK_OPEN_MAX];
+static unsigned open_limit = 1u;
+static uint32_t use_clock;
 
-void sm_cover_pack_let_go(void) {
-    if (open_file) fclose(open_file);
-    open_file = NULL;
-    open_pack = NULL;
+static void let_go_of(unsigned slot) {
+    if (held[slot].file) fclose(held[slot].file);
+    held[slot].file = NULL;
+    held[slot].pack = NULL;
 }
 
-bool sm_cover_pack_holding(void) { return open_file != NULL; }
+/* Close the file read from longest ago until fewer than `room` are open. */
+static void make_room(unsigned room) {
+    for (;;) {
+        unsigned slot, open = 0u, oldest = SM_COVER_PACK_OPEN_MAX;
+        for (slot = 0u; slot < SM_COVER_PACK_OPEN_MAX; slot++) {
+            if (!held[slot].file) continue;
+            open++;
+            if (oldest == SM_COVER_PACK_OPEN_MAX || held[slot].used < held[oldest].used) oldest = slot;
+        }
+        if (open < room) return;
+        let_go_of(oldest);
+    }
+}
+
+void sm_cover_pack_set_open_limit(unsigned limit) {
+    if (limit < 1u) limit = 1u;
+    if (limit > SM_COVER_PACK_OPEN_MAX) limit = SM_COVER_PACK_OPEN_MAX;
+    open_limit = limit;
+    make_room(open_limit + 1u);
+}
+
+void sm_cover_pack_let_go(void) {
+    unsigned slot;
+    for (slot = 0u; slot < SM_COVER_PACK_OPEN_MAX; slot++) let_go_of(slot);
+}
+
+bool sm_cover_pack_holding(void) {
+    unsigned slot;
+    for (slot = 0u; slot < SM_COVER_PACK_OPEN_MAX; slot++)
+        if (held[slot].file) return true;
+    return false;
+}
+
+/* Close this pack's file, if it is open. */
+static void let_go_of_pack(const sm_cover_pack_t *pack) {
+    unsigned slot;
+    for (slot = 0u; slot < SM_COVER_PACK_OPEN_MAX; slot++)
+        if (held[slot].pack == pack) let_go_of(slot);
+}
 
 static FILE *pack_file(const sm_cover_pack_t *pack) {
-    if (open_pack == pack && open_file) return open_file;
-    sm_cover_pack_let_go();
-    open_file = fopen(pack->path, "rb");
-    if (open_file) open_pack = pack;
-    return open_file;
+    unsigned slot;
+    for (slot = 0u; slot < SM_COVER_PACK_OPEN_MAX; slot++) {
+        if (held[slot].pack != pack || !held[slot].file) continue;
+        held[slot].used = ++use_clock;
+        return held[slot].file;
+    }
+    /* At the limit, the file read from longest ago is closed before this
+       one is opened: on the X7 that is the one pack file there is. */
+    make_room(open_limit);
+    for (slot = 0u; held[slot].file; slot++) {}
+    held[slot].file = fopen(pack->path, "rb");
+    if (!held[slot].file) return NULL;
+    held[slot].pack = pack;
+    held[slot].used = ++use_clock;
+    return held[slot].file;
 }
 
 bool sm_cover_pack_open(sm_cover_pack_t *pack, const char *path) {
@@ -83,7 +137,7 @@ bool sm_cover_pack_open(sm_cover_pack_t *pack, const char *path) {
     uint32_t count = 0u, index_offset = 0u, payload_offset = 0u, i;
     FILE *file;
     if (!pack) return false;
-    if (open_pack == pack) sm_cover_pack_let_go();
+    let_go_of_pack(pack);
     memset(pack, 0, sizeof(*pack));
     if (!path || strlen(path) >= sizeof(pack->path)) return false;
     memcpy(pack->path, path, strlen(path) + 1u);
@@ -124,7 +178,7 @@ fail:
 
 void sm_cover_pack_close(sm_cover_pack_t *pack) {
     if (!pack) return;
-    if (open_pack == pack) sm_cover_pack_let_go();
+    let_go_of_pack(pack);
     free(pack->entries);
     memset(pack, 0, sizeof(*pack));
 }

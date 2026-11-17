@@ -5,8 +5,10 @@
    offset the C reader computes differently, every cover on the card is either
    missing or somebody else's picture. Testing the C side against a fixture it
    generated itself would prove nothing, so the fixture comes from the packer. */
+#define _POSIX_C_SOURCE 200809L
 #include "cover_pack.h"
 #include <assert.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +27,28 @@ static void expect_found(sm_cover_pack_t *pack, const char *name,
     assert(((bytes[2] << 8) | bytes[3]) == (int)height);
     assert(length >= 8u + width * height * 2u);
     free(bytes);
+}
+
+/* How many files this process has open. */
+static int open_files(void) {
+    int count = 0;
+    for (int fd = 3; fd < 256; fd++)
+        if (fcntl(fd, F_GETFD) != -1) count++;
+    return count;
+}
+
+/* A copy of the pack under another name, so that each pack below has a
+   file of its own to take away. */
+static void copy_pack(const char *from, char *to, size_t size, const char *suffix) {
+    FILE *in = fopen(from, "rb"), *out;
+    char buffer[4096];
+    size_t got;
+    snprintf(to, size, "%s.%s", from, suffix);
+    out = fopen(to, "wb");
+    assert(in && out);
+    while ((got = fread(buffer, 1, sizeof(buffer), in)) > 0) assert(fwrite(buffer, 1, got, out) == got);
+    fclose(in);
+    fclose(out);
 }
 
 int main(int argc, char **argv) {
@@ -98,11 +122,15 @@ int main(int argc, char **argv) {
        reading from the first again opens it again. One file at a time. */
     {
         sm_cover_pack_t other;
+        int files;
+        sm_cover_pack_let_go();
+        files = open_files();
         assert(sm_cover_pack_open(&other, argv[1]));
         assert(sm_cover_pack_holding());
         expect_found(&other, "Wave Race 64 (USA).sprite", 64u, 48u);
         expect_found(&pack, "Zelda (Japan).sprite", 96u, 72u);
         expect_found(&other, "Zelda (Japan).sprite", 96u, 72u);
+        assert(open_files() == files + 1);
         /* Let go, and the next read opens it again. */
         sm_cover_pack_let_go();
         assert(!sm_cover_pack_holding() && sm_cover_pack_ready(&pack));
@@ -120,6 +148,63 @@ int main(int argc, char **argv) {
     sm_cover_pack_close(&pack);
     assert(!sm_cover_pack_ready(&pack));
     sm_cover_pack_close(&pack);      /* twice must be harmless */
+
+    /* Room for two, as the Pro has room for four: two packs keep their
+       file, a third closes the one read from longest ago, and letting go
+       closes them all. A file taken away from under a pack shows which
+       ones are still open: an open one still reads, a closed one cannot
+       open again. */
+    {
+        sm_cover_pack_t a, b, c;
+        char path_a[300], path_b[300], path_c[300];
+        int files;
+        copy_pack(argv[1], path_a, sizeof(path_a), "a");
+        copy_pack(argv[1], path_b, sizeof(path_b), "b");
+        copy_pack(argv[1], path_c, sizeof(path_c), "c");
+        sm_cover_pack_let_go();
+        files = open_files();
+        sm_cover_pack_set_open_limit(2u);
+        assert(sm_cover_pack_open(&a, path_a) && sm_cover_pack_open(&b, path_b));
+        assert(open_files() == files + 2);
+        expect_found(&b, "Wave Race 64 (USA).sprite", 64u, 48u);
+        expect_found(&a, "Zelda (Japan).sprite", 96u, 72u);
+        assert(open_files() == files + 2);
+        /* b was read from longest ago. */
+        assert(sm_cover_pack_open(&c, path_c));
+        assert(open_files() == files + 2);
+        assert(remove(path_a) == 0 && remove(path_b) == 0);
+        expect_found(&a, "Super Mario 64 (USA).sprite", 96u, 72u);
+        expect_found(&c, "Zelda (Japan).sprite", 96u, 72u);
+        /* b's file is gone. Room was made for it first, as on the X7, so
+           a, read from longest ago, is closed too. */
+        assert(sm_cover_pack_read(&b, "Zelda (Japan).sprite", &length) == NULL);
+        assert(open_files() == files + 1);
+        assert(sm_cover_pack_read(&a, "Zelda (Japan).sprite", &length) == NULL);
+        /* Back to one, with two open: the one read from longest ago, c, is
+           closed, and a keeps its file. */
+        copy_pack(argv[1], path_a, sizeof(path_a), "a");
+        expect_found(&a, "Zelda (Japan).sprite", 96u, 72u);
+        assert(open_files() == files + 2);
+        sm_cover_pack_set_open_limit(1u);
+        assert(open_files() == files + 1);
+        assert(remove(path_a) == 0);
+        expect_found(&a, "Wave Race 64 (USA).sprite", 64u, 48u);
+        sm_cover_pack_set_open_limit(2u);
+        expect_found(&c, "Wave Race 64 (USA).sprite", 64u, 48u);
+        assert(open_files() == files + 2);
+        sm_cover_pack_let_go();
+        assert(!sm_cover_pack_holding() && open_files() == files);
+        /* Out of range is held to 1 and to SM_COVER_PACK_OPEN_MAX. */
+        sm_cover_pack_set_open_limit(0u);
+        expect_found(&c, "Wave Race 64 (USA).sprite", 64u, 48u);
+        assert(open_files() == files + 1);
+        sm_cover_pack_close(&a);
+        sm_cover_pack_close(&b);
+        sm_cover_pack_close(&c);
+        assert(!sm_cover_pack_holding() && open_files() == files);
+        remove(path_c);
+        sm_cover_pack_set_open_limit(1u);
+    }
 
     /* A truncated or corrupted pack must be refused, not half-read. */
     if (argc > 2) {

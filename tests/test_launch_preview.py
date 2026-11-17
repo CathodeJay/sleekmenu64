@@ -541,6 +541,18 @@ class DetailsCardReadsTests(unittest.TestCase):
         # Nothing else changes the outcome once it is known.
         self.assertEqual(source.count("save_db_state = "), 2)
 
+    def test_the_packs_keep_their_files_open_on_the_pro_only(self):
+        """Four pack files on the Pro, which has eight handles; one on the
+        X7, whose SD driver has four files in all."""
+        main = self.read("src/main.c")
+        self.assertIn("sm_cover_pack_set_open_limit(sm_flashcart()->kind == SM_FLASHCART_PRO"
+                      " ? SM_COVER_PACK_OPEN_MAX : 1u);", main)
+        self.assertRegex(main, r"_Static_assert\(SM_COVER_PACK_OPEN_MAX \+ 1u \+ 2u <= SM_PRO_FS_HANDLES,")
+        self.assertLess(main.index("sm_flashcart_detect()"), main.index("sm_cover_pack_set_open_limit("))
+        self.assertRegex(self.read("src/cover_pack.h"), r"#define SM_COVER_PACK_OPEN_MAX 4u\b")
+        self.assertRegex(self.read("src/pro/pro_fs.h"), r"#define SM_PRO_FS_HANDLES 8u\b")
+        self.assertIn("static unsigned open_limit = 1u;", self.read("src/cover_pack.c"))
+
 
 class RetiredModuleTests(unittest.TestCase):
     """The hand-rolled X7 register driver and the FAT chain planner are gone.
