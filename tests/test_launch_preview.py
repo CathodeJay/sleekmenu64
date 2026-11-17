@@ -308,6 +308,185 @@ class HostModuleTests(unittest.TestCase):
         build_and_run("pro-fs-test", ["src/pro/pro_fs.c", "tests/pro_fs_test.c"],
                       ["-Itests/stubs", "-D_POSIX_C_SOURCE=200809L"])
 
+    def test_host_pro_fs_counters(self):
+        """The same checks built as make perf builds the driver, with the
+        counters on: every call still reaches the fake unchanged, and the
+        counters say what was asked of it."""
+        build_and_run("pro-fs-counters-test", ["src/pro/pro_fs.c", "tests/pro_fs_test.c"],
+                      ["-Itests/stubs", "-D_POSIX_C_SOURCE=200809L", "-DSM_SHOW_FRAME_TIME"])
+
+
+def frame_time_regions(source):
+    """The character ranges of `source` that only make perf compiles: from
+    each #ifdef SM_SHOW_FRAME_TIME to its own #endif (or an #else at the
+    same depth), and the inside of each SM_PERF(...)."""
+    regions, depth, start = [], 0, None
+    offset = 0
+    for line in source.splitlines(keepends=True):
+        directive = line.strip()
+        if start is None:
+            if re.match(r"#\s*ifdef\s+SM_SHOW_FRAME_TIME\b", directive):
+                start, depth = offset, 0
+        elif re.match(r"#\s*if", directive):
+            depth += 1
+        elif re.match(r"#\s*endif", directive):
+            if depth == 0:
+                regions.append((start, offset + len(line)))
+                start = None
+            else:
+                depth -= 1
+        elif re.match(r"#\s*(else|elif)", directive) and depth == 0:
+            regions.append((start, offset + len(line)))
+            start = None
+        offset += len(line)
+    assert start is None, "an #ifdef SM_SHOW_FRAME_TIME is never closed"
+    for match in re.finditer(r"\bSM_PERF\(", source):
+        if any(a <= match.start() < b for a, b in regions):
+            continue
+        depth, at = 1, match.end()
+        while depth:
+            depth += {"(": 1, ")": -1}.get(source[at], 0)
+            at += 1
+        regions.append((match.start(), at))
+    return sorted(regions)
+
+
+def without(source, regions):
+    """`source` with the given ranges taken out: what the release build
+    compiles, line breaks and all."""
+    out, at = [], 0
+    for start, end in regions:
+        out.append(source[at:start])
+        at = end
+    out.append(source[at:])
+    return "".join(out)
+
+
+class DetailsTimersTests(unittest.TestCase):
+    """The timers and the cartridge counters are for make perf alone: the
+    release ROM must not carry a byte of them. Not even a line number: the
+    ROM's symbol file gives each function its source line, so the release
+    build's lines must not move either (src/perf.h)."""
+
+    NAMES = ("launch_times", "launch_times_clear", "launch_times_lap", "sm_launch_times_t",
+             "SM_PREP_ROM", "SM_PREP_DB", "SM_PREP_DISK", "SM_PREP_CHEATS", "SM_PREP_STEPS",
+             "prepare_times", "sm_pro_fs_counters", "sm_pro_fs_counters_t",
+             "sm_pro_fs_counters_reset", "sm_pro_fs_counting", "sm_pro_fs_commands",
+             "counters", "counting", "COUNT_DIR_BATCH",
+             "ui_card_times_begin", "ui_card_times_lap", "ui_card_times_end",
+             "ui_draw_card_times", "SM_CARD_PREP", "SM_CARD_TEXT", "SM_CARD_COVER",
+             "SM_CARD_FACTS", "SM_CARD_SHOTS", "SM_CARD_STEPS", "card_ms", "card_counters")
+    SOURCES = ("src/ui.c", "src/launch.c", "src/pro/pro_fs.c")
+    HEADERS = ("src/ui.h", "src/launch.h", "src/pro/pro_fs.h")
+
+    def read(self, name):
+        return strip_comments((ROOT / name).read_text(encoding="utf-8"))
+
+    def test_only_inside_the_define(self):
+        seen = set()
+        for name in self.SOURCES + self.HEADERS:
+            source = self.read(name)
+            regions = frame_time_regions(source)
+            for word in self.NAMES:
+                for match in re.finditer(rf"\b{word}\b", source):
+                    seen.add(word)
+                    self.assertTrue(
+                        any(start <= match.start() < end for start, end in regions),
+                        f"{name}: {word} outside #ifdef SM_SHOW_FRAME_TIME "
+                        f"(line {source.count(chr(10), 0, match.start()) + 1})")
+        self.assertEqual(seen, set(self.NAMES))
+
+    def test_perf_hook_is_empty_without_the_define(self):
+        source = self.read("src/perf.h")
+        self.assertRegex(source, r"#ifdef SM_SHOW_FRAME_TIME\s*#define SM_PERF\(\.\.\.\) __VA_ARGS__"
+                                 r"\s*#else\s*#define SM_PERF\(\.\.\.\)\s*#endif")
+        for name in self.HEADERS[1:]:
+            self.assertIn('#include "perf.h"', self.read(name))
+
+    def test_release_lines_stay_where_they_were(self):
+        """Every block only make perf compiles comes after the file's last
+        release line, and every SM_PERF shares its line with release code."""
+        for name in self.SOURCES:
+            source = self.read(name)
+            blocks = [r for r in frame_time_regions(source) if source[r[0]] == "#"]
+            self.assertTrue(blocks, name)
+            self.assertEqual(source[blocks[0][0]:].count("SM_PERF("), 0, name)
+            self.assertEqual(without(source, blocks)[blocks[0][0]:].strip(), "",
+                             f"{name}: release code after a make perf block")
+            hooks = 0
+            for line in source[:blocks[0][0]].splitlines():
+                if "SM_PERF(" not in line:
+                    continue
+                hooks += 1
+                self.assertTrue(without(line, frame_time_regions(line)).strip(),
+                                f"{name}: an SM_PERF on a line of its own: {line.strip()}")
+            self.assertGreater(hooks, 0, name)
+
+    def test_batch_size_matches_the_backend(self):
+        """The counters mirror the Pro backend's folder batches without
+        touching it; the batch size has to be the backend's own."""
+        backend = self.read("src/pro/flashcart_pro.c")
+        counting = self.read("src/pro/pro_fs.c")
+        theirs = re.search(r"#define PRO_DIR_BATCH (\d+)u?\b", backend)
+        ours = re.search(r"#define COUNT_DIR_BATCH (\d+)u?\b", counting)
+        self.assertTrue(theirs and ours)
+        self.assertEqual(int(theirs.group(1)), int(ours.group(1)))
+
+    def body(self, name, signature):
+        source = self.read(name)
+        start = source.index(signature)
+        return source[start:source.index("\n}\n", start)]
+
+    def assert_in_order(self, body, calls):
+        order = [body.index(call) for call in calls]
+        self.assertEqual(order, sorted(order))
+
+    def test_open_card_times_each_step(self):
+        self.assert_in_order(self.body("src/ui.c", "static void open_card("), (
+            "SM_PERF(ui_card_times_begin();)", "launch_prepare(",
+            "SM_PERF(ui_card_times_lap(SM_CARD_PREP);)", "render_description(",
+            "SM_PERF(ui_card_times_lap(SM_CARD_TEXT);)", "load_selected_cover(",
+            "SM_PERF(ui_card_times_lap(SM_CARD_COVER);)", "load_selected_details(",
+            "SM_PERF(ui_card_times_lap(SM_CARD_FACTS);)", "load_shot_thumbs(",
+            "SM_PERF(ui_card_times_lap(SM_CARD_SHOTS);)", "SM_PERF(ui_card_times_end();)"))
+        timers = self.read("src/ui.c")
+        begin = timers[timers.index("void ui_card_times_begin(void)"):]
+        self.assertIn("sm_pro_fs_counters_reset();", begin[:begin.index("\n}\n")])
+        end = timers[timers.index("void ui_card_times_end(void)"):]
+        self.assertIn("sm_pro_fs_counters(&card_counters);", end[:end.index("\n")])
+
+    def test_launch_prepare_times_each_read(self):
+        self.assert_in_order(self.body("src/launch.c", "sm_launch_result_t launch_prepare("), (
+            "SM_PERF(launch_times_clear();)",
+            "SM_PERF(launch_times_lap(-1);)", "open_launch_rom_readonly(",
+            "SM_PERF(launch_times_lap(SM_PREP_ROM);)",
+            "SM_PERF(launch_times_lap(-1);) sm_save_resolve(", "read_save_db()",
+            "SM_PERF(launch_times_lap(SM_PREP_DB);)",
+            "SM_PERF(launch_times_lap(-1);) find_sibling_disk(",
+            "SM_PERF(launch_times_lap(SM_PREP_DISK);)",
+            "SM_PERF(launch_times_lap(-1);) cheats_available = sm_cheats_load(",
+            "SM_PERF(launch_times_lap(SM_PREP_CHEATS);)"))
+
+    def test_diagnostics_rows(self):
+        card = self.body("src/ui.c", "static void draw_launch_card(")
+        diagnostics = card[card.index("if (ui->diagnostics) {"):card.index("draw_load_bar(")]
+        # After the six rows the page already had.
+        self.assertRegex(diagnostics, r"y \+= 11;\s*\} SM_PERF\(ui_draw_card_times\(s, l, &y\);\)")
+        rows = self.body("src/ui.c", "void ui_draw_card_times(")
+        for text in ('"TIMES"', '"PREP"', '"CARD"',
+                     '"prep %lu text %lu box %lu fact %lu shot %lu"',
+                     '"rom %lu  db %lu  disk %lu  cheats %lu"',
+                     '"%lu commands  %lu reads"', "sm_pro_fs_commands(n)",
+                     "SM_FLASHCART_PRO ? 3 : 2"):
+            self.assertIn(text, rows)
+        # The longest a row gets, with four digits wherever a card read can
+        # take that long, fits the value column: 43 characters.
+        width = (296 - 24 - 9 * 5 - 10) // 5
+        self.assertEqual(width, 43)
+        for row in ("prep 9999 text 99 box 999 fact 999 shot 999",
+                    "rom 9999  db 9999  disk 9999  cheats 9999",
+                    "99999 commands  9999 reads"):
+            self.assertLessEqual(len(row), width, row)
 
 
 class RetiredModuleTests(unittest.TestCase):

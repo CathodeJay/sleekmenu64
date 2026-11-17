@@ -261,4 +261,19 @@ void sm_format_rom_size(uint32_t bytes, char *out, size_t size);
    from meanwhile. */
 bool ui_card_busy(const sm_ui_t *ui);
 
+#ifdef SM_SHOW_FRAME_TIME
+/* make perf, for ui.c: how long each step of opening a game's details
+   took, in milliseconds, and on the Pro what it asked of the cartridge.
+   The diagnostics page shows them under its own rows. */
+enum { SM_CARD_PREP, SM_CARD_TEXT, SM_CARD_COVER, SM_CARD_FACTS, SM_CARD_SHOTS, SM_CARD_STEPS };
+/* Clear the times and the cartridge counters, and start a step. */
+void ui_card_times_begin(void);
+/* End a step and start the next. */
+void ui_card_times_lap(int step);
+/* Keep what the cartridge was asked since the beginning. */
+void ui_card_times_end(void);
+/* The rows, from y down; y comes back below them. */
+void ui_draw_card_times(surface_t *s, const sm_layout_t *l, int *y);
+#endif
+
 #endif

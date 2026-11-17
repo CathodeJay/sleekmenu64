@@ -43,7 +43,7 @@ static uint32_t cache_length;
 #define POSITION_UNKNOWN UINT32_MAX
 
 void sm_pro_fs_init(const sm_pro_mcu_t *cartridge) {
-    mcu = cartridge;
+    mcu = cartridge; SM_PERF(mcu = sm_pro_fs_counting(cartridge);)
     memset(handles, 0, sizeof(handles));
     current = NULL;
     mcu_position = 0;
@@ -306,3 +306,91 @@ static filesystem_t table = {
 };
 
 filesystem_t *sm_pro_fs(void) { return &table; }
+
+#ifdef SM_SHOW_FRAME_TIME
+/* make perf. After the last function, so that no line the released ROM
+   compiles moves (perf.h). */
+static const sm_pro_mcu_t *counted;
+static sm_pro_mcu_t counting;
+static sm_pro_fs_counters_t counters;
+
+/* The backend fetches folder records this many at a time: PRO_DIR_BATCH in
+   flashcart_pro.c, which is left alone so that the released ROM does not
+   move. A test checks that the two agree. The window is the batch the
+   backend holds, by its own rule. */
+#define COUNT_DIR_BATCH 8u
+static uint16_t window_start, window_count, listing_size;
+
+static int count_open(const char *path, unsigned mode) {
+    counters.opens++;
+    return counted->file_open(path, mode);
+}
+static int count_close(void) {
+    counters.closes++;
+    return counted->file_close();
+}
+static int count_set_ptr(uint32_t offset) {
+    counters.seeks++;
+    return counted->file_set_ptr(offset);
+}
+static int count_read(void *dst, uint32_t length) {
+    counters.slow_reads++;
+    return counted->file_read(dst, length);
+}
+static int count_read_fast(void *dst, uint32_t length) {
+    counters.fast_reads++;
+    return counted->file_read_fast(dst, length);
+}
+static int count_info(const char *path, uint32_t *size, bool *is_dir) {
+    int rc = counted->file_info(path, size, is_dir);
+    counters.opens++;
+    if (rc == 0) {
+        counters.size_queries++;
+        counters.closes++;
+    }
+    return rc;
+}
+static int count_dir_load(const char *path, uint16_t *count) {
+    int rc = counted->dir_load(path, count);
+    counters.folder_loads++;
+    window_count = 0;
+    listing_size = rc == 0 ? *count : 0;
+    return rc;
+}
+static int count_dir_record(uint16_t index, char *name, size_t name_size, uint32_t *size,
+    bool *is_dir) {
+    counters.folder_records++;
+    if (index < listing_size &&
+        (window_count == 0 || index < window_start || index >= window_start + window_count)) {
+        uint16_t left = (uint16_t)(listing_size - index);
+        counters.folder_batches++;
+        window_start = index;
+        window_count = left < COUNT_DIR_BATCH ? left : (uint16_t)COUNT_DIR_BATCH;
+    }
+    return counted->dir_record(index, name, name_size, size, is_dir);
+}
+
+const sm_pro_mcu_t *sm_pro_fs_counting(const sm_pro_mcu_t *cartridge) {
+    counted = cartridge;
+    window_count = listing_size = 0;
+    counting = *cartridge;
+    counting.file_open = count_open;
+    counting.file_close = count_close;
+    counting.file_set_ptr = count_set_ptr;
+    counting.file_read = count_read;
+    counting.file_info = count_info;
+    counting.dir_load = count_dir_load;
+    counting.dir_record = count_dir_record;
+    counting.file_read_fast = cartridge->file_read_fast ? count_read_fast : NULL;
+    return &counting;
+}
+
+void sm_pro_fs_counters(sm_pro_fs_counters_t *out) { *out = counters; }
+
+void sm_pro_fs_counters_reset(void) { memset(&counters, 0, sizeof(counters)); }
+
+uint32_t sm_pro_fs_commands(const sm_pro_fs_counters_t *n) {
+    return n->opens + n->closes + n->seeks + n->size_queries + n->fast_reads + n->slow_reads +
+        2u * n->folder_loads + n->folder_batches;
+}
+#endif

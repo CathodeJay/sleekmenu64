@@ -1567,11 +1567,11 @@ static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_
     uint32_t item, const sm_game_t *game) {
     /* The launcher reads the header and, on a cartridge with a drive, lists
        the folder for a disk: the card is its now. */
-    sm_folder_scan_yield(&ui->scan);
-    launch_prepare(game->path);
+    sm_folder_scan_yield(&ui->scan); SM_PERF(ui_card_times_begin();)
+    launch_prepare(game->path); SM_PERF(ui_card_times_lap(SM_CARD_PREP);)
     ui->status = launch_status_message();
     ui->diagnostics = false;
-    render_description(ui, layout, game->description);
+    render_description(ui, layout, game->description); SM_PERF(ui_card_times_lap(SM_CARD_TEXT);)
     /* The grid keeps its covers in slot_sprites and never touches
        cover_sprite, which is what the launch card draws -- so coming here
        from the grid showed a game with no box and "..." where its save type
@@ -1580,10 +1580,10 @@ static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_
        waiting for it. */
     if (!ui->cover_loaded || ui->cover_index != item)
         load_selected_cover(ui, catalog);
-    if (!ui->selected_details_loaded)
+    SM_PERF(ui_card_times_lap(SM_CARD_COVER);) if (!ui->selected_details_loaded)
         load_selected_details(ui, catalog);
-    load_shot_thumbs(ui, game);
-    ui->screen = SM_SCREEN_LAUNCH_DETAILS;
+    SM_PERF(ui_card_times_lap(SM_CARD_FACTS);) load_shot_thumbs(ui, game); SM_PERF(ui_card_times_lap(SM_CARD_SHOTS);)
+    ui->screen = SM_SCREEN_LAUNCH_DETAILS; SM_PERF(ui_card_times_end();)
 }
 
 /* Left or right on the card: the next game in the list either way, round
@@ -2936,7 +2936,7 @@ static void draw_launch_card(surface_t *s, const sm_layout_t *l, const sm_catalo
             else draw_truncated(s, l->safe_left + 9 * SM_FONT_WIDTH + 6, y, values[row],
                 (l->safe_right - l->safe_left - 9 * SM_FONT_WIDTH - 10) / SM_FONT_WIDTH);
             y += 11;
-        }
+        } SM_PERF(ui_draw_card_times(s, l, &y);)
         graphics_set_color(sm_colour(SM_C_TEXT_SOFT), 0);
         /* A load can be started with the diagnostics page open -- Start is not
            gated on it -- and this branch returns before the card's own bar. */
@@ -3363,3 +3363,56 @@ void ui_close(sm_ui_t *ui) {
     if (ui->desc_surface.buffer) surface_free(&ui->desc_surface);
     ui->desc_lines = 0;
 }
+
+#ifdef SM_SHOW_FRAME_TIME
+/* make perf. After the last function, so that no line the released ROM
+   compiles moves (perf.h). */
+#include "pro/pro_fs.h"
+
+static uint32_t card_ms[SM_CARD_STEPS];
+static sm_pro_fs_counters_t card_counters;
+static uint64_t card_lap_began_us;
+
+void ui_card_times_begin(void) {
+    memset(card_ms, 0, sizeof(card_ms));
+    memset(&card_counters, 0, sizeof(card_counters));
+    sm_pro_fs_counters_reset();
+    card_lap_began_us = get_ticks_us();
+}
+
+void ui_card_times_lap(int step) {
+    uint64_t now = get_ticks_us();
+    if (step >= 0 && step < SM_CARD_STEPS)
+        card_ms[step] = (uint32_t)((now - card_lap_began_us + 500u) / 1000u);
+    card_lap_began_us = now;
+}
+
+void ui_card_times_end(void) { sm_pro_fs_counters(&card_counters); }
+
+void ui_draw_card_times(surface_t *s, const sm_layout_t *l, int *y) {
+    static const char *LABELS[] = {"TIMES", "PREP", "CARD"};
+    const sm_launch_times_t *prep = launch_times();
+    const sm_pro_fs_counters_t *n = &card_counters;
+    char values[3][64];
+    /* The cartridge row means something on the Pro alone. */
+    int rows = sm_flashcart()->kind == SM_FLASHCART_PRO ? 3 : 2;
+    snprintf(values[0], sizeof(values[0]), "prep %lu text %lu box %lu fact %lu shot %lu",
+        (unsigned long)card_ms[SM_CARD_PREP], (unsigned long)card_ms[SM_CARD_TEXT],
+        (unsigned long)card_ms[SM_CARD_COVER], (unsigned long)card_ms[SM_CARD_FACTS],
+        (unsigned long)card_ms[SM_CARD_SHOTS]);
+    snprintf(values[1], sizeof(values[1]), "rom %lu  db %lu  disk %lu  cheats %lu",
+        (unsigned long)prep->ms[SM_PREP_ROM], (unsigned long)prep->ms[SM_PREP_DB],
+        (unsigned long)prep->ms[SM_PREP_DISK], (unsigned long)prep->ms[SM_PREP_CHEATS]);
+    snprintf(values[2], sizeof(values[2]), "%lu commands  %lu reads",
+        (unsigned long)sm_pro_fs_commands(n),
+        (unsigned long)(n->fast_reads + n->slow_reads));
+    for (int row = 0; row < rows; row++) {
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
+        graphics_draw_text(s, l->safe_left + 3, *y, LABELS[row]);
+        graphics_set_color(sm_colour(SM_C_TEXT), 0);
+        draw_truncated(s, l->safe_left + 9 * SM_FONT_WIDTH + 6, *y, values[row],
+            (l->safe_right - l->safe_left - 9 * SM_FONT_WIDTH - 10) / SM_FONT_WIDTH);
+        *y += 11;
+    }
+}
+#endif

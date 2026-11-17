@@ -207,7 +207,7 @@ static sm_launch_result_t prepare_disk(const char *relative_path) {
 sm_launch_result_t launch_prepare(const char *relative_path) {
     uint8_t header[SM_N64_HEADER_SIZE] __attribute__((aligned(16)));
     FILE *file = NULL;
-    uint32_t boot_crc = 0;
+    uint32_t boot_crc = 0; SM_PERF(launch_times_clear();)
     selected[0] = '\0';
     selected_size = 0;
     selected_boot_crc = 0;
@@ -236,14 +236,14 @@ sm_launch_result_t launch_prepare(const char *relative_path) {
     if (!launch_suffix_is_rom(relative_path)) {
         set_status(SM_LAUNCH_BAD_SUFFIX); return SM_LAUNCH_BAD_SUFFIX;
     }
-    file = open_launch_rom_readonly(relative_path);
+    SM_PERF(launch_times_lap(-1);) file = open_launch_rom_readonly(relative_path);
     if (!file || fseek(file, 0, SEEK_END) || (selected_size = (uint64_t)ftell(file)) == (uint64_t)-1 ||
         fseek(file, 0, SEEK_SET) || fread(header, 1, sizeof(header), file) != sizeof(header)) {
         if (file) fclose(file);
-        set_status(SM_LAUNCH_IO_ERROR);
+        SM_PERF(launch_times_lap(SM_PREP_ROM);) set_status(SM_LAUNCH_IO_ERROR);
         return SM_LAUNCH_IO_ERROR;
     }
-    fclose(file);
+    fclose(file); SM_PERF(launch_times_lap(SM_PREP_ROM);)
     /* Judge by the header, not the filename: the library holds byteswapped
        dumps named .z64 and native dumps named .n64. Normalising the copy in
        RAM means the CRC, the CIC and the save lookup all read real bytes. */
@@ -269,10 +269,10 @@ sm_launch_result_t launch_prepare(const char *relative_path) {
         set_status(SM_LAUNCH_WRONG_CARTRIDGE); return SM_LAUNCH_WRONG_CARTRIDGE;
     }
     snprintf(selected, sizeof(selected), "%s", relative_path);
-    sm_save_resolve(header, sizeof(header), read_save_db(), &selected_save);
+    SM_PERF(launch_times_lap(-1);) sm_save_resolve(header, sizeof(header), read_save_db(), &selected_save); SM_PERF(launch_times_lap(SM_PREP_DB);)
     describe_save();
-    find_sibling_disk(opened_path);
-    cheats_available = sm_cheats_load(selected, header, sizeof(header), &cheat_pack, &cheats, &cheats_source);
+    SM_PERF(launch_times_lap(-1);) find_sibling_disk(opened_path); SM_PERF(launch_times_lap(SM_PREP_DISK);)
+    SM_PERF(launch_times_lap(-1);) cheats_available = sm_cheats_load(selected, header, sizeof(header), &cheat_pack, &cheats, &cheats_source); SM_PERF(launch_times_lap(SM_PREP_CHEATS);)
     cheats_hook = sm_cheats_hook_check(header, sizeof(header));
     snprintf(status, sizeof(status), "%s CIC %u %lu MiB; save %s%s; Start to launch",
         sm_rom_format_name(selected_format), (unsigned)selected_cic,
@@ -524,3 +524,21 @@ bool launch_cheats_save(void) {
     cheats_dirty = false;
     return true;
 }
+
+#ifdef SM_SHOW_FRAME_TIME
+/* make perf. After the last function, so that no line the released ROM
+   compiles moves (perf.h). */
+static sm_launch_times_t prepare_times;
+static uint64_t lap_began_us;
+
+const sm_launch_times_t *launch_times(void) { return &prepare_times; }
+
+void launch_times_clear(void) { memset(&prepare_times, 0, sizeof(prepare_times)); }
+
+void launch_times_lap(int step) {
+    uint64_t now = get_ticks_us();
+    if (step >= 0 && step < SM_PREP_STEPS)
+        prepare_times.ms[step] = (uint32_t)((now - lap_began_us + 500u) / 1000u);
+    lap_began_us = now;
+}
+#endif

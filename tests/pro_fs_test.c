@@ -11,7 +11,7 @@
 #include <string.h>
 
 /* --- the fake cartridge ------------------------------------------------ */
-#define FAKE_FILES 12
+#define FAKE_FILES 32
 #define FAKE_DATA (48u * 1024u)
 typedef struct { char path[128]; uint8_t data[FAKE_DATA]; uint32_t size; bool is_dir; } fake_file_t;
 static fake_file_t files[FAKE_FILES];
@@ -20,6 +20,9 @@ static fake_file_t *open_file;      /* the MCU's one file */
 static uint32_t open_pointer;
 static int opens, closes, seeks, reads, fast_reads;
 static bool offer_fast;             /* whether the fake advertises file_read_fast */
+/* Every command the real cartridge would be sent for what was asked of the
+   fake, counted the way flashcart_pro.c sends them. */
+static int commands;
 
 static fake_file_t *find(const char *path) {
     for (int i = 0; i < file_count; i++)
@@ -44,6 +47,7 @@ static int fake_open(const char *path, unsigned mode) {
     assert(open_file == NULL && "the real MCU holds one file; opening a second is a driver bug");
     assert(path[0] != '/' && "the MCU wants card-relative paths");
     f = find(path);
+    commands++;
     if (!f) {
         if (!(mode & (SM_PRO_MCU_CREATE_ALWAYS | SM_PRO_MCU_OPEN_ALWAYS))) return 4;  /* FR_NO_FILE */
         f = add(path, "", false);
@@ -60,6 +64,7 @@ static int fake_close(void) {
     assert(open_file != NULL);
     open_file = NULL;
     closes++;
+    commands++;
     return 0;
 }
 
@@ -67,6 +72,7 @@ static int fake_set_ptr(uint32_t offset) {
     assert(open_file != NULL);
     open_pointer = offset;
     seeks++;
+    commands++;
     return 0;
 }
 
@@ -76,6 +82,7 @@ static int fake_read(void *dst, uint32_t length) {
     memcpy(dst, open_file->data + open_pointer, length);
     open_pointer += length;
     reads++;
+    commands++;
     return 0;
 }
 
@@ -90,6 +97,7 @@ static int fake_read_fast(void *dst, uint32_t length) {
     memcpy(dst, open_file->data + open_pointer, length);
     open_pointer = 7;
     fast_reads++;
+    commands++;
     return 0;
 }
 
@@ -97,6 +105,7 @@ static int fake_write(const void *src, uint32_t length) {
     assert(open_file != NULL);
     assert(open_pointer + length <= sizeof(open_file->data));
     memcpy(open_file->data + open_pointer, src, length);
+    commands++;
     open_pointer += length;
     if (open_pointer > open_file->size) open_file->size = open_pointer;
     return 0;
@@ -105,6 +114,8 @@ static int fake_write(const void *src, uint32_t length) {
 static int fake_info(const char *path, uint32_t *size, bool *is_dir) {
     fake_file_t *f = find(path);
     assert(open_file == NULL && "the real cartridge answers file_info by opening the path");
+    /* Open, ask the size, close; or only the open, which fails. */
+    commands += f ? 3 : 1;
     if (!f) return 4;
     *size = f->size;
     *is_dir = f->is_dir;
@@ -113,10 +124,15 @@ static int fake_info(const char *path, uint32_t *size, bool *is_dir) {
 
 static char listed[FAKE_FILES][128];
 static uint16_t listed_count;
+/* The batch of records the cartridge last sent: eight at most, fetched
+   from the record asked for when it is not already here. */
+static uint16_t batch_first, batch_size;
 
 static int fake_dir_load(const char *path, uint16_t *count) {
     size_t prefix = strlen(path);
     listed_count = 0;
+    batch_size = 0;
+    commands += 2;                  /* the load, then its size */
     for (int i = 0; i < file_count; i++) {
         const char *rest;
         if (prefix && (strncmp(files[i].path, path, prefix) || files[i].path[prefix] != '/')) continue;
@@ -132,6 +148,11 @@ static int fake_dir_record(uint16_t index, char *name, size_t name_size, uint32_
     fake_file_t *f;
     char full[256];
     if (index >= listed_count) return 1;
+    if (index < batch_first || index >= batch_first + batch_size) {
+        commands++;
+        batch_first = index;
+        batch_size = (uint16_t)(listed_count - index < 8 ? listed_count - index : 8);
+    }
     snprintf(name, name_size, "%s", listed[index]);
     snprintf(full, sizeof(full), "ROMS/%s", listed[index]);
     f = find(full);
@@ -169,6 +190,8 @@ static void reset(void) {
     file_count = 0;
     open_file = NULL;
     opens = closes = seeks = reads = fast_reads = 0;
+    commands = 0;
+    batch_size = 0;
     add("sleekmenu/catalog.ebc", "CATALOG-BYTES-HERE", false);
     add("sleekmenu/covers.pak", "PACK:0123456789abcdef", false);
     add("sleekmenu/favorites.txt", "ROMS/a.z64\n", false);
@@ -448,6 +471,92 @@ int main(void) {
         assert(h[SM_PRO_FS_HANDLES] == NULL);
         for (unsigned i = 0; i < SM_PRO_FS_HANDLES; i++) fs->close(h[i]);
     }
+
+#ifdef SM_SHOW_FRAME_TIME
+    /* --- make perf: what the driver asks of the cartridge, counted ------ */
+    offer_fast = true;
+    reset();
+    {
+        static uint8_t big[20u * 1024u];
+        sm_pro_fs_counters_t n;
+        fake_file_t *gone;
+        dir_t entry;
+        void *pack, *f, *a;
+        int listed_records;
+        add_big("sleekmenu/shots.big", 20u * 1024u);
+        /* A folder of 19 games: not a whole number of batches. */
+        for (int i = 0; i < 19; i++) {
+            char name[32];
+            snprintf(name, sizeof(name), "BIG/g%02d.z64", i);
+            add(name, "\x80\x37\x12\x40", false);
+        }
+        sm_pro_fs_counters_reset();
+        opens = closes = seeks = reads = fast_reads = 0;
+        commands = 0;
+
+        /* A size query that fails: the open, no more. */
+        assert(fs->open("sleekmenu/history.txt", O_RDONLY) == NULL);
+        /* One that answers: an open, the size and a close. */
+        pack = fs->open("sleekmenu/covers.pak", O_RDONLY);
+        assert(pack);
+        /* An open, then a slow read: 21 bytes are under the fast threshold. */
+        assert(fs->read(pack, buf, 5) == 5);
+        /* The pack is closed, then a size query. */
+        f = fs->open("sleekmenu/shots.big", O_RDONLY);
+        assert(f);
+        /* An open, then a fast read of a whole window. */
+        assert(fs->read(f, big, 1024) == 1024);
+        /* A seek, since the fast read left the pointer unknown, then a slow
+           read of a tail under the threshold. */
+        assert(fs->lseek(f, 17000, SEEK_SET) == 17000);
+        assert(fs->read(f, big, 100) == 100 && big[0] == pattern_at(17000));
+        /* The big file is closed, then a size query. */
+        a = fs->open("ROMS/a.z64", O_RDONLY);
+        assert(a);
+        /* The file goes away before it is read: the open fails, and counts. */
+        gone = find("ROMS/a.z64");
+        gone->path[0] = '#';
+        assert(fs->read(a, buf, 4) == -1);
+        /* A folder of two: the load, its size, one batch. Listed again
+           at once, it costs the same again: a load drops the batch the
+           cartridge held, even one that covers the first record. */
+        for (int pass = 0; pass < 2; pass++) {
+            assert(fs->findfirst("/ROMS", &entry) == 0);
+            assert(fs->findnext2("/ROMS", &entry) == 0);
+            assert(fs->findnext2("/ROMS", &entry) == -1);
+        }
+        /* The folder of 19, twice: three batches each time. */
+        for (int pass = 0; pass < 2; pass++) {
+            listed_records = 0;
+            assert(fs->findfirst("/BIG", &entry) == 0);
+            do listed_records++; while (fs->findnext2("/BIG", &entry) == 0);
+            assert(listed_records == 19);
+        }
+        /* Back to the pack: an open, a seek to where it was, a slow read. */
+        assert(fs->read(pack, buf, 4) == 4 && !memcmp(buf, "0123", 4));
+        fs->close(a);
+        fs->close(f);
+        /* The pack is the cartridge's file: a close. */
+        fs->close(pack);
+
+        sm_pro_fs_counters(&n);
+        assert(n.opens == 8 && n.closes == 6 && n.seeks == 2 && n.size_queries == 3);
+        assert(n.fast_reads == 1 && n.slow_reads == 3);
+        assert(n.folder_loads == 4 && n.folder_records == 42 && n.folder_batches == 8);
+        /* The total, against what the fake cartridge counted on its own. */
+        assert(commands == 39);
+        assert(sm_pro_fs_commands(&n) == (uint32_t)commands);
+        assert(n.seeks == (uint32_t)seeks && n.slow_reads == (uint32_t)reads &&
+               n.fast_reads == (uint32_t)fast_reads);
+
+        sm_pro_fs_counters_reset();
+        sm_pro_fs_counters(&n);
+        assert(!n.opens && !n.closes && !n.seeks && !n.size_queries && !n.fast_reads &&
+               !n.slow_reads && !n.folder_loads && !n.folder_records && !n.folder_batches);
+        assert(sm_pro_fs_commands(&n) == 0);
+    }
+    offer_fast = false;
+#endif
 
     printf("pro fs checks passed\n");
     return 0;

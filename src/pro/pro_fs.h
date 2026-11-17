@@ -21,6 +21,7 @@
    the handle logic runs on the host against a fake with the same one-file
    rule, where a bug in it is a failed test rather than a wrong cover. */
 
+#include "perf.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -80,6 +81,28 @@ void sm_pro_fs_release_mcu(void);
    is already gone, and a leading slash is stripped. Returns false when the
    result would not fit. */
 bool sm_pro_fs_normalise(const char *name, char *out, size_t out_size);
+
+#ifdef SM_SHOW_FRAME_TIME
+/* make perf: what the driver asked of the cartridge since the last reset,
+   counted the way the cartridge is sent commands (src/pro/flashcart_pro.c).
+   Opens count the failed ones too. Asking a file's size is an open, a size
+   query and a close when the file is there, and the failed open alone when
+   it is not. A folder load is two commands, the load and its size. Records
+   come from the cartridge in batches of eight, and a record outside the
+   batch last fetched costs one more batch. Writes are not counted: none
+   happens while a game's details open. */
+typedef struct {
+    uint32_t opens, closes, seeks, size_queries, fast_reads, slow_reads;
+    uint32_t folder_loads, folder_records, folder_batches;
+} sm_pro_fs_counters_t;
+/* What all that cost in commands. */
+uint32_t sm_pro_fs_commands(const sm_pro_fs_counters_t *n);
+void sm_pro_fs_counters(sm_pro_fs_counters_t *out);
+void sm_pro_fs_counters_reset(void);
+/* For sm_pro_fs_init: a table that counts each call, then passes it on to
+   the cartridge's own. */
+const sm_pro_mcu_t *sm_pro_fs_counting(const sm_pro_mcu_t *cartridge);
+#endif
 
 #include <dir.h>
 #include <system.h>

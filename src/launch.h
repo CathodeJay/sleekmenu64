@@ -3,6 +3,7 @@
 #define SLEEKMENU_LAUNCH_H
 
 #include "history.h"
+#include "perf.h"
 
 #include "save_type.h"
 
@@ -178,5 +179,20 @@ bool launch_cheat_toggle(uint32_t index);
 /* Switch every entry off. Like a toggle, it is written by the next save. */
 void launch_cheats_all_off(void);
 bool launch_cheats_save(void);
+
+#ifdef SM_SHOW_FRAME_TIME
+/* make perf: how long the last launch_prepare spent on each card read, in
+   milliseconds. A step that did not run reads 0. The save database's time
+   includes resolving the save type from it, which costs nothing beside
+   the read. */
+enum { SM_PREP_ROM, SM_PREP_DB, SM_PREP_DISK, SM_PREP_CHEATS, SM_PREP_STEPS };
+typedef struct {
+    uint32_t ms[SM_PREP_STEPS];
+} sm_launch_times_t;
+const sm_launch_times_t *launch_times(void);
+/* For launch_prepare: clear the times, then start a step (-1) or end one. */
+void launch_times_clear(void);
+void launch_times_lap(int step);
+#endif
 
 #endif
