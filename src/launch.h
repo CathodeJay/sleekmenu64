@@ -85,6 +85,11 @@ typedef enum {
 #define SM_DISK_HEAD_SIZE 4u
 
 bool launch_suffix_is_disk(const char *path);
+/* Whether `path` is a disk image in the same folder as the ROM at `rom_path`,
+   both as the catalog has them, and in `same_name` whether the two file
+   names are the same up to the extension. Case is ignored, as the card
+   ignores it. */
+bool launch_disk_beside(const char *rom_path, const char *path, bool *same_name);
 sm_disk_region_t launch_disk_region(const uint8_t *head, size_t length);
 const char *launch_disk_region_name(sm_disk_region_t region);
 /* "NDDJ2.n64" and friends: the file name under SM_DISK_IPL_DIR. */
@@ -151,6 +156,11 @@ sm_save_type_t launch_save_type(void);
    beside a selected ROM ("" when none). */
 bool launch_selected_is_disk(void);
 const char *launch_sibling_disk(void);
+/* The disk the browser found beside the prepared ROM in the catalog, or ""
+   for none, called after a successful launch_prepare. It is what the card
+   shows. Start lists the folder again and attaches what it finds there.
+   Ignored on a cartridge without a drive. */
+void launch_note_sibling_disk(const char *catalog_path);
 
 /* GameShark cheats for the selected ROM, from the firmware's database
    (ED64/CHEATS) or the browser's own folder. `available` says a file named

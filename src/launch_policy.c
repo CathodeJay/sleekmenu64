@@ -86,6 +86,33 @@ bool launch_suffix_is_disk(const char *path) {
     return n >= 4u && !strcasecmp(path + n - 4, ".ndd");
 }
 
+/* Where a catalog path's file name starts, and how long its folder is. */
+static const char *file_name(const char *path, size_t *folder_length) {
+    const char *slash = strrchr(path, '/');
+    *folder_length = slash ? (size_t)(slash - path) : 0u;
+    return slash ? slash + 1 : path;
+}
+
+/* A name's length without its extension. */
+static size_t stem_length(const char *name) {
+    const char *dot = strrchr(name, '.');
+    return dot ? (size_t)(dot - name) : strlen(name);
+}
+
+bool launch_disk_beside(const char *rom_path, const char *path, bool *same_name) {
+    size_t rom_folder, folder, stem;
+    const char *rom_name, *name;
+    if (same_name) *same_name = false;
+    if (!rom_path || !path || !launch_suffix_is_disk(path)) return false;
+    rom_name = file_name(rom_path, &rom_folder);
+    name = file_name(path, &folder);
+    if (folder != rom_folder || strncasecmp(path, rom_path, folder)) return false;
+    stem = stem_length(name);
+    if (same_name)
+        *same_name = stem == stem_length(rom_name) && !strncasecmp(name, rom_name, stem);
+    return true;
+}
+
 sm_disk_region_t launch_disk_region(const uint8_t *head, size_t length) {
     if (!head || length < SM_DISK_HEAD_SIZE) return SM_DISK_REGION_UNKNOWN;
     if (head[0] == 0xE8 && head[1] == 0x48 && head[2] == 0xD3 && head[3] == 0x16) return SM_DISK_REGION_JAPAN;

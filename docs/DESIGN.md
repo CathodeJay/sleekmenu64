@@ -325,7 +325,7 @@ file name is spelled so when it is made. A
 finished folder is kept for the session, four at a time, so stepping back
 into one lists its extras at once. Only one thing reads the card at a time:
 covers, headers and the music's read-ahead wait for the read to finish, and the launch card, which
-reads the header and on the Pro lists the folder for a disk, takes the card
+reads the header, takes the card
 over -- the read starts again from the top on the way back. The shortlists
 are card-wide and list no extras, because the card has only been read where
 the cursor has been; a card without a catalog was scanned whole at boot and
@@ -493,7 +493,11 @@ OS 3.11 with `tools/trace_x7_rtc.py`, which is where the evidence lives.
 **64DD.** On the Pro, `.ndd` images are listed like games. Selected on their
 own they boot from the drive's IPL, which the Pro menu keeps in
 `ED64/64ddipl/`, chosen by the disk's region; a `.ndd` beside a cartridge
-ROM is attached to it as an expansion disk. Not yet run on hardware.
+ROM is attached to it as an expansion disk. The details find that disk in
+the catalog, without reading the card: the one named like the ROM,
+otherwise the first in name order. Start lists the folder and attaches the
+first `.ndd` there, preferring one named like the ROM, so a disk copied on
+since the last update is attached too. Not yet run on hardware.
 
 ## Saves
 

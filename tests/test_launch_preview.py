@@ -444,6 +444,8 @@ class DetailsTimersTests(unittest.TestCase):
     def test_open_card_times_each_step(self):
         self.assert_in_order(self.body("src/ui.c", "static void open_card("), (
             "SM_PERF(ui_card_times_begin();)", "launch_prepare(",
+            "SM_PERF(launch_times_lap(-1);)", "launch_note_sibling_disk(",
+            "SM_PERF(launch_times_lap(SM_PREP_DISK);)",
             "SM_PERF(ui_card_times_lap(SM_CARD_PREP);)", "render_description(",
             "SM_PERF(ui_card_times_lap(SM_CARD_TEXT);)", "load_selected_cover(",
             "SM_PERF(ui_card_times_lap(SM_CARD_COVER);)", "load_selected_details(",
@@ -462,10 +464,11 @@ class DetailsTimersTests(unittest.TestCase):
             "SM_PERF(launch_times_lap(SM_PREP_ROM);)",
             "SM_PERF(launch_times_lap(-1);) sm_save_resolve(", "read_save_db()",
             "SM_PERF(launch_times_lap(SM_PREP_DB);)",
-            "SM_PERF(launch_times_lap(-1);) find_sibling_disk(",
-            "SM_PERF(launch_times_lap(SM_PREP_DISK);)",
             "SM_PERF(launch_times_lap(-1);) cheats_available = sm_cheats_load(",
             "SM_PERF(launch_times_lap(SM_PREP_CHEATS);)"))
+        # The disk is no longer looked for here: "disk" times the look in
+        # the catalog and the note, in open_card (above).
+        self.assertNotIn("SM_PREP_DISK", self.body("src/launch.c", "sm_launch_result_t launch_prepare("))
 
     def test_diagnostics_rows(self):
         card = self.body("src/ui.c", "static void draw_launch_card(")
@@ -487,6 +490,40 @@ class DetailsTimersTests(unittest.TestCase):
                     "rom 9999  db 9999  disk 9999  cheats 9999",
                     "99999 commands  9999 reads"):
             self.assertLessEqual(len(row), width, row)
+
+
+class DetailsCardReadsTests(unittest.TestCase):
+    """What opening a game's details asks of the card. src/launch.c only
+    exists on the console, so its side is read here; the browser's side is
+    driven in ui_host_test.c."""
+
+    def read(self, name):
+        return strip_comments((ROOT / name).read_text(encoding="utf-8"))
+
+    def body(self, name, signature):
+        source = self.read(name)
+        start = source.index(signature)
+        return source[start:source.index("\n}\n", start)]
+
+    def test_the_disk_is_looked_for_in_the_folder_at_start_only(self):
+        """The details find the disk in the catalog. Start lists the folder,
+        once, before the load, and attaches what it finds there."""
+        prepare = self.body("src/launch.c", "sm_launch_result_t launch_prepare(")
+        self.assertNotIn("find_sibling_disk(", prepare)
+        launch = self.body("src/launch.c", "sm_launch_result_t launch_rom(")
+        self.assertEqual(launch.count("find_sibling_disk("), 1)
+        self.assertIn("if (cart->attach_disk) find_sibling_disk(opened_path);", launch)
+        self.assertLess(launch.index("find_sibling_disk("), launch.index("cart->load_rom("))
+        self.assertLess(launch.index("cart->load_rom("),
+                        launch.index("cart->attach_disk(sibling_disk,"))
+        source = self.read("src/launch.c")
+        self.assertEqual(source.count("find_sibling_disk("), 2, "its definition and Start")
+        note = self.body("src/launch.c", "void launch_note_sibling_disk(")
+        self.assertIn("!sm_flashcart()->attach_disk) return;", note)
+        self.assertIn("describe_ready();", note)
+        card = self.body("src/ui.c", "static void open_card(")
+        self.assertIn("if (launch_prepare(game->path) == SM_LAUNCH_OK) {", card)
+        self.assertIn("launch_note_sibling_disk(catalog_sibling_disk(catalog, game->path));", card)
 
 
 class RetiredModuleTests(unittest.TestCase):

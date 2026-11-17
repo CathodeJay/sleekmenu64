@@ -79,7 +79,15 @@ const char *launch_selected_path(void) { return fake_selected; }
 /* The UI lends the launcher its history list at startup; nothing boots
    here, so the loan is simply taken and dropped. */
 void launch_set_history(sm_history_t *history) { (void)history; }
-void launch_cancel(void) { fake_selected[0] = '\0'; }
+/* The disk the browser noted beside the prepared game, as launch.c keeps
+   it, and how many times it noted one ("" included). */
+static char fake_sibling[256];
+static int fake_sibling_notes;
+void launch_note_sibling_disk(const char *path) {
+    snprintf(fake_sibling, sizeof(fake_sibling), "%s", path);
+    fake_sibling_notes++;
+}
+void launch_cancel(void) { fake_selected[0] = '\0'; fake_sibling[0] = '\0'; }
 sm_launch_result_t launch_probe(void) { return SM_LAUNCH_OK; }
 /* Launches are counted rather than made, and the launcher's verdict on the
    selected file is whatever a test says it is. */
@@ -100,7 +108,7 @@ sm_cic_t launch_detected_cic(void) { return (sm_cic_t)0; }
 sm_launch_result_t launch_last_result(void) { return fake_last_result; }
 const char *launch_save_summary(void) { return ""; }
 bool launch_selected_is_disk(void) { return false; }
-const char *launch_sibling_disk(void) { return ""; }
+const char *launch_sibling_disk(void) { return fake_sibling; }
 /* The cheat set the launcher would have read for the selected game. Empty
    and "no file" until a test fills it in. */
 static sm_cheat_set_t fake_cheats;
@@ -136,6 +144,23 @@ void sm_rom_header_normalise(uint8_t *header, size_t length, sm_rom_format_t for
 bool launch_suffix_is_disk(const char *path) {
     size_t n = path ? strlen(path) : 0;
     return n >= 4 && !strcasecmp(path + n - 4, ".ndd");
+}
+/* launch_policy.c's rule, as tests/launch_policy_test.c holds it: a disk
+   in the same folder, case ignored, and whether the names match up to the
+   extension. */
+bool launch_disk_beside(const char *rom_path, const char *path, bool *same_name) {
+    const char *rom_slash = strrchr(rom_path, '/'), *slash = strrchr(path, '/');
+    size_t rom_folder = rom_slash ? (size_t)(rom_slash - rom_path) : 0u;
+    size_t folder = slash ? (size_t)(slash - path) : 0u;
+    const char *rom_name = rom_slash ? rom_slash + 1 : rom_path, *name = slash ? slash + 1 : path;
+    const char *rom_dot = strrchr(rom_name, '.'), *dot = strrchr(name, '.');
+    size_t rom_stem = rom_dot ? (size_t)(rom_dot - rom_name) : strlen(rom_name);
+    size_t stem = dot ? (size_t)(dot - name) : strlen(name);
+    *same_name = false;
+    if (!launch_suffix_is_disk(path) || folder != rom_folder || strncasecmp(path, rom_path, folder))
+        return false;
+    *same_name = stem == rom_stem && !strncasecmp(name, rom_name, stem);
+    return true;
 }
 surface_t *app_display_begin(void) { return &screen; }
 void app_display_end(surface_t *surface) { (void)surface; }
@@ -2588,6 +2613,50 @@ int main(void) {
         frame(PRESS(back)); frame(PRESS(back));
         assert(open_files() <= files + 1);
         ROW_SHOTS = NULL;
+    }
+
+    /* ---- the disk beside a game is found in the catalog ------------------ */
+    {
+        /* Game.z64 has a disk named like it, though another sorts first.
+           Other.z64 has none named like it: the first in name order, the
+           set-aside file that sorts before it passed over. Solo.z64 has no
+           disk in its folder. */
+        static const row_t rows[] = {
+            {"Aardvark.ndd", "Aardvark", "Action", SM_FLAG_SET_ASIDE, "", 0, NULL},
+            {"Alone/Solo.z64", "Solo", "Action", 0, "", 0, NULL},
+            {"Expansion.ndd", "Expansion", "Action", 0, "", 0, NULL},
+            {"Game.ndd", "Game Disk", "Action", 0, "", 0, NULL},
+            {"Game.z64", "Game", "Action", 0, "", 0, NULL},
+            {"Other.z64", "Other", "Action", 0, "", 0, NULL},
+        };
+        static const struct { const char *rom, *disk; } cases[] = {
+            {"Game.z64", "Game.ndd"}, {"Other.z64", "Expansion.ndd"},
+        };
+        sm_game_t game;
+        int notes;
+        start(rows, 6u);
+        settle();
+        for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+            while (!catalog_get(&CATALOG, ui.items[ui.selected] & ~SM_UI_FOLDER_BIT, &game) ||
+                   (ui.items[ui.selected] & SM_UI_FOLDER_BIT) || strcmp(game.path, cases[c].rom))
+                frame(PRESS(down));
+            settle();
+            notes = fake_sibling_notes;
+            frame(PRESS(select));
+            assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, cases[c].rom));
+            assert(fake_sibling_notes == notes + 1 && !strcmp(fake_sibling, cases[c].disk));
+            frame(PRESS(back));
+        }
+        frame(PRESS(up));
+        while (!(ui.items[ui.selected] & SM_UI_FOLDER_BIT)) frame(PRESS(up));
+        frame(PRESS(select));                 /* into Alone */
+        settle();
+        snprintf(fake_sibling, sizeof(fake_sibling), "%s", "stale");
+        notes = fake_sibling_notes;
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, "Alone/Solo.z64"));
+        assert(fake_sibling_notes == notes + 1 && fake_sibling[0] == '\0');
+        frame(PRESS(back)); frame(PRESS(back));
     }
 
     /* ---- the start screen names the release ------------------------------ */

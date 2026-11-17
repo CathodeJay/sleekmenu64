@@ -96,6 +96,14 @@ static void describe_save(void) {
         (selected_save.config & SM_SAVE_CFG_REGION_FREE) ? " +RF" : "");
 }
 
+/* The status line of a ROM ready to play. */
+static void describe_ready(void) {
+    snprintf(status, sizeof(status), "%s CIC %u %lu MiB; save %s%s; Start to launch",
+        sm_rom_format_name(selected_format), (unsigned)selected_cic,
+        (unsigned long)((selected_size + 0xFFFFFu) >> 20), save_summary,
+        sibling_disk[0] ? " +64DD" : "");
+}
+
 static void set_status(sm_launch_result_t result) {
     last_result = result;
     snprintf(status, sizeof(status), "%s", launch_result_message(result));
@@ -124,8 +132,9 @@ static FILE *open_launch_rom_readonly(const char *catalog_path) {
 }
 
 /* The first .ndd in the folder of the ROM that was opened, preferring one
-   named like the ROM. One listing per launch, and only on a cart with a
-   drive; the stock firmware attaches by the same rule. */
+   named like the ROM. One listing at Start, and only on a cart with a
+   drive, so a disk copied on since the last update is found too; the stock
+   firmware attaches by the same rule. */
 static void find_sibling_disk(const char *rom_sd_path) {
     char folder[SM_LAUNCH_PATH_SIZE];
     char best[SM_LAUNCH_PATH_SIZE];
@@ -271,13 +280,9 @@ sm_launch_result_t launch_prepare(const char *relative_path) {
     snprintf(selected, sizeof(selected), "%s", relative_path);
     SM_PERF(launch_times_lap(-1);) sm_save_resolve(header, sizeof(header), read_save_db(), &selected_save); SM_PERF(launch_times_lap(SM_PREP_DB);)
     describe_save();
-    SM_PERF(launch_times_lap(-1);) find_sibling_disk(opened_path); SM_PERF(launch_times_lap(SM_PREP_DISK);)
     SM_PERF(launch_times_lap(-1);) cheats_available = sm_cheats_load(selected, header, sizeof(header), &cheat_pack, &cheats, &cheats_source); SM_PERF(launch_times_lap(SM_PREP_CHEATS);)
     cheats_hook = sm_cheats_hook_check(header, sizeof(header));
-    snprintf(status, sizeof(status), "%s CIC %u %lu MiB; save %s%s; Start to launch",
-        sm_rom_format_name(selected_format), (unsigned)selected_cic,
-        (unsigned long)((selected_size + 0xFFFFFu) >> 20), save_summary,
-        sibling_disk[0] ? " +64DD" : "");
+    describe_ready();
     last_result = SM_LAUNCH_OK;
     return SM_LAUNCH_OK;
 }
@@ -391,6 +396,9 @@ sm_launch_result_t launch_rom(sm_launch_progress_cb progress, void *context) {
             return last_result;
         }
     } else {
+        /* The expansion disk, if one sits beside the ROM: the folder as it
+           is now, whatever the card showed. */
+        if (cart->attach_disk) find_sibling_disk(opened_path);
         loaded = cart->load_rom(opened_path, (uint32_t)selected_size,
             selected_format == SM_ROM_FORMAT_V64, boot_mode == SM_BOOT_VERIFY,
             load_progress, &bridge, status, sizeof(status));
@@ -492,6 +500,12 @@ const char *launch_save_summary(void) { return save_summary; }
 sm_save_type_t launch_save_type(void) { return selected_save.type; }
 bool launch_selected_is_disk(void) { return selected_disk; }
 const char *launch_sibling_disk(void) { return sibling_disk; }
+
+void launch_note_sibling_disk(const char *catalog_path) {
+    if (!selected[0] || selected_disk || last_result != SM_LAUNCH_OK || !sm_flashcart()->attach_disk) return;
+    snprintf(sibling_disk, sizeof(sibling_disk), "%s", catalog_path ? catalog_path : "");
+    describe_ready();
+}
 
 void launch_read_cheat_pack(void) { sm_cheats_read_pack(&cheat_pack); }
 const sm_cheat_pack_t *launch_cheat_pack(void) { return &cheat_pack; }

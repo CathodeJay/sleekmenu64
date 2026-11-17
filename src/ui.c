@@ -1560,15 +1560,36 @@ static bool card_warning(void) {
     return sm_cheats_enabled_count(launch_cheats()) && cheat_warning();
 }
 
+/* The 64DD disk beside a ROM, as the catalog knows the card: the one named
+   like the ROM, otherwise the first in name order, "" for none. Files the
+   browser found since the last update count, set-aside ones do not. Nothing
+   is read off the card. */
+static const char *catalog_sibling_disk(const sm_catalog_t *catalog, const char *rom_path) {
+    const char *best = "";
+    uint32_t total = catalog_total(catalog);
+    if (launch_suffix_is_disk(rom_path)) return best;
+    for (uint32_t i = 0; i < total; i++) {
+        sm_game_t game;
+        bool same_name;
+        if (!catalog_get(catalog, i, &game) || (game.flags & SM_FLAG_SET_ASIDE)) continue;
+        if (!launch_disk_beside(rom_path, game.path, &same_name)) continue;
+        if (same_name) return game.path;
+        if (!best[0] || strcasecmp(game.path, best) < 0) best = game.path;
+    }
+    return best;
+}
+
 /* Prepare the launch for a game and show its card. Reached by A, and by
    Start when it goes on to play: the card is the progress screen, so it
    has to be up either way, with its cover and its facts. */
 static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_t *layout,
     uint32_t item, const sm_game_t *game) {
-    /* The launcher reads the header and, on a cartridge with a drive, lists
-       the folder for a disk: the card is its now. */
+    /* The launcher reads the header: the card is its now. A disk to go with
+       the game is looked for in the catalog, not in the folder. */
     sm_folder_scan_yield(&ui->scan); SM_PERF(ui_card_times_begin();)
-    launch_prepare(game->path); SM_PERF(ui_card_times_lap(SM_CARD_PREP);)
+    if (launch_prepare(game->path) == SM_LAUNCH_OK) { SM_PERF(launch_times_lap(-1);)
+        launch_note_sibling_disk(catalog_sibling_disk(catalog, game->path)); SM_PERF(launch_times_lap(SM_PREP_DISK);)
+    } SM_PERF(ui_card_times_lap(SM_CARD_PREP);)
     ui->status = launch_status_message();
     ui->diagnostics = false;
     render_description(ui, layout, game->description); SM_PERF(ui_card_times_lap(SM_CARD_TEXT);)

@@ -136,6 +136,28 @@ int main(void) {
         assert(strstr(launch_result_message(SM_LAUNCH_NO_IPL), "64ddipl"));
         assert(!strcmp(SM_DISK_IPL_DIR, "sd:/ED64/64ddipl"));
     }
+
+    /* A disk beside a ROM, judged from the two catalog paths alone: same
+       folder, and whether the names are the same up to the extension. */
+    {
+        bool same = true;
+        assert(launch_disk_beside("Disk/Game.z64", "Disk/Game.ndd", &same) && same);
+        assert(launch_disk_beside("Disk/Game.z64", "Disk/Expansion.ndd", &same) && !same);
+        assert(!launch_disk_beside("Disk/Game.z64", "Other/Game.ndd", &same) && !same);
+        assert(!launch_disk_beside("Disk/Game.z64", "Disk/Sub/Game.ndd", &same));
+        assert(!launch_disk_beside("Disk/Game.z64", "Game.ndd", &same));
+        assert(!launch_disk_beside("Disk/Game.z64", "Disk/Game.v64", &same) && !same);
+        assert(!launch_disk_beside("Disk/Game.z64", "Disk/Game.z64", &same));
+        /* Case is the card's to ignore. */
+        assert(launch_disk_beside("disk/GAME.z64", "DISK/game.NDD", &same) && same);
+        assert(launch_disk_beside("Disk/Game.Z64", "dIsK/Other.Ndd", &same) && !same);
+        /* At the card's root, and a name that only starts like the ROM's. */
+        assert(launch_disk_beside("Game.z64", "Game.ndd", &same) && same);
+        assert(launch_disk_beside("Disk/Game.z64", "Disk/Game 2.ndd", &same) && !same);
+        assert(launch_disk_beside("Disk/Game 2.z64", "Disk/Game.ndd", &same) && !same);
+        assert(!launch_disk_beside(NULL, "Disk/Game.ndd", &same));
+        assert(launch_disk_beside("Disk/Game.z64", "Disk/Game.ndd", NULL));
+    }
     puts("launch policy tests passed");
     return 0;
 }
