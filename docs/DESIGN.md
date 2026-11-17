@@ -452,7 +452,8 @@ libdragon refuses the combination.
 normalises byte order, checks magic, size and the boot code's CRC, resolves
 the save type (header override, then the card's `save_db.txt`, read once a
 session, then the built-in table generated from the ares emulator), and
-looks for cheats. Start
+looks for cheats. The game's details take the save type, the accessories
+and the size from that same read. Start
 then hands everything to the cartridge backend: the X7 streams the ROM into
 its SDRAM through libcart; the Pro asks its MCU to copy the file into
 cartridge memory. Either can verify the copy afterwards (C-up on the card

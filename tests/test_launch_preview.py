@@ -448,7 +448,8 @@ class DetailsTimersTests(unittest.TestCase):
             "SM_PERF(launch_times_lap(SM_PREP_DISK);)",
             "SM_PERF(ui_card_times_lap(SM_CARD_PREP);)", "render_description(",
             "SM_PERF(ui_card_times_lap(SM_CARD_TEXT);)", "load_selected_cover(",
-            "SM_PERF(ui_card_times_lap(SM_CARD_COVER);)", "load_selected_details(",
+            "SM_PERF(ui_card_times_lap(SM_CARD_COVER);)", "details_from_launcher(ui)",
+            "load_selected_details(",
             "SM_PERF(ui_card_times_lap(SM_CARD_FACTS);)", "load_shot_thumbs(",
             "SM_PERF(ui_card_times_lap(SM_CARD_SHOTS);)", "SM_PERF(ui_card_times_end();)"))
         timers = self.read("src/ui.c")
@@ -1102,8 +1103,12 @@ class SafetyGateTests(unittest.TestCase):
         ui = strip_comments((ROOT / "src/ui.c").read_text(encoding="utf-8"))
         start = ui.index("static void load_selected_details")
         body = ui[start:ui.index("\n}", start)]
-        self.assertIn("sm_rom_db_lookup(", body)
+        self.assertIn("details_from_header(ui, header, ui->selected_size, false);", body)
         self.assertIn("sm_rom_header_normalise(", body)
+        # the header becomes facts in one place, which the details also use
+        # with the header the launcher read (open_card)
+        helper = ui[ui.index("static void details_from_header("):]
+        self.assertIn("sm_rom_db_lookup(header, SM_SAVE_MIN_HEADER)", helper[:helper.index("\n}")])
         self.assertIn('fopen(paths.primary, "rb")', body)
         # and the panel shows what that produced, not a catalog field
         self.assertIn("ui->selected_details_loaded", ui)

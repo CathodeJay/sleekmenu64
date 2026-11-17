@@ -610,12 +610,39 @@ void sm_format_rom_size(uint32_t bytes, char *out, size_t size) {
     else snprintf(out, size, "%u MB", (unsigned)whole);
 }
 
+/* The facts the card shows, from a header in z64 order and the file's
+   size: the save type and the accessories through the same database the
+   launcher uses. A 64DD image has no cartridge header: the disk is its own
+   save, and there is nothing to look up. */
+static void details_from_header(sm_ui_t *ui, const uint8_t *header, uint32_t size, bool disk) {
+    const sm_rom_db_entry_t *entry = disk ? NULL : sm_rom_db_lookup(header, SM_SAVE_MIN_HEADER);
+    ui->selected_save = SM_SAVE_OFF;
+    ui->selected_features = 0u;
+    ui->selected_size = size;
+    ui->selected_disk = disk;
+    if (entry) {
+        ui->selected_save = (sm_save_type_t)entry->save;
+        ui->selected_features = entry->feat;
+    }
+    ui->selected_details_loaded = true;
+}
+
+/* The same from the header the launcher has just read, so the ROM is not
+   opened a second time. False when the launcher has nothing prepared. */
+static bool details_from_launcher(sm_ui_t *ui) {
+    const uint8_t *header;
+    uint64_t size;
+    bool disk;
+    if (!launch_prepared_game(&header, &size, &disk)) return false;
+    details_from_header(ui, header, (uint32_t)size, disk);
+    return true;
+}
+
 static void load_selected_details(sm_ui_t *ui, const sm_catalog_t *catalog) {
     uint8_t header[SM_SAVE_MIN_HEADER] __attribute__((aligned(8)));
     sm_launch_paths_t paths;
     sm_game_t game;
     FILE *file;
-    const sm_rom_db_entry_t *entry;
 
     ui->selected_details_loaded = false;
     ui->selected_save = SM_SAVE_OFF;
@@ -635,20 +662,12 @@ static void load_selected_details(sm_ui_t *ui, const sm_catalog_t *catalog) {
     }
     rewind(file);
     if (launch_suffix_is_disk(game.path)) {
-        /* A 64DD image has no cartridge header: the disk is its own save,
-           and there is nothing to look up. */
-        ui->selected_disk = true;
-        ui->selected_details_loaded = true;
+        details_from_header(ui, NULL, ui->selected_size, true);
     } else if (fread(header, 1, sizeof(header), file) == sizeof(header)) {
         sm_rom_format_t format = sm_rom_format_detect(header, sizeof(header));
         if (format != SM_ROM_FORMAT_UNKNOWN) {
             sm_rom_header_normalise(header, sizeof(header), format);
-            entry = sm_rom_db_lookup(header, sizeof(header));
-            if (entry) {
-                ui->selected_save = (sm_save_type_t)entry->save;
-                ui->selected_features = entry->feat;
-            }
-            ui->selected_details_loaded = true;
+            details_from_header(ui, header, ui->selected_size, false);
         }
     }
     fclose(file);
@@ -1598,10 +1617,11 @@ static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_
        from the grid showed a game with no box and "..." where its save type
        should be. Both are wanted now, whichever view we arrived from, and
        the settle delay does not apply: the card is already on screen and
-       waiting for it. */
+       waiting for it. The facts come from the header the launcher read,
+       and from the ROM itself only when the launcher could not prepare it. */
     if (!ui->cover_loaded || ui->cover_index != item)
         load_selected_cover(ui, catalog);
-    SM_PERF(ui_card_times_lap(SM_CARD_COVER);) if (!ui->selected_details_loaded)
+    SM_PERF(ui_card_times_lap(SM_CARD_COVER);) if (!details_from_launcher(ui) && !ui->selected_details_loaded)
         load_selected_details(ui, catalog);
     SM_PERF(ui_card_times_lap(SM_CARD_FACTS);) load_shot_thumbs(ui, game); SM_PERF(ui_card_times_lap(SM_CARD_SHOTS);)
     ui->screen = SM_SCREEN_LAUNCH_DETAILS; SM_PERF(ui_card_times_end();)

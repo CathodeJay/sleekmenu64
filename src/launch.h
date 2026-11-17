@@ -161,6 +161,10 @@ const char *launch_sibling_disk(void);
    shows. Start lists the folder again and attaches what it finds there.
    Ignored on a cartridge without a drive. */
 void launch_note_sibling_disk(const char *catalog_path);
+/* The prepared game as the launcher read it: its header in z64 order
+   (SM_N64_HEADER_SIZE bytes, NULL for a disk image, which has none), its
+   size, and whether it is a disk. False when nothing is prepared. */
+bool launch_prepared_game(const uint8_t **header, uint64_t *size, bool *disk);
 
 /* GameShark cheats for the selected ROM, from the firmware's database
    (ED64/CHEATS) or the browser's own folder. `available` says a file named

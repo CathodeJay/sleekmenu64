@@ -12,6 +12,7 @@
 #include "favorites.h"
 #include "launch.h"
 #include "music.h"
+#include "rom_db.h"
 #include "rom_load.h"
 #include "theme.h"
 #include "version.h"
@@ -88,6 +89,19 @@ void launch_note_sibling_disk(const char *path) {
     fake_sibling_notes++;
 }
 void launch_cancel(void) { fake_selected[0] = '\0'; fake_sibling[0] = '\0'; }
+/* The header the launcher read for the prepared game, when a test gives it
+   one. Without it the launcher has nothing to hand out, as after a failed
+   prepare, and the browser reads the ROM itself. */
+static uint8_t fake_header[SM_N64_HEADER_SIZE];
+static uint64_t fake_size;
+static bool fake_has_header, fake_disk;
+bool launch_prepared_game(const uint8_t **header, uint64_t *size, bool *disk) {
+    if (!fake_selected[0] || !fake_has_header) return false;
+    *header = fake_disk ? NULL : fake_header;
+    *size = fake_size;
+    *disk = fake_disk;
+    return true;
+}
 sm_launch_result_t launch_probe(void) { return SM_LAUNCH_OK; }
 /* Launches are counted rather than made, and the launcher's verdict on the
    selected file is whatever a test says it is. */
@@ -293,6 +307,18 @@ static sm_actions_t press_of(size_t offset) {
     return a;
 }
 #define PRESS(field) press_of(offsetof(sm_actions_t, field))
+
+/* Up or down the list to the game at this catalog path. */
+static void cursor_to(const char *path) {
+    sm_game_t game;
+    uint32_t at = 0;
+    while (at < ui.item_count && ((ui.items[at] & SM_UI_FOLDER_BIT) ||
+           !catalog_get(&CATALOG, ui.items[at], &game) || strcmp(game.path, path))) at++;
+    assert(at < ui.item_count);
+    while (ui.selected < at) frame(PRESS(down));
+    while (ui.selected > at) frame(PRESS(up));
+    settle();
+}
 
 int main(void) {
     layout_ntsc();
@@ -2632,15 +2658,11 @@ int main(void) {
         static const struct { const char *rom, *disk; } cases[] = {
             {"Game.z64", "Game.ndd"}, {"Other.z64", "Expansion.ndd"},
         };
-        sm_game_t game;
         int notes;
         start(rows, 6u);
         settle();
         for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
-            while (!catalog_get(&CATALOG, ui.items[ui.selected] & ~SM_UI_FOLDER_BIT, &game) ||
-                   (ui.items[ui.selected] & SM_UI_FOLDER_BIT) || strcmp(game.path, cases[c].rom))
-                frame(PRESS(down));
-            settle();
+            cursor_to(cases[c].rom);
             notes = fake_sibling_notes;
             frame(PRESS(select));
             assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, cases[c].rom));
@@ -2657,6 +2679,46 @@ int main(void) {
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, "Alone/Solo.z64"));
         assert(fake_sibling_notes == notes + 1 && fake_sibling[0] == '\0');
         frame(PRESS(back)); frame(PRESS(back));
+    }
+
+    /* ---- the card's facts come from the header the launcher read -------- */
+    {
+        /* No file behind either game: the browser cannot read a header of
+           its own. */
+        static const row_t rows[] = {
+            {"Missing/Zelda.z64", "Zelda", "Action", 0, "", 0, NULL},
+            {"Missing/Zelda.ndd", "Zelda Disk", "Action", 0, "", 0, NULL},
+        };
+        const sm_rom_db_entry_t *entry;
+        start(rows, 2u);
+        settle();
+        /* The one folder is opened at once; the list has tried the ROM. */
+        assert(!strcmp(ui.folder, "Missing") && !ui.selected_details_loaded);
+        memset(fake_header, 0, sizeof(fake_header));
+        fake_header[0] = 0x80; fake_header[1] = 0x37; fake_header[2] = 0x12; fake_header[3] = 0x40;
+        memcpy(fake_header + 0x3B, "CZLJ", 4);
+        entry = sm_rom_db_lookup(fake_header, SM_SAVE_MIN_HEADER);
+        assert(entry && entry->save != SM_SAVE_OFF && entry->feat);
+        fake_size = 32u << 20;
+        fake_has_header = true;
+        fake_disk = false;
+        cursor_to("Missing/Zelda.z64");
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, "Missing/Zelda.z64"));
+        assert(ui.selected_details_loaded && !ui.selected_disk);
+        assert(ui.selected_save == (sm_save_type_t)entry->save && ui.selected_features == entry->feat);
+        assert(ui.selected_size == (32u << 20));
+        frame(PRESS(back));
+        /* A disk: no header, the disk is the save. */
+        fake_disk = true;
+        fake_size = 64458560u;
+        cursor_to("Missing/Zelda.ndd");
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, "Missing/Zelda.ndd"));
+        assert(ui.selected_details_loaded && ui.selected_disk && ui.selected_save == SM_SAVE_OFF);
+        assert(ui.selected_size == 64458560u && !ui.selected_features);
+        frame(PRESS(back));
+        fake_has_header = fake_disk = false;
     }
 
     /* ---- the start screen names the release ------------------------------ */

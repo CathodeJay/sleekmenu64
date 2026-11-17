@@ -510,6 +510,14 @@ sm_save_type_t launch_save_type(void) { return selected_save.type; }
 bool launch_selected_is_disk(void) { return selected_disk; }
 const char *launch_sibling_disk(void) { return sibling_disk; }
 
+bool launch_prepared_game(const uint8_t **header, uint64_t *size, bool *disk) {
+    if (!selected[0]) return false;
+    if (header) *header = selected_disk ? NULL : selected_header;
+    if (size) *size = selected_size;
+    if (disk) *disk = selected_disk;
+    return true;
+}
+
 void launch_note_sibling_disk(const char *catalog_path) {
     if (!selected[0] || selected_disk || last_result != SM_LAUNCH_OK || !sm_flashcart()->attach_disk) return;
     snprintf(sibling_disk, sizeof(sibling_disk), "%s", catalog_path ? catalog_path : "");
