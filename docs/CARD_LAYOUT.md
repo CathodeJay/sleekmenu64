@@ -73,9 +73,11 @@ touches the network. The Game Catalog Manager creates the `sleekmenu/`
 folder and writes `catalog.ebc` and `covers.pak` into it, and fetches
 `release-metadata.zip` into it when the card has no collection; a
 `release-metadata.zip` at the card root, where versions before 2.2 put it,
-is moved in at the next run. Everything else it reads in place. One file of the tool's lives outside
-`sleekmenu/`, and only when asked for: the start-up copy, `ED64/autoexec.v64`
-or `ED64/menu.n64`, below.
+is moved in at the next run. Everything else it reads in place, except for
+two things you ask for. The start-up copy, `ED64/autoexec.v64` or
+`ED64/menu.n64`, below, is the one file of the tool's that lives outside
+`sleekmenu/`. The saves in `ED64/gamedata/` are written when you restore a
+backup of them, and only then.
 
 ## Which SleekMenu
 

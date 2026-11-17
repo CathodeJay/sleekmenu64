@@ -300,6 +300,43 @@ class EntryPointTests(unittest.TestCase):
         self.assertEqual(code, 0, self.output)
         self.assertFalse((self.card / card_layout.CARD_FOLDER).exists())
 
+    def test_the_saves_are_backed_up_and_put_back_and_nothing_else_is_done(self):
+        from tests.test_saves import PLAYED, X7_TREE, read_tree, write_tree
+        from tools import saves
+        write_collection(self.card / "release-metadata.zip", "NWRE", zipped=True)
+        backup = Path(self.temporary.name) / "SleekMenu saves 2026-11-17.zip"
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            self.assertEqual(sleekmenu_prep.main(["--card", str(self.card), "--backup-saves", str(backup)]), 1)
+        self.assertEqual(errors.getvalue(), "There are no saves on this card yet.\n")
+        self.assertFalse(backup.exists())
+
+        write_tree(self.card, X7_TREE)
+        self.assertEqual(self.run_prep("--backup-saves", str(backup)), 0)
+        self.assertEqual(self.output, "Backed up 3 saves to SleekMenu saves 2026-11-17.zip.\n")
+        self.assertEqual(saves.inspect(backup).count, 3)
+        self.assertFalse((self.card / card_layout.CARD_FOLDER).exists(), "only that, no catalog")
+
+        mario = "Super Mario 64 (USA).eep"
+        (saves.folder(self.card) / mario).unlink()
+        write_tree(self.card, {"Paper Mario (USA).fla": b"played since"}, when=PLAYED + 3600)
+        self.assertEqual(self.run_prep("--restore-saves", str(backup)), 0)
+        self.assertEqual(self.output, "Put 1 save back. 1 newer save on the card was kept.\n")
+        self.assertEqual(self.run_prep("--restore-saves", str(backup), "--replace-newer"), 0)
+        self.assertEqual(self.output, "Put 1 save back.\n")
+        self.assertEqual(read_tree(self.card), X7_TREE)
+        self.assertFalse((self.card / card_layout.CARD_FOLDER).exists(), "only that, no catalog")
+
+        errors = io.StringIO()
+        with contextlib.redirect_stderr(errors):
+            self.assertEqual(sleekmenu_prep.main(["--card", str(self.card), "--restore-saves",
+                                                  str(self.card / "release-metadata.zip")]), 1)
+        self.assertEqual(errors.getvalue(), "This file isn't a SleekMenu saves backup.\n")
+        # --replace-newer means nothing alone, and the two can't go together
+        for wrong in (["--replace-newer"], ["--backup-saves", str(backup), "--restore-saves", str(backup)]):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                sleekmenu_prep.main(["--card", str(self.card), *wrong])
+
     def test_a_fresh_card_gets_its_folders_and_a_message_not_a_catalog(self):
         """No ROMS/ at all: the run lays the card out, tells the person where
         the games go, and stops -- cleanly, exit 0, nothing half-built."""

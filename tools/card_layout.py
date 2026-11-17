@@ -60,6 +60,10 @@ THEME_FILE = "theme.txt"
 #: (tools/music.py). src/card_paths.h has the same names.
 MUSIC_FILE = "music.wav64"
 MUSIC_SETTING_FILE = "music.txt"
+#: Under FIRMWARE_FOLDER: the saves, written by the EverDrive and by the
+#: browser. The tool reads them for a backup and writes them only when the
+#: owner restores one (tools/saves.py).
+GAMEDATA_FOLDER = "gamedata"
 #: Under FIRMWARE_FOLDER on an EverDrive-64 X7: the stock OS itself, and
 #: the ROM it starts on its own at power-on when there is one
 #: (tools/direct_boot.py).

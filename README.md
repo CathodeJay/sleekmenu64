@@ -159,6 +159,8 @@ To go back, untick the box and update, or delete the file. More in
 - **Cheats** come from the EverDrive-64 Pro's cheat pack in `ED64/CHEATS/`,
   or from libretro when you tick **Download cheat codes** on the Game Catalog
   Manager's Card tab, and need an Expansion Pak.
+- **Saves** can be copied to your computer and put back, from the Game
+  Catalog Manager's Card tab.
 - **`.z64` and `.v64`** dumps load; `.n64` ones do not — convert them first.
 
 Everything else about the console — the screens, saves, the clock, 64DD,

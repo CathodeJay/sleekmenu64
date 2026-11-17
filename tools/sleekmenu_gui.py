@@ -45,7 +45,7 @@ if __package__ in (None, ""):
 
 from tools import (card_catalog, card_layout, cheat_codes, coverdb, custom_art, direct_boot, fetch, genre_map,
                    hires, kinds, library, make_sprite, metadata_repo, music, progress, provenance, releases,
-                   shots, sleekmenu_prep, themes, version)
+                   saves, shots, sleekmenu_prep, themes, version)
 from tools.metadata_repo import MetadataRepo
 
 TITLE = f"Game Catalog Manager — SleekMenu 64 {version.VERSION}"
@@ -64,6 +64,20 @@ SHOTS_HINT = "Title and in-game screenshots for retail games, from libretro. Abo
 SWATCH_ROLES = ("bg", "band", "select", "accent", "text")
 #: Remove under Music: the next run takes the song off the card.
 REMOVE_MUSIC = "remove"
+#: Under Saves on the Card tab.
+SAVES_HINT = ("Copies every save on the card to a file on your computer. On the Pro, start the console once "
+              "after playing first, so the last save is on the card.")
+BACK_UP_SAVES = "Back up saves…"
+RESTORE_SAVES = "Restore saves…"
+#: The answers to the questions before a restore.
+PUT_THEM_BACK = "Put them back"
+KEEP_NEWER = "Keep the newer ones"
+REPLACE_NEWER = "Replace them"
+CANCEL = "Cancel"
+SAVES_FAILED = ("The saves couldn't be backed up. Check that the card is still in, then try again. "
+                "See the Log tab for details.")
+RESTORE_FAILED = ("The saves couldn't all be put back. Check that the card is still in, then try again. "
+                  "See the Log tab for details.")
 #: The box is 96x72 on the console; twice that on a desktop screen is
 #: legible without pretending to be the source picture.
 BOX_ZOOM = 2
@@ -2129,6 +2143,40 @@ def palette(root, tk, ttk) -> dict[str, str]:
             "info": "#8fc7f0" if dark else "#1f5fa8"}
 
 
+def ask(parent, text: str, answers: list[str]) -> str | None:
+    """A question in a small window of its own, answered with one of its
+    buttons, the first of which is the default. None when it is closed
+    without an answer."""
+    import tkinter as tk
+    from tkinter import ttk
+    window = tk.Toplevel(parent)
+    window.title("Saves")
+    window.transient(parent.winfo_toplevel())
+    window.resizable(False, False)
+    chosen = {"answer": None}
+
+    def answer(word: str | None) -> None:
+        chosen["answer"] = word
+        window.destroy()
+    window.protocol("WM_DELETE_WINDOW", lambda: answer(None))
+    frame = ttk.Frame(window, padding=16)
+    frame.pack(fill="both", expand=True)
+    ttk.Label(frame, text=text, wraplength=420, justify="left").pack(anchor="w")
+    row = ttk.Frame(frame)
+    row.pack(anchor="e", pady=(16, 0))
+    for index, word in enumerate(answers):
+        ttk.Button(row, text=word, command=lambda word=word: answer(None if word == CANCEL else word),
+                   default="active" if index == 0 else "normal").pack(side="left", padx=(0 if not index else 6, 0))
+    window.bind("<Return>", lambda _event: answer(answers[0]))
+    window.bind("<Escape>", lambda _event: answer(None))
+    try:
+        window.grab_set()
+    except tk.TclError:
+        pass
+    parent.wait_window(window)
+    return chosen["answer"]
+
+
 def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = ""):
     """The window, as a Tk root. `smoke` closes it after a moment, which is
     how a build is checked to start at all; with `card` as well it presses
@@ -2391,6 +2439,24 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     ttk.Label(music_buttons, textvariable=music_name_var).grid(row=0, column=2, padx=(10, 0))
     hint(19, music_note)
 
+    # The saves the EverDrive and SleekMenu keep on the card, copied to the
+    # computer and back. Done at once, not by the button: nothing else
+    # changes on the card.
+    group(20, "Saves")
+    saves_buttons = ttk.Frame(options)
+    saves_buttons.grid(row=21, column=0, sticky="w", pady=(6, 0))
+    back_up = ttk.Button(saves_buttons, text=BACK_UP_SAVES)
+    back_up.grid(row=0, column=0)
+    put_back = ttk.Button(saves_buttons, text=RESTORE_SAVES)
+    put_back.grid(row=0, column=1, padx=(6, 0))
+    hint(22, SAVES_HINT)
+    saves_note = tk.StringVar()
+    # What a backup or a restore did, under the hint, and only once there
+    # is something to say: the column is the window's tallest.
+    saves_said = hint(23, saves_note)
+    saves_said.grid_configure(pady=(4, 0))
+    saves_said.grid_remove()
+
     fit(options, hints)
 
     # -- the run's report, on a tab of its own ----------------------------------
@@ -2547,6 +2613,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
         cheats_note.set(CHEATS_OFFLINE if offline else CHEATS_HINT)
         shots_check.configure(state="disabled" if offline else "normal")
         shots_note.set(CHEATS_OFFLINE if offline else SHOTS_HINT)
+        back_up.configure(state="normal" if saves.has_folder(chosen) else "disabled")
+        put_back.configure(state="normal" if chosen is not None else "disabled")
         update_buttons()
 
     def read_choices() -> None:
@@ -2625,6 +2693,82 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
         if chosen:
             pick_music(Path(chosen))
 
+    def saves_said_it(line: str, good: bool) -> None:
+        saves_said.configure(foreground=colors["good"] if good else colors["warn"])
+        saves_note.set(line)
+        saves_said.grid()
+        make_room()
+
+    def back_up_saves(target: Path | None = None) -> None:
+        """Back up saves…: every save on the card into a zip the owner
+        names, written at once."""
+        chosen = current_card()
+        if chosen is None:
+            return
+        try:
+            found = saves.find(chosen)
+        except OSError as error:
+            say(f"saves:    {error}")
+            saves_said_it(SAVES_FAILED, False)
+            return
+        if not found:
+            saves_said_it(saves.NO_SAVES, False)
+            return
+        if target is None:
+            named = filedialog.asksaveasfilename(title="Back up saves", initialfile=saves.file_name(),
+                                                 defaultextension=".zip", filetypes=[("Zip", "*.zip")])
+            if not named:
+                return
+            target = Path(named)
+        try:
+            count = saves.backup(chosen, target)
+        except saves.SavesError as error:
+            saves_said_it(str(error), False)
+            return
+        except OSError as error:
+            say(f"saves:    {error}")
+            saves_said_it(SAVES_FAILED, False)
+            return
+        say(f"saves:    {plural(count, 'save')} backed up to {target}")
+        saves_said_it(saves.backed_up_line(count, target), True)
+
+    def restore_saves(source: Path | None = None) -> None:
+        """Restore saves…: a backup's saves back on the card, once the
+        owner has said yes, and said what to do with saves that changed on
+        the card since."""
+        chosen = current_card()
+        if chosen is None:
+            return
+        if source is None:
+            named = filedialog.askopenfilename(title="Restore saves",
+                                               filetypes=[("Zip", "*.zip"), ("All files", "*")])
+            if not named:
+                return
+            source = Path(named)
+        try:
+            held = saves.inspect(source)
+            if ask(root, saves.restore_question(held), [PUT_THEM_BACK, CANCEL]) != PUT_THEM_BACK:
+                return
+            newer = len(saves.plan(chosen, source).newer)
+            replace = False
+            if newer:
+                answer = ask(root, saves.newer_question(newer), [KEEP_NEWER, REPLACE_NEWER, CANCEL])
+                if answer is None:
+                    return
+                replace = answer == REPLACE_NEWER
+            result = saves.restore(chosen, source, replace)
+        except saves.SavesError as error:
+            saves_said_it(str(error), False)
+            return
+        except OSError as error:
+            say(f"saves:    {error}")
+            saves_said_it(RESTORE_FAILED, False)
+            return
+        say(f"saves:    {plural(result.put, 'save')} put back from {source}, {result.kept:,} newer kept, "
+            f"{result.same:,} already on the card")
+        saves_said_it(saves.restored_line(result), True)
+        refresh()
+
     def read_theme() -> None:
         """The card's theme, shown. The console changes it too, so the
         window remembers what it read: a run puts a theme on the card only
@@ -2643,6 +2787,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
             read_choices()
             state["steps"] = Steps()
             result_var.set("")
+            saves_note.set("")
+            saves_said.grid_remove()
             draw_steps()
         refresh()
 
@@ -2875,6 +3021,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     forget_pack.configure(command=lambda: metadata_var.set(""))
     choose_music.configure(command=browse_music)
     remove_music.configure(command=drop_music)
+    back_up.configure(command=back_up_saves)
+    put_back.configure(command=restore_saves)
     note.bind("<Button-1>", open_download)
     card_box.bind("<<ComboboxSelected>>", on_card_change)
     card_var.trace_add("write", on_card_change)
@@ -2904,6 +3052,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     state["make_room"] = make_room
     state["pick_music"] = pick_music
     state["drop_music"] = drop_music
+    state["back_up_saves"] = back_up_saves
+    state["restore_saves"] = restore_saves
+    state["saves_note"] = saves_note
     state["boot_row"] = boot_row
     state["boot_note"] = boot_note
     state["words"] = {"headline": headline_var, "detail": detail_var, "explain": explain_var, "cart": cart_var,
@@ -2914,7 +3065,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     state["buttons"] = {"action": action, "stop": stop, "coffee": coffee, "boot": boot_check,
                         "refresh": refresh_button,
                         "cheats": cheats_check, "shots": shots_check, "browser": browser_check,
-                        "music": choose_music, "music_remove": remove_music}
+                        "music": choose_music, "music_remove": remove_music,
+                        "back_up_saves": back_up, "restore_saves": put_back}
     state["notebook"] = notebook
     state["header"] = header
     state["edit_menu"] = edit_menu

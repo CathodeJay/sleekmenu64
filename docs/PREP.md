@@ -96,6 +96,11 @@ only that. The card remembers the choice.
   one, **Remove** takes it off. The line under it says which song is on the
   card, or which one the next update puts there. See [Music](#music).
 
+**Saves**
+
+- **Back up saves…** copies every save on the card to one file on your
+  computer, and **Restore saves…** puts them back. See [Saves](#saves).
+
 ### Games
 
 The card as the browser will show it, and the place to change a game.
@@ -383,6 +388,28 @@ The console turns the music on and off with its **MUSIC** row
 ([CONSOLE.md](CONSOLE.md#music)). Putting a new song on the card turns it
 back on.
 
+## Saves
+
+The EverDrive and SleekMenu keep every game's save in `ED64/gamedata/` on
+the card. **Back up saves…** on the Card tab copies them all into one zip
+on your computer, named for the day: `SleekMenu saves 2026-11-17.zip`.
+The button is greyed when the card has no `ED64/gamedata/` folder. On the
+Pro, start the console once after playing before you back up, so the last
+save is on the card.
+
+**Restore saves…** puts a backup's saves back in `ED64/gamedata/`. It says
+how many saves the backup holds and from which day, and asks first. A save
+that is the same on the card is left alone. A save you played on since the
+backup was made is newer on the card, and the window asks whether to keep
+it or replace it with the backup's. Nothing on the card is deleted: a save
+that is not in the backup stays. A zip that is not a backup made here is
+refused.
+
+Each save is copied as it is, under its own name. The tool never changes
+what is inside one. On the command line, `--backup-saves FILE` and
+`--restore-saves FILE` do the same, and nothing else. A restore there keeps
+the newer saves unless you add `--replace-newer`.
+
 ## Versions
 
 SleekMenu and the Game Catalog Manager are released together, under one
@@ -460,6 +487,10 @@ card and run the tool again. The options mirror the window's:
   `--direct-boot on` and `--direct-boot off` set an X7's start-up switch;
   `--theme` takes a theme's name in lower case (`--theme grape`);
   `--music FILE` puts a song on the card and `--no-music` takes it off.
+- `--backup-saves FILE` copies every save on the card to a zip, and
+  `--restore-saves FILE` puts them back, keeping the saves that are newer
+  on the card unless you add `--replace-newer`. Each does only that. See
+  [Saves](#saves).
 - `--keep-browser` leaves `SleekMenu64.z64` on the card as it is; by
   default an older one, or none, is replaced by this release's.
 - `--no-download` (or `SLEEKMENU_NO_DOWNLOAD=1` in the environment) keeps
@@ -500,7 +531,7 @@ What the tool writes, and what it leaves alone:
 /sleekmenu/history.txt     the last fifteen games you launched
 /sleekmenu/cheats.txt      which cheats are on, per game
 /sleekmenu/music.txt       whether the music plays, when changed on the console
-/ED64/gamedata/            saves, shared with the EverDrive menu — never touched
+/ED64/gamedata/            saves, shared with the EverDrive menu — written only when you restore a backup
 ```
 
 Both the catalog and the covers are optional: with no catalog the browser

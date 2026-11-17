@@ -9,6 +9,7 @@ failed, since a Python without Tk is exactly what the command line is for.
 """
 
 import contextlib
+import datetime
 import gc
 import io
 import os
@@ -1824,6 +1825,138 @@ class WindowTests(unittest.TestCase):
             self.assertIsNone(music.read_card(card))
             self.assertEqual(note.get(), "Choose a song to play in SleekMenu.")
             self.assertEqual(name.get(), "")
+            root.destroy()
+
+    def test_the_saves_are_backed_up_and_put_back_from_the_card_tab(self):
+        from tests.test_saves import PLAYED, X7_TREE, read_tree, write_tree
+        from tools import saves
+
+        def labels(widget):
+            found = []
+            for child in widget.winfo_children():
+                try:
+                    found.append(str(child.cget("text")))
+                except Exception:
+                    pass
+                found += labels(child)
+            return found
+
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            root = sleekmenu_gui.build()
+            root.update()
+            state = root.sleekmenu_state
+            note = state["saves_note"]
+            back_up, put_back = state["buttons"]["back_up_saves"], state["buttons"]["restore_saves"]
+            shown = labels(root)
+            for words in ("Saves", "Back up saves…", "Restore saves…",
+                          "Copies every save on the card to a file on your computer. On the Pro, start the "
+                          "console once after playing first, so the last save is on the card."):
+                self.assertIn(words, shown)
+            self.assertEqual(str(back_up.cget("state")), "disabled", "no card")
+            self.assertEqual(str(put_back.cget("state")), "disabled", "no card")
+
+            # a card with no ED64/gamedata: nothing to back up, a backup can go on it
+            state["fields"]["card"].set(str(card))
+            root.update()
+            self.assertEqual(str(back_up.cget("state")), "disabled")
+            self.assertEqual(str(put_back.cget("state")), "normal")
+
+            # an empty gamedata says so, and asks for no file
+            saves.folder(card).mkdir(parents=True)
+            state["fields"]["card"].set(str(card))
+            root.update()
+            self.assertEqual(str(back_up.cget("state")), "normal")
+            backup = Path(scratch) / "SleekMenu saves 2026-11-17.zip"
+            with mock.patch("tkinter.filedialog.asksaveasfilename") as chooser:
+                state["back_up_saves"]()
+            chooser.assert_not_called()
+            self.assertEqual(note.get(), "There are no saves on this card yet.")
+
+            # the chooser suggests today's name; the backup is written at once
+            write_tree(card, X7_TREE)
+            with mock.patch("tkinter.filedialog.asksaveasfilename", return_value=str(backup)) as chooser:
+                state["back_up_saves"]()
+            self.assertEqual(chooser.call_args.kwargs["initialfile"], saves.file_name())
+            self.assertEqual(note.get(), "Backed up 3 saves to SleekMenu saves 2026-11-17.zip.")
+            self.assertEqual(saves.inspect(backup).count, 3)
+
+            # Restore asks first, and a no writes nothing
+            mario = "Super Mario 64 (USA).eep"
+            (saves.folder(card) / mario).unlink()
+            write_tree(card, {"Paper Mario (USA).fla": b"played since"}, when=PLAYED + 3600)
+            asked = []
+
+            def answering(*answers):
+                said = list(answers)
+
+                def ask(_parent, text, choices):
+                    asked.append((text, choices))
+                    return said.pop(0)
+                return mock.patch.object(sleekmenu_gui, "ask", ask)
+
+            with answering(None):
+                state["restore_saves"](backup)
+            today = datetime.date.today()
+            self.assertEqual(asked, [(f"This backup holds 3 saves from {saves.spoken_date(today)}. "
+                                      "Put them back on the card?", ["Put them back", "Cancel"])])
+            self.assertFalse((saves.folder(card) / mario).exists())
+
+            # then about the saves that are newer on the card
+            asked.clear()
+            with answering("Put them back", None):
+                state["restore_saves"](backup)
+            self.assertEqual(asked[1], ("1 save on the card is newer than the backup.",
+                                        ["Keep the newer ones", "Replace them", "Cancel"]))
+            self.assertFalse((saves.folder(card) / mario).exists(), "Cancel writes nothing")
+            with answering("Put them back", "Keep the newer ones"):
+                state["restore_saves"](backup)
+            self.assertEqual(note.get(), "Put 1 save back. 1 newer save on the card was kept.")
+            self.assertEqual((saves.folder(card) / mario).read_bytes(), X7_TREE[mario])
+            self.assertEqual((saves.folder(card) / "Paper Mario (USA).fla").read_bytes(), b"played since")
+            with answering("Put them back", "Replace them"):
+                state["restore_saves"](backup)
+            self.assertEqual(note.get(), "Put 1 save back.")
+            self.assertEqual(read_tree(card), X7_TREE)
+
+            # a file that isn't a backup says so, before any question
+            other = Path(scratch) / "photos.zip"
+            other.write_bytes(b"not a zip")
+            asked.clear()
+            with answering():
+                state["restore_saves"](other)
+            self.assertEqual(asked, [])
+            self.assertEqual(note.get(), "This file isn't a SleekMenu saves backup.")
+
+            # a backup that can't be written is a sentence on the tab, and the reason on the Log tab
+            with mock.patch.object(saves, "backup", side_effect=OSError("No space left on device")):
+                state["back_up_saves"](Path(scratch) / "full.zip")
+            self.assertTrue(note.get().startswith("The saves couldn't be backed up."), note.get())
+            self.assertNotIn("No space", note.get())
+
+            # the question is a small window whose buttons answer it, and Cancel is no answer
+            import tkinter
+
+            def press(word):
+                def find(widget):
+                    for child in widget.winfo_children():
+                        if child.winfo_class() == "TButton" and str(child.cget("text")) == word:
+                            return child
+                        found = find(child)
+                        if found is not None:
+                            return found
+                    return None
+                dialogs = [child for child in root.winfo_children() if isinstance(child, tkinter.Toplevel)]
+                button = find(dialogs[-1]) if dialogs else None
+                if button is None:
+                    root.after(20, lambda: press(word))
+                else:
+                    button.invoke()
+            for word, answer in (("Replace them", "Replace them"), ("Cancel", None)):
+                root.after(20, lambda word=word: press(word))
+                self.assertEqual(sleekmenu_gui.ask(root, "12 saves on the card are newer than the backup.",
+                                                   ["Keep the newer ones", "Replace them", "Cancel"]), answer)
             root.destroy()
 
     def test_the_window_grows_until_nothing_in_a_column_is_cut_off(self):
