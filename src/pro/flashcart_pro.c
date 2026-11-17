@@ -177,6 +177,7 @@ static const sm_pro_mcu_t mcu = {
 /* -- the backend ------------------------------------------------------------ */
 
 static uint32_t max_rom_bytes;   /* what the MCU reported at startup */
+static uint32_t firmware;        /* INFS_TS_FW, as the MCU reported it */
 static uint32_t loaded_bytes;    /* the ROM now in cartridge memory, for arming */
 static bool swap_on;             /* the cartridge is un-swapping writes */
 static DevCfg armed_cfg;         /* what set_cfg was last sent, for the disk to amend */
@@ -198,13 +199,19 @@ bool sm_flashcart_pro_present(void) {
 
 static uint32_t pro_max(void) { return max_rom_bytes; }
 
+/* The firmware's own word for itself, shown as it came: what its digits
+   mean is not documented. */
+static void pro_describe(char *out, size_t out_size) {
+    snprintf(out, out_size, "%08lX", (unsigned long)firmware);
+}
+
 static void pro_fail(char *out, size_t out_size, const char *what, unsigned code) {
     if (out && out_size) snprintf(out, out_size, "Pro: %s (0x%02X)", what, code);
 }
 
 static bool pro_init(char *error, size_t error_size) {
     u8 resp;
-    u32 info[1] = { INFS_MAX_ROM_SIZE };
+    u32 info[2] = { INFS_MAX_ROM_SIZE, INFS_TS_FW };
 
     /* Whatever the stock firmware left in the FIFO goes first, or every
        reply from here on is shifted by it. Then one status request, to know
@@ -223,8 +230,9 @@ static bool pro_init(char *error, size_t error_size) {
     if (resp) { pro_fail(error, error_size, "device would not stop", resp); return false; }
     resp = ed_fs_init();
     if (resp) { pro_fail(error, error_size, "SD card unavailable", resp); return false; }
-    ed_sys_get_inf(info, 1);
+    ed_sys_get_inf(info, 2);
     max_rom_bytes = (uint32_t)info[0];
+    firmware = (uint32_t)info[1];
     if (max_rom_bytes == 0u || max_rom_bytes > SIZE_RAM) max_rom_bytes = SM_LAUNCH_MAX_ROM;
 
     sm_pro_fs_init(&mcu);
@@ -600,6 +608,7 @@ const sm_flashcart_t sm_flashcart_pro = {
     .attach_disk = pro_attach_disk,
     .boot = pro_boot,
     .probe = NULL,
+    .describe = pro_describe,
 };
 #else
 /* The host has no cartridge; the table exists so the launcher links. */

@@ -1554,6 +1554,35 @@ class FlashcartInterfaceTests(unittest.TestCase):
         header = (ROOT / "src/card_paths.h").read_text(encoding="utf-8")
         self.assertIn('#define SM_FIRMWARE_CHEATS_DIR SM_SD_ROOT SM_FIRMWARE_FOLDER "/CHEATS"', header)
 
+    def test_the_system_screen_hears_about_the_machine_from_the_console(self):
+        """ui.c never asks the hardware: system_info.c does, on the console
+        only, and tests/ui_host_test.c stands in for it. The Pro's firmware
+        word is asked for in the same request as the largest ROM, kept, and
+        shown as its eight hex digits. The X7 has nothing to say."""
+        info = self.source("system_info.c")
+        start = info.index("#ifdef __mips__")
+        self.assertEqual(info[:start].strip(), '#include "system_info.h"')
+        self.assertTrue(info.rstrip().endswith("#endif"))
+        body = info[info.index("void sm_system_info(sm_system_info_t *info) {"):]
+        for needed in ("sm_flashcart()", "get_tv_type()", "is_memory_expanded()",
+                       "if (cart->describe) cart->describe(info->firmware, sizeof(info->firmware));",
+                       "TV_PAL", "TV_MPAL"):
+            self.assertIn(needed, body)
+        ui = self.source("ui.c")
+        self.assertIn("sm_system_info(&info);", ui)
+        for forbidden in ("get_tv_type(", "is_memory_expanded(", "->describe"):
+            self.assertNotIn(forbidden, ui)
+        pro = self.source("pro/flashcart_pro.c")
+        init = pro[pro.index("static bool pro_init("):pro.index("static void pro_flush(")]
+        self.assertIn("u32 info[2] = { INFS_MAX_ROM_SIZE, INFS_TS_FW };", init)
+        self.assertEqual(init.count("ed_sys_get_inf("), 1)
+        self.assertIn("ed_sys_get_inf(info, 2);", init)
+        self.assertIn("firmware = (uint32_t)info[1];", init)
+        self.assertIn('snprintf(out, out_size, "%08lX", (unsigned long)firmware);', pro)
+        self.assertIn(".describe = pro_describe,", pro)
+        self.assertIn(".describe = NULL,", self.source("flashcart_x7.c"))
+        self.assertIn(".describe = NULL,", self.source("flashcart.c"))
+
     def test_the_pro_library_is_confined_to_the_pro_backend(self):
         """The vendored library reaches the cartridge's registers directly;
         the register-access invariant above is kept by never compiling it

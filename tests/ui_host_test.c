@@ -14,6 +14,7 @@
 #include "music.h"
 #include "rom_db.h"
 #include "rom_load.h"
+#include "system_info.h"
 #include "theme.h"
 #include "version.h"
 #include <assert.h>
@@ -62,6 +63,11 @@ bool catalog_matches(const sm_game_t *game, const sm_filter_t *filter) {
     if (filter->kind && (unsigned)sm_game_kind(game) + 1u != filter->kind) return false;
     return true;
 }
+
+/* --- the machine, as src/system_info.c would describe it --------------- */
+/* A Pro with a firmware word to show unless a test says otherwise. */
+static sm_system_info_t fake_system = { "EverDrive-64 Pro", "5D4E1234", "NTSC", true };
+void sm_system_info(sm_system_info_t *info) { *info = fake_system; }
 
 /* --- everything the launch screen would reach ------------------------- */
 static surface_t screen;
@@ -2760,6 +2766,97 @@ int main(void) {
             assert(title && !strcmp(title, "?"));
             free(title);
         }
+    }
+
+    /* ---- A on the Z page shows the system screen, and B comes back ------- */
+    {
+        static const row_t rows[] = {
+            {"a.z64", "Alpha", "Racing", 0, "", 0, NULL},
+            {"b.z64", "Beta", "Racing", 0, "", 0, NULL},
+            {"c.z64", "Gamma", "Sports", 0, "", 0, NULL},
+            {"junk.z64", "junk", "", SM_FLAG_SET_ASIDE, "", 0, NULL},
+        };
+        static const uint8_t header[24] = {'W', 'V', '6', '4', 2, 0, 1, 16,
+            0, 0, 0x3E, 0x80, 0, 0, 0x7D, 0, 0, 0, 0x7D, 0, 0, 0, 0, 24};
+        char version[32];
+        uint32_t selected;
+        FILE *file;
+        start(rows, 4u);
+        cursor_to("c.z64");
+        selected = ui.selected;
+        assert(selected != 0u);
+        frame(PRESS(filter));
+        frame(PRESS(down)); frame(PRESS(down));
+        assert(ui.screen == SM_SCREEN_FILTERS && ui.filter_row == 2u);
+        draw();
+        assert(sm_test_drew("SYSTEM") && drew_button(SM_BUTTON_A));
+
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_SYSTEM);
+        draw();
+        snprintf(version, sizeof(version), "%s", SM_VERSION);
+        assert(drew_line("SYSTEM") == 1);
+        assert(drew_line("SLEEKMENU") == 1 && drew_line(version) == 1);
+        assert(drew_line("CARTRIDGE") == 1 && drew_line("EverDrive-64 Pro") == 1);
+        assert(drew_line("FIRMWARE") == 1 && drew_line("5D4E1234") == 1);
+        assert(drew_line("CONSOLE") == 1 && drew_line("NTSC, Expansion Pak") == 1);
+        /* The set-aside record is in the catalog, and is not a game. */
+        assert(drew_line("GAMES") == 1 && drew_line("3 in the catalog") == 1);
+        assert(drew_line("MUSIC") == 1 && drew_line("None") == 1);
+        assert(drew_line("ABOUT") == 1 && drew_line(SM_ABOUT) == 1);
+        assert(sm_test_drew("BACK") && drew_button(SM_BUTTON_B));
+        /* Nothing else on the screen does anything. */
+        frame(PRESS(up)); frame(PRESS(right)); frame(PRESS(filter)); frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_SYSTEM && ui.filter_row == 2u);
+        assert(!ui.filter.players && !ui.filter.regions);
+
+        /* B is the Z page again, on the row it was on, and the list under
+           it was not built again: the cursor is where it was. */
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_FILTERS && ui.filter_row == 2u);
+        assert(ui.selected == selected && ui.item_count == 3u);
+        frame(PRESS(back));
+        assert(ui.screen == SM_SCREEN_LIBRARY);
+
+        /* An X7 has no firmware row, and a PAL console without the pak
+           says so. */
+        fake_system = (sm_system_info_t){ "EverDrive-64 X7", "", "PAL", false };
+        frame(PRESS(filter)); frame(PRESS(select));
+        draw();
+        assert(drew_line("EverDrive-64 X7") == 1 && drew_line("PAL, no Expansion Pak") == 1);
+        assert(!sm_test_drew("FIRMWARE"));
+        fake_system = (sm_system_info_t){ "EverDrive-64 Pro", "5D4E1234", "NTSC", true };
+
+        /* The music as the Z page has it: On, Off. */
+        file = fopen(SM_MUSIC_PATH, "wb");
+        assert(file != NULL);
+        fwrite(header, 1, sizeof(header), file);
+        for (int i = 0; i < 32000 * 2; i++) fputc(0, file);
+        fclose(file);
+        sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
+        sm_music_set_enabled(true);
+        draw();
+        assert(drew_line("On") == 1);
+        sm_music_set_enabled(false);
+        draw();
+        assert(drew_line("Off") == 1);
+        frame(PRESS(back)); frame(PRESS(back));
+        remove(SM_MUSIC_PATH);
+        remove(SM_MUSIC_SETTING_PATH);
+        sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
+
+        /* A card with no catalog: A works there too. */
+        start_discovered = true;
+        start(rows, 3u);
+        frame(PRESS(filter));
+        draw();
+        assert(sm_test_drew("No catalog: only folders filter.") && drew_button(SM_BUTTON_A));
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_SYSTEM);
+        draw();
+        assert(drew_line("No catalog") == 1);
+        frame(PRESS(back)); frame(PRESS(back));
+        start_discovered = false;
     }
 
     remove(SM_FAVORITES_PATH);

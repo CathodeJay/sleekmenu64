@@ -105,6 +105,10 @@ typedef struct {
     /* The read-only transport diagnostic, where the cart has one; NULL where
        it has not. */
     bool (*probe)(const char *sd_path, char *status, size_t status_size);
+
+    /* One line about the cartridge's firmware, for the System screen; NULL
+       on a cart with nothing to say. Asked after init. */
+    void (*describe)(char *out, size_t out_size);
 } sm_flashcart_t;
 
 /* Ask each cart in turn; the first that answers is the one for the session. */

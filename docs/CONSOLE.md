@@ -119,6 +119,17 @@ hear the change right away. B keeps the choice in `sleekmenu/music.txt`.
 The row says **None** when the card has no song. Choosing a new song in the
 Game Catalog Manager turns the music back on.
 
+## System
+
+Press Z, then A, for the **system** screen. It says which SleekMenu you
+have, which cartridge it runs on and, on the Pro, its firmware. It also
+says whether the console is NTSC, PAL or MPAL and whether an Expansion Pak
+is in, how many games the catalog has, and whether the music is on. Games
+the Game Catalog Manager set aside are not counted, and neither are files
+copied on since the last update. B goes back to the filter page.
+
+When you report a problem, quote what this screen shows.
+
 ## Starting the console in SleekMenu
 
 **EverDrive-64 X7.** The stock OS starts a file by itself at power-on when

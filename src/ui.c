@@ -10,6 +10,7 @@
 #include "rom_db.h"
 #include "music.h"
 #include "theme.h"
+#include "system_info.h"
 #include "version.h"
 #include <libdragon.h>
 #include <stdio.h>
@@ -1579,6 +1580,18 @@ static bool card_warning(void) {
     return sm_cheats_enabled_count(launch_cheats()) && cheat_warning();
 }
 
+/* The games the catalog has, for the System screen: its records, less what
+   the tool set aside. Files found on the card since the last update are not
+   in the catalog, and are not counted. */
+static uint32_t catalog_games(const sm_catalog_t *catalog) {
+    uint32_t games = 0;
+    for (uint32_t i = 0; i < catalog->count; i++) {
+        sm_game_t game;
+        if (catalog_get(catalog, i, &game) && !(game.flags & SM_FLAG_SET_ASIDE)) games++;
+    }
+    return games;
+}
+
 /* The 64DD disk beside a ROM, as the catalog knows the card: the one named
    like the ROM, otherwise the first in name order, "" for none. Files the
    browser found since the last update count, set-aside ones do not. Nothing
@@ -1869,7 +1882,19 @@ static void update(sm_ui_t *ui, sm_catalog_t *catalog, sm_actions_t actions, con
         }
         return;
     }
+    /* Facts and nothing to change: B goes back to the Z page as it was
+       left, cursor and all. The list is not rebuilt, since nothing on it
+       changed. */
+    if (ui->screen == SM_SCREEN_SYSTEM) {
+        if (actions.back) ui->screen = SM_SCREEN_FILTERS;
+        return;
+    }
     if (ui->screen == SM_SCREEN_FILTERS) {
+        if (actions.select) {
+            ui->system_games = catalog_games(catalog);
+            ui->screen = SM_SCREEN_SYSTEM;
+            return;
+        }
         if (actions.up) ui->filter_row = (ui->filter_row + FILTER_ROWS - 1) % FILTER_ROWS;
         if (actions.down) ui->filter_row = (ui->filter_row + 1) % FILTER_ROWS;
         if (actions.back) {
@@ -2862,8 +2887,8 @@ static void draw_filters(surface_t *s, const sm_layout_t *l, const sm_catalog_t 
         y += step;
     }
 
-    draw_help(s, l, c->discovery_mode ? "No catalog: only folders filter. {B}APPLY"
-                                      : "{|}ROW {-}CHANGE {Z}CLEAR {B}APPLY");
+    draw_help(s, l, c->discovery_mode ? "No catalog: only folders filter. {A}SYSTEM {B}APPLY"
+                                      : "{|}ROW {-}CHANGE {Z}CLEAR {A}SYSTEM {B}APPLY");
 }
 
 /* What someone about to play a game wants to know, and nothing else: what it
@@ -3299,6 +3324,48 @@ static void draw_cheats(surface_t *s, const sm_layout_t *l, const sm_ui_t *ui) {
     draw_help(s, l, "{A}TOGGLE {Z}ALL OFF {L}{R}PAGE {B}BACK");
 }
 
+/* The System screen, A on the Z page: which SleekMenu, which cartridge,
+   which console. What a bug report needs, laid out like the diagnostics
+   rows. A cart with nothing to say about its firmware gets no row for it. */
+static void draw_system(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c,
+    const sm_ui_t *ui) {
+    sm_system_info_t info;
+    const char *labels[7], *values[7];
+    char console[40], games[32];
+    int rows = 0;
+    int width = l->safe_right - l->safe_left;
+    int value_x = l->safe_left + 9 * SM_FONT_WIDTH + 6;
+    int value_chars = (width - 9 * SM_FONT_WIDTH - 10) / SM_FONT_WIDTH;
+    int y = l->safe_top + SM_HEADER_HEIGHT + 8;
+
+    sm_system_info(&info);
+    snprintf(console, sizeof(console), "%s, %s", info.tv,
+        info.expansion_pak ? "Expansion Pak" : "no Expansion Pak");
+    if (c->discovery_mode) snprintf(games, sizeof(games), "No catalog");
+    else snprintf(games, sizeof(games), "%lu in the catalog", (unsigned long)ui->system_games);
+    labels[rows] = "SLEEKMENU"; values[rows++] = SM_VERSION;
+    labels[rows] = "CARTRIDGE"; values[rows++] = info.cartridge;
+    if (info.firmware[0]) { labels[rows] = "FIRMWARE"; values[rows++] = info.firmware; }
+    labels[rows] = "CONSOLE"; values[rows++] = console;
+    labels[rows] = "GAMES"; values[rows++] = games;
+    labels[rows] = "MUSIC";
+    values[rows++] = !sm_music_available() ? "None" : sm_music_enabled() ? "On" : "Off";
+    labels[rows] = "ABOUT"; values[rows++] = SM_ABOUT;
+
+    graphics_draw_box(s, l->safe_left, l->safe_top, width, SM_HEADER_HEIGHT,
+        sm_colour(SM_C_BAND));
+    graphics_set_color(sm_colour(SM_C_ACCENT), 0);
+    graphics_draw_text(s, l->safe_left + 3, l->safe_top + 3, "SYSTEM");
+    for (int row = 0; row < rows; row++) {
+        graphics_set_color(sm_colour(SM_C_TEXT_DIM), 0);
+        graphics_draw_text(s, l->safe_left + 3, y, labels[row]);
+        graphics_set_color(sm_colour(SM_C_TEXT), 0);
+        draw_truncated(s, value_x, y, values[row], value_chars);
+        y += 11;
+    }
+    draw_help(s, l, "{B}BACK");
+}
+
 void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm_ui_t *ui) {
     graphics_fill_screen(s,sm_colour(SM_C_BG));
     graphics_draw_box(s,l->safe_left,l->safe_top,l->safe_right-l->safe_left,20,sm_colour(SM_C_BAND));
@@ -3313,6 +3380,10 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
     }
     if (ui->screen == SM_SCREEN_CHEATS) {
         draw_cheats(s, l, ui);
+        return;
+    }
+    if (ui->screen == SM_SCREEN_SYSTEM) {
+        draw_system(s, l, c, ui);
         return;
     }
     if (ui->screen==SM_SCREEN_FILTERS) { graphics_draw_text(s,l->safe_left+4,l->safe_top+6,"FILTERS"); draw_filters(s,l,c,ui); return; }

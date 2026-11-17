@@ -241,7 +241,7 @@ On the console the work is split into small modules:
 | `folder_scan` | the folder being browsed read off the card for what the catalog does not know; the name rules the whole-card scan shares |
 | `cover_pack` | binary-searched picture lookup in `covers.pak`, and the same in the screenshots' packs |
 | `picture` | a cover shrunk by averaging, for the grid's tiles |
-| `ui` | list, grid and coverflow views, filters, the launch card and its screenshots, the box view, the cheats page |
+| `ui` | list, grid and coverflow views, filters, the launch card and its screenshots, the box view, the cheats page, the system screen |
 | `theme` | the colours, by what each is for; the built-in themes and the card's choice of one |
 | `music` | the card's song, read ahead by the main loop and played by the audio interrupt, and whether it plays |
 | `buttons` | the controller's buttons as pictures, and the help bar's lines of them |
@@ -250,6 +250,7 @@ On the console the work is split into small modules:
 | `x7_rtc` / `x7_save_reg` | the X7's clock and save configuration for the game about to run |
 | `save_io` / `save_sync` / `ed64_registry` | saves to and from `ED64/gamedata/`, and the record the EverDrive menu reads |
 | `cheats` / `cheat_pack` / `cheats_io` | finding a game's `.cht`, the record of what is on, the list handed to the boot code |
+| `system_info` | what the system screen says about the cartridge, its firmware and the console |
 
 **Three views**, cycled with C-up. The list is for a game you can name. The
 grid shows twelve covers for scanning a folder. Coverflow shows one cover

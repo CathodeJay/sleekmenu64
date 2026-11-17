@@ -209,6 +209,9 @@ class CardLayoutTests(unittest.TestCase):
         offender = re.compile(r'"(?:[^"]*/)?' + name + r'(?:/[^"]*)?"', re.IGNORECASE)
         prose = ("#", "*", "//", "/*", chr(34) * 3, chr(39) * 3)
         allowed = {"card_paths.h", "card_layout.py"}
+        # The System screen's first row is the program's name in capitals:
+        # a label drawn on the screen, never a path that is opened.
+        labels = {("ui.c", '"SLEEKMENU"')}
         for path in sorted((self.ROOT / "src").rglob("*.[ch]")) + \
                     sorted((self.ROOT / "tools").glob("*.py")):
             if path.name in allowed:
@@ -216,7 +219,8 @@ class CardLayoutTests(unittest.TestCase):
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
                 if line.lstrip().startswith(prose):
                     continue
-                if offender.search(line):
+                if any((path.name, found.group(0)) not in labels
+                       for found in offender.finditer(line)):
                     self.fail(f"{path.name}:{number} hardcodes the card folder: "
                               f"{line.strip()}")
 

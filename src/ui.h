@@ -60,7 +60,7 @@ _Static_assert((int)SM_UI_SLOTS_MAX >= (int)SM_UI_GRID_VISIBLE,
 enum { SM_UI_SETTLE_FRAMES = 6 };
 
 typedef enum { SM_SCREEN_LIBRARY, SM_SCREEN_FILTERS, SM_SCREEN_LAUNCH_DETAILS, SM_SCREEN_CHEATS,
-               SM_SCREEN_BOX } sm_screen_t;
+               SM_SCREEN_BOX, SM_SCREEN_SYSTEM } sm_screen_t;
 typedef enum { SM_VIEW_LIST, SM_VIEW_GRID, SM_VIEW_COVERFLOW } sm_view_t;
 
 typedef struct {
@@ -85,6 +85,9 @@ typedef struct {
     sm_screen_t screen;
     sm_view_t view;
     uint8_t filter_row;
+    /* The System screen's GAMES row: catalog records not set aside, counted
+       when A opens the screen rather than every frame. */
+    uint32_t system_games;
     /* The genre tab strip, rebuilt whenever the item list is. tab 0 is "all". */
     sm_genre_tabs_t genres;
     uint32_t genre_tab;

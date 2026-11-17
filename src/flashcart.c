@@ -59,6 +59,7 @@ const sm_flashcart_t sm_flashcart_none = {
     .attach_disk = NULL,
     .boot = none_boot,
     .probe = NULL,
+    .describe = NULL,
 };
 
 /* -- detection ------------------------------------------------------------ */

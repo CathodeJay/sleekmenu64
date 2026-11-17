@@ -101,7 +101,7 @@ SleekMenu ships none of them.
 | C-up | List, grid or coverflow | Fast or verified load |
 | C-down | Favourite | Cheats |
 | L / R | Page up / down (coverflow: previous / next letter) | — |
-| Z | Filters, theme and music | Diagnostics |
+| Z | Filters, theme and music. A there shows the system screen | Diagnostics |
 
 The bar along the bottom of every screen says what the buttons do there,
 each button drawn in its own colour: a blue A, a green B, a red Start, the

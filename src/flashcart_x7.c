@@ -177,6 +177,7 @@ const sm_flashcart_t sm_flashcart_x7 = {
     .attach_disk = NULL,
     .boot = x7_boot,
     .probe = x7_probe,
+    .describe = NULL,
 };
 #else
 /* The host has no cartridge; the table exists so the launcher links. */
