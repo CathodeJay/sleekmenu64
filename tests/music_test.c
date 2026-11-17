@@ -2,6 +2,7 @@
 /* The background music: which files are a track the browser can play, and
    the On/Off the card keeps. */
 #include "music.h"
+#include <libdragon.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +17,35 @@ static void make(uint8_t h[24]) {
 }
 
 static bool setting(const char *text) { return sm_music_setting_from_text(text, strlen(text)); }
+
+/* A track as the Game Catalog Manager writes one, two seconds long. */
+static void write_track(const char *path) {
+    uint8_t h[24];
+    FILE *file = fopen(path, "wb");
+    assert(file);
+    make(h);
+    fwrite(h, 1, sizeof(h), file);
+    for (unsigned i = 0; i < 44100u * 2u; i++) fputc(0, file);
+    fclose(file);
+}
+
+static bool path_is(unsigned number, const char *first, const char *expected) {
+    char out[64];
+    return sm_music_track_path(out, sizeof(out), first, number) && !strcmp(out, expected);
+}
+
+/* Over `seeds` seeds from `base`, `step` apart: every track is picked, and
+   none more than twice as often as an even share. */
+static void picks_evenly(unsigned count, uint64_t base, uint64_t step, unsigned seeds) {
+    unsigned times[SM_MUSIC_MAX_TRACKS + 1] = {0};
+    for (unsigned i = 0; i < seeds; i++) {
+        unsigned picked = sm_music_pick(count, base + i * step);
+        assert(picked >= 1u && picked <= count);
+        times[picked]++;
+    }
+    for (unsigned n = 1; n <= count; n++)
+        assert(times[n] > 0u && times[n] <= 2u * seeds / count);
+}
 
 int main(int argc, char **argv) {
     uint8_t h[24];
@@ -61,6 +91,34 @@ int main(int argc, char **argv) {
     assert(sm_music_setting_from_text(NULL, 0));
     assert(!sm_music_setting_from_text("offXXXX", 3));
 
+    /* The path of each track: the first as it is, the others numbered
+       before the extension, and nothing past eight. */
+    assert(path_is(1, "sd:/sleekmenu/music.wav64", "sd:/sleekmenu/music.wav64"));
+    assert(path_is(2, "sd:/sleekmenu/music.wav64", "sd:/sleekmenu/music-2.wav64"));
+    assert(path_is(8, "sd:/sleekmenu/music.wav64", "sd:/sleekmenu/music-8.wav64"));
+    assert(path_is(3, "card.d/music", "card.d/music-3"));
+    assert(!path_is(0, "sd:/sleekmenu/music.wav64", ""));
+    assert(!path_is(9, "sd:/sleekmenu/music.wav64", ""));
+    {
+        char small[12];
+        assert(sm_music_track_path(small, sizeof(small), "a/music.wav", 1));
+        assert(!sm_music_track_path(small, sizeof(small), "a/music.wav", 2));   /* a/music-2.wav */
+        assert(!sm_music_track_path(small, sizeof(small), "a/music.wav64", 1));
+    }
+
+    /* The pick. Nothing to pick from, or one track. */
+    assert(sm_music_pick(0, 12345u) == 0u);
+    assert(sm_music_pick(1, 0u) == 1u && sm_music_pick(1, UINT64_MAX) == 1u);
+    for (unsigned count = 2; count <= SM_MUSIC_MAX_TRACKS; count++) {
+        /* Seeds that differ only in their lowest bits, as two power-ons of
+           one console do, near zero and two seconds in. */
+        picks_evenly(count, 0u, 1u, 64u * count);
+        picks_evenly(count, 93750000u, 1u, 64u * count);
+        /* and seeds whose lowest bits are all the same: the rest counts too */
+        picks_evenly(count, 0u, 1u << 20, 64u * count);
+        picks_evenly(count, 0u, (uint64_t)1 << 32, 64u * count);
+    }
+
     /* On the card. No track: nothing to play, whatever the setting says. */
     assert(argc > 1);
     snprintf(track, sizeof(track), "%s/music.wav64", argv[1]);
@@ -105,6 +163,74 @@ int main(int argc, char **argv) {
     sm_music_init(track, saved);
     assert(sm_music_enabled() && sm_music_playing());
 
+    assert(sm_music_track_count() == 1u && sm_music_track() == 1u);
+
+    /* Three tracks: each start counts them and picks one by the ticks. */
+    {
+        char second[512], third[512], ninth[512];
+        bool heard[4] = {false};
+        assert(sm_music_track_path(second, sizeof(second), track, 2));
+        assert(sm_music_track_path(third, sizeof(third), track, 3));
+        write_track(second);
+        write_track(third);
+        for (uint64_t ticks = 0; ticks < 32u; ticks++) {
+            sm_test_ticks = ticks;
+            sm_music_init(track, saved);
+            assert(sm_music_available() && sm_music_playing() && sm_music_track_count() == 3u);
+            assert(sm_music_track() == sm_music_pick(3, ticks));
+            heard[sm_music_track()] = true;
+        }
+        assert(heard[1] && heard[2] && heard[3]);
+
+        /* Off and on, and a launch that comes back: the same track, though
+           the ticks have moved on. */
+        for (uint64_t ticks = 0; ticks < 32u; ticks++) {
+            unsigned picked;
+            sm_test_ticks = ticks;
+            sm_music_init(track, saved);
+            picked = sm_music_track();
+            sm_test_ticks = ticks + 1u;
+            sm_music_set_enabled(false);
+            sm_music_set_enabled(true);
+            assert(sm_music_playing() && sm_music_track() == picked);
+            sm_music_fade_out();
+            sm_music_resume();
+            assert(sm_music_playing() && sm_music_track() == picked);
+        }
+
+        /* A gap: the count stops at the first track missing. */
+        remove(second);
+        for (uint64_t ticks = 0; ticks < 8u; ticks++) {
+            sm_test_ticks = ticks;
+            sm_music_init(track, saved);
+            assert(sm_music_track_count() == 1u && sm_music_track() == 1u && sm_music_playing());
+        }
+        /* or at the first that does not play. */
+        file = fopen(second, "wb");
+        assert(file);
+        fputs("RIFF and nothing else", file);
+        fclose(file);
+        sm_music_init(track, saved);
+        assert(sm_music_track_count() == 1u && sm_music_track() == 1u);
+        /* Eight at most: a ninth is never looked for. */
+        for (unsigned n = 2; n <= SM_MUSIC_MAX_TRACKS; n++) {
+            char path[512];
+            assert(sm_music_track_path(path, sizeof(path), track, n));
+            write_track(path);
+        }
+        snprintf(ninth, sizeof(ninth), "%s/music-9.wav64", argv[1]);
+        write_track(ninth);
+        sm_music_init(track, saved);
+        assert(sm_music_track_count() == SM_MUSIC_MAX_TRACKS);
+        remove(ninth);
+        for (unsigned n = 2; n <= SM_MUSIC_MAX_TRACKS; n++) {
+            char path[512];
+            assert(sm_music_track_path(path, sizeof(path), track, n));
+            remove(path);
+        }
+        sm_test_ticks = 0;
+    }
+
     /* A track that is not one is not available, and the setting stays. */
     file = fopen(track, "wb");
     assert(file);
@@ -112,6 +238,7 @@ int main(int argc, char **argv) {
     fclose(file);
     sm_music_init(track, saved);
     assert(!sm_music_available() && sm_music_enabled() && !sm_music_playing());
+    assert(sm_music_track_count() == 0u && sm_music_track() == 0u);
     remove(track);
     remove(saved);
     puts("music ok");

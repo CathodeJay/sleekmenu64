@@ -2468,6 +2468,38 @@ int main(void) {
         assert(fake_launches == 1 && !fake_music_during_launch);
         assert(sm_music_playing());
 
+        /* With three songs, the one picked at start-up is the one that
+           plays on after the launch, though the ticks have moved on. */
+        {
+            char path[512];
+            for (unsigned n = 2; n <= 3; n++) {
+                assert(sm_music_track_path(path, sizeof(path), SM_MUSIC_PATH, n));
+                file = fopen(path, "wb");
+                assert(file != NULL);
+                fwrite(header, 1, sizeof(header), file);
+                for (int i = 0; i < 32000 * 2; i++) fputc(0, file);
+                fclose(file);
+            }
+            for (uint64_t ticks = 0; ticks < 12u; ticks++) {
+                unsigned picked;
+                sm_test_ticks = ticks;
+                sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);    /* reads "off" */
+                sm_music_set_enabled(true);
+                picked = sm_music_track();
+                assert(sm_music_playing() && sm_music_track_count() == 3u && picked >= 1u);
+                sm_test_ticks = ticks + 7u;
+                fake_launches = 0;
+                frame(PRESS(start));
+                assert(fake_launches == 1 && !fake_music_during_launch);
+                assert(sm_music_playing() && sm_music_track() == picked);
+            }
+            sm_test_ticks = 0;
+            for (unsigned n = 2; n <= 3; n++) {
+                assert(sm_music_track_path(path, sizeof(path), SM_MUSIC_PATH, n));
+                remove(path);
+            }
+        }
+
         sm_music_set_enabled(false);
         remove(SM_MUSIC_PATH);
         remove(SM_MUSIC_SETTING_PATH);
@@ -2840,6 +2872,35 @@ int main(void) {
         sm_music_set_enabled(false);
         draw();
         assert(drew_line("Off") == 1);
+        /* Three songs: On says how many, Off stays Off. */
+        {
+            char path[512];
+            for (unsigned n = 2; n <= 3; n++) {
+                assert(sm_music_track_path(path, sizeof(path), SM_MUSIC_PATH, n));
+                file = fopen(path, "wb");
+                assert(file != NULL);
+                fwrite(header, 1, sizeof(header), file);
+                for (int i = 0; i < 32000 * 2; i++) fputc(0, file);
+                fclose(file);
+            }
+            sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
+            sm_music_set_enabled(true);
+            draw();
+            assert(drew_line("On, 3 songs") == 1 && !sm_test_drew("None"));
+            sm_music_set_enabled(false);
+            draw();
+            assert(drew_line("Off") == 1 && !sm_test_drew("songs"));
+            /* Song 2 gone: only the first is counted, and it reads On. */
+            assert(sm_music_track_path(path, sizeof(path), SM_MUSIC_PATH, 2));
+            remove(path);
+            sm_music_init(SM_MUSIC_PATH, SM_MUSIC_SETTING_PATH);
+            sm_music_set_enabled(true);
+            draw();
+            assert(drew_line("On") == 1 && !sm_test_drew("songs"));
+            sm_music_set_enabled(false);
+            assert(sm_music_track_path(path, sizeof(path), SM_MUSIC_PATH, 3));
+            remove(path);
+        }
         frame(PRESS(back)); frame(PRESS(back));
         remove(SM_MUSIC_PATH);
         remove(SM_MUSIC_SETTING_PATH);

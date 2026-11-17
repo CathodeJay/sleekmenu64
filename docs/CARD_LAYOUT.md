@@ -32,6 +32,7 @@ this is the reference.
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump     fetched by the tool (--cheats)
 /sleekmenu/theme.txt        the browser's theme, one word      written by the browser or the tool
 /sleekmenu/music.wav64      the song the browser loops         written by the tool (--music)
+/sleekmenu/music-2.wav64    more songs, up to music-8.wav64    written by the tool (--music)
 /sleekmenu/music.txt        whether it plays: on or off        written by the browser
 /sleekmenu/art/             your own box art and text (optional)  yours
 
@@ -106,7 +107,7 @@ never chose has none.
 
 ## The music
 
-`sleekmenu/music.wav64` is a WAV64 file, libdragon's audio container,
+Each song is a WAV64 file, libdragon's audio container,
 version 2: a 24-byte big-endian header (`WV64`, version 2, format 0 for
 uncompressed samples, one channel, 16 bits, then the sample rate, the
 length in samples, the loop length and the offset of the first sample),
@@ -116,10 +117,18 @@ the first sample the tool records the name of the file the song came from
 (`name`, one length byte, UTF-8), which the window shows; the browser
 skips it, since the header says where the samples start.
 
+A card holds up to eight songs: `sleekmenu/music.wav64`, then
+`music-2.wav64` to `music-8.wav64`, numbered with no gaps. Each time it
+starts, the browser counts them from the first and stops at the first one
+missing or that it can't play. Then it picks one of them to play. The tool
+writes the songs in the order they were chosen. It deletes the
+higher-numbered songs a shorter set leaves behind, and Remove deletes them
+all. It deletes nothing else.
+
 `sleekmenu/music.txt` turns the music off when its first word is `off`.
 Anything else, or no file, plays it. The browser writes it from the MUSIC
-row of its filter page; the tool removes it when it puts a new song on
-the card, and with the song when it takes the music off.
+row of its filter page; the tool removes it when it puts new songs on
+the card, and with the songs when it takes the music off.
 
 ## Starting in the browser
 

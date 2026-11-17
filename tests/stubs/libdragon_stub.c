@@ -145,3 +145,5 @@ int dir_findfirst(const char *path, dir_t *entry) {
 uint64_t sm_test_now_us;
 uint64_t get_ticks_us(void) { return sm_test_now_us; }
 uint64_t get_ticks_ms(void) { return sm_test_now_us / 1000u; }
+uint64_t sm_test_ticks;
+uint64_t get_ticks(void) { return sm_test_ticks; }

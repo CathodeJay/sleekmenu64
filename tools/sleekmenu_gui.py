@@ -62,8 +62,10 @@ CHEATS_OFFLINE = "Unavailable while downloads are off."
 SHOTS_HINT = "Title and in-game screenshots for retail games, from libretro. About 0.4 MB per game."
 #: The colours of a theme shown beside its name, in this order.
 SWATCH_ROLES = ("bg", "band", "select", "accent", "text")
-#: Remove under Music: the next run takes the song off the card.
+#: Remove under Music: the next run takes the songs off the card.
 REMOVE_MUSIC = "remove"
+#: Under Music, with no song on the card and none picked.
+MUSIC_HINT = "Choose up to 8 songs. SleekMenu plays one each time it starts."
 #: Under Saves on the Card tab.
 SAVES_HINT = ("Copies every save on the card to a file on your computer. On the Pro, start the console once "
               "after playing first, so the last save is on the card.")
@@ -487,31 +489,37 @@ def finished_line(code: int | None, outcome, status: CardStatus, games_on_card: 
 MUSIC_NAME_MAX = 26
 
 
-def music_name(on_card, picked=None, seconds: float = 0.0) -> str:
-    """Beside the Music buttons: the song picked here, or else the card's,
-    with how long it plays; nothing when there is neither."""
-    if isinstance(picked, Path):
-        name, length = picked.name, seconds
-    elif on_card is not None:
-        name, length = on_card.name or "A song", on_card.seconds
+def music_name(on_card=(), picked=None, seconds=()) -> str:
+    """Beside the Music buttons: the songs picked here (a list of files,
+    with how long each plays in `seconds`), or else the card's (a list of
+    music.OnCard); nothing when there are neither. One song is shown with
+    how long it plays, several by their names after how many there are."""
+    if isinstance(picked, list):
+        songs = [(path.name, length) for path, length in zip(picked, seconds)]
     else:
+        songs = [(song.name or "A song", song.seconds) for song in on_card or ()]
+    names = [name if len(name) <= MUSIC_NAME_MAX else name[:MUSIC_NAME_MAX - 1].rstrip() + "…"
+             for name, _length in songs]
+    if not songs:
         return ""
-    if len(name) > MUSIC_NAME_MAX:
-        name = name[:MUSIC_NAME_MAX - 1].rstrip() + "…"
-    return f"{name} ({music.duration(length)})"
+    if len(songs) == 1:
+        return f"{names[0]} ({music.duration(songs[0][1])})"
+    return f"{len(songs)} songs: " + ", ".join(names)
 
 
-def music_line(on_card, picked=None, problem: str = "") -> str:
-    """Under the Music buttons: what happens to the song, or why the file
+def music_line(on_card=(), picked=None, problem: str = "") -> str:
+    """Under the Music buttons: what happens to the songs, or why the files
     picked can't be used."""
     if problem:
         return problem
     if picked == REMOVE_MUSIC:
         return "The music comes off the card at the next update."
-    if picked is not None:
+    if isinstance(picked, list):
+        if len(picked) > 1:
+            return f"{len(picked)} songs will be put on the card at the next update."
         return "Goes on the card at the next update."
-    if on_card is None:
-        return "Choose a song to play in SleekMenu."
+    if not on_card:
+        return MUSIC_HINT
     return "Plays in SleekMenu. Press Z on the console to turn it off."
 
 
@@ -669,7 +677,7 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
                  cheats: bool = False, cheats_remembered: bool = False,
                  direct_boot: bool | None = None, theme: str | None = None,
                  shots: bool = False, shots_remembered: bool = False,
-                 browser: bool = True, music_file: str | Path | None = None,
+                 browser: bool = True, music_files=None,
                  no_music: bool = False) -> sleekmenu_prep.Options:
     """The window's choices as the run takes them. An empty collection
     means whatever is on the card, fetched when there is none. An empty
@@ -687,8 +695,8 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
     `shots_remembered`). `browser` puts the SleekMenu this release goes
     with on a card that has an older one or none. `direct_boot` is the start-up switch as the
     tab shows it, None on a card that has no such switch. `theme` is
-    the id of the colours chosen for the browser. `music_file` is a song
-    picked to go on the card, `no_music` the Remove button."""
+    the id of the colours chosen for the browser. `music_files` are the
+    songs picked to go on the card, `no_music` the Remove button."""
     return sleekmenu_prep.Options(
         card=Path(card) if card.strip() else None,
         metadata=Path(metadata) if metadata.strip() else None,
@@ -700,7 +708,7 @@ def options_from(card: str, metadata: str = "", roms: str = "", fix_checksums: b
         shots=False if not shots else None if shots_remembered and not rebuild else True,
         direct_boot=direct_boot,
         theme=theme,
-        music=Path(music_file) if music_file else None,
+        music=[Path(file) for file in music_files or ()],
         no_music=bool(no_music),
         browser=bool(browser),
         rebuild=bool(rebuild),
@@ -2434,9 +2442,20 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     choose_music.grid(row=0, column=0)
     remove_music = ttk.Button(music_buttons, text="Remove")
     remove_music.grid(row=0, column=1, padx=(6, 0))
-    # The song itself, on the row, where the buttons that change it are.
+    # The songs themselves, on the row, where the buttons that change them
+    # are. Several names wrap at the column's edge rather than run past it.
     music_name_var = tk.StringVar()
-    ttk.Label(music_buttons, textvariable=music_name_var).grid(row=0, column=2, padx=(10, 0))
+    music_name_label = ttk.Label(music_buttons, textvariable=music_name_var, justify="left")
+    music_name_label.grid(row=0, column=2, padx=(10, 0), sticky="w")
+
+    def wrap_music_name(_event=None) -> None:
+        if not music_name_label.winfo_ismapped():
+            return
+        inset = music_name_label.winfo_rootx() - options.winfo_rootx()
+        wrap = max(160, options.winfo_width() - inset - 4)
+        if str(music_name_label.cget("wraplength")) != str(wrap):
+            music_name_label.configure(wraplength=wrap)
+    options.bind("<Configure>", wrap_music_name, add="+")
     hint(19, music_note)
 
     # The saves the EverDrive and SleekMenu keep on the card, copied to the
@@ -2630,9 +2649,9 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     def show_music() -> None:
         on_card = music.read_card(current_card())
         picked = state.get("music_pick")
-        music_name_var.set(music_name(on_card, picked, state.get("music_seconds", 0.0)))
+        music_name_var.set(music_name(on_card, picked, state.get("music_seconds", [])))
         music_note.set(music_line(on_card, picked, state.get("music_problem", "")))
-        removable = isinstance(picked, Path) or (on_card is not None and picked != REMOVE_MUSIC)
+        removable = isinstance(picked, list) or (bool(on_card) and picked != REMOVE_MUSIC)
         remove_music.configure(state="normal" if removable else "disabled")
         make_room()
 
@@ -2645,6 +2664,8 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
         root.update_idletasks()
         if not root.winfo_ismapped():
             return
+        wrap_music_name()
+        root.update_idletasks()
         short = 0
         for column in (body, options):
             if column.winfo_height() > 1:
@@ -2663,24 +2684,36 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
         state["music_problem"] = ""
         show_music()
 
-    def pick_music(chosen: Path) -> None:
-        """A song for the card, checked now so the row can say at once
-        whether it can be used; converted by the next run."""
-        try:
-            seconds = music.probe(chosen)
-        except music.MusicError as error:
-            state["music_pick"] = None
-            state["music_problem"] = str(error)
-        else:
-            state["music_pick"] = chosen
+    def pick_music(chosen) -> None:
+        """Songs for the card, a file or a list of them, in the order they
+        become songs 1 to n. Each is checked now so the row can say at once
+        whether they can be used; converted by the next run. More than the
+        card holds, or one that can't be used, and nothing is picked."""
+        files = [Path(chosen)] if isinstance(chosen, (str, Path)) else [Path(file) for file in chosen]
+        state["music_pick"] = None
+        state["music_problem"] = ""
+        if len(files) > card_layout.MUSIC_MAX_SONGS:
+            state["music_problem"] = music.TOO_MANY
+            show_music()
+            return
+        seconds = []
+        for file in files:
+            try:
+                seconds.append(music.probe(file))
+            except music.MusicError as error:
+                # With several, which one it was.
+                state["music_problem"] = f"{file.name}: {error}" if len(files) > 1 else str(error)
+                show_music()
+                return
+        if files:
+            state["music_pick"] = files
             state["music_seconds"] = seconds
-            state["music_problem"] = ""
         show_music()
 
     def drop_music() -> None:
-        """Remove: a song picked here is forgotten; otherwise the next
+        """Remove: songs picked here are forgotten; otherwise the next
         run takes the card's off."""
-        state["music_pick"] = None if isinstance(state.get("music_pick"), Path) else REMOVE_MUSIC
+        state["music_pick"] = None if isinstance(state.get("music_pick"), list) else REMOVE_MUSIC
         state["music_problem"] = ""
         show_music()
 
@@ -2688,10 +2721,10 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
         # Every kind of song a decoder might read, so none is greyed out in
         # the chooser; one this computer can't read says so when picked.
         patterns = " ".join(f"*{suffix}" for suffix in music.SUFFIXES)
-        chosen = filedialog.askopenfilename(title="A song for SleekMenu",
-                                            filetypes=[("Music", patterns), ("All files", "*")])
+        chosen = filedialog.askopenfilenames(title="Songs for SleekMenu",
+                                             filetypes=[("Music", patterns), ("All files", "*")])
         if chosen:
-            pick_music(Path(chosen))
+            pick_music(list(root.tk.splitlist(chosen)) if isinstance(chosen, str) else list(chosen))
 
     def saves_said_it(line: str, good: bool) -> None:
         saves_said.configure(foreground=colors["good"] if good else colors["warn"])
@@ -2980,7 +3013,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
                                   browser=browser_var.get(),
                                   direct_boot=boot_var.get() if state["boot"].available else None,
                                   theme=picked_theme(),
-                                  music_file=state["music_pick"] if isinstance(state.get("music_pick"), Path)
+                                  music_files=state["music_pick"] if isinstance(state.get("music_pick"), list)
                                   else None,
                                   no_music=state.get("music_pick") == REMOVE_MUSIC)))
 
@@ -3049,6 +3082,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     state["swatch"] = swatch
     state["music_note"] = music_note
     state["music_name"] = music_name_var
+    state["music_name_label"] = music_name_label
     state["make_room"] = make_room
     state["pick_music"] = pick_music
     state["drop_music"] = drop_music

@@ -60,6 +60,11 @@ THEME_FILE = "theme.txt"
 #: (tools/music.py). src/card_paths.h has the same names.
 MUSIC_FILE = "music.wav64"
 MUSIC_SETTING_FILE = "music.txt"
+#: The most songs a card holds. The first is MUSIC_FILE, the others
+#: music-2.wav64 to music-8.wav64, numbered with no gaps; the browser picks
+#: one each time it starts (src/music.h has the same limit).
+MUSIC_MAX_SONGS = 8
+MUSIC_FILES = (MUSIC_FILE,) + tuple(f"music-{number}.wav64" for number in range(2, MUSIC_MAX_SONGS + 1))
 #: Under FIRMWARE_FOLDER: the saves, written by the EverDrive and by the
 #: browser. The tool reads them for a backup and writes them only when the
 #: owner restores one (tools/saves.py).

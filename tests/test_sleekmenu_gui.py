@@ -288,26 +288,41 @@ class FieldTests(unittest.TestCase):
         self.assertIs(from_window("/c", direct_boot=False).direct_boot, False)
         self.assertIsNone(from_window("/c").theme, "nothing chosen: the card's theme is left alone")
         self.assertEqual(from_window("/c", theme="jungle").theme, "jungle")
-        self.assertEqual((from_window("/c").music, from_window("/c").no_music), (None, False),
+        self.assertEqual((from_window("/c").music, from_window("/c").no_music), ([], False),
                          "nothing picked: the card's song is left alone")
-        self.assertEqual(from_window("/c", music_file="/m/song.mp3").music, Path("/m/song.mp3"))
+        self.assertEqual(from_window("/c", music_files=["/m/song.mp3"]).music, [Path("/m/song.mp3")])
+        self.assertEqual(from_window("/c", music_files=[Path("/m/b.mp3"), "/m/a.mp3"]).music,
+                         [Path("/m/b.mp3"), Path("/m/a.mp3")], "songs 1 to n, in the order picked")
         self.assertIs(from_window("/c", no_music=True).no_music, True)
 
     def test_the_music_row_says_what_is_on_the_card_and_what_comes_next(self):
         from tools import music
         line, name = sleekmenu_gui.music_line, sleekmenu_gui.music_name
-        on_card = music.OnCard("Title Theme.mp3", 187.4, 1000)
+        on_card = [music.OnCard("Title Theme.mp3", 187.4, 1000)]
         # beside the buttons: the song, picked here or on the card
+        self.assertEqual(name([]), "")
         self.assertEqual(name(None), "")
         self.assertEqual(name(on_card), "Title Theme.mp3 (3:07)")
-        self.assertEqual(name(music.OnCard("", 61, 10)), "A song (1:01)")
-        self.assertEqual(name(on_card, Path("/x/Credits.wav"), 62), "Credits.wav (1:02)")
+        self.assertEqual(name([music.OnCard("", 61, 10)]), "A song (1:01)")
+        self.assertEqual(name(on_card, [Path("/x/Credits.wav")], [62]), "Credits.wav (1:02)")
         self.assertEqual(name(on_card, sleekmenu_gui.REMOVE_MUSIC), "Title Theme.mp3 (3:07)")
-        self.assertEqual(name(None, Path("/x/" + "A" * 40 + ".mp3"), 5), "A" * 25 + "… (0:05)")
-        # under them: what happens to it
-        self.assertEqual(line(None), "Choose a song to play in SleekMenu.")
+        self.assertEqual(name([], [Path("/x/" + "A" * 40 + ".mp3")], [5]), "A" * 25 + "… (0:05)")
+        # several: how many, then their names, each cut like one alone
+        three = [music.OnCard("First Title", 60, 10), music.OnCard("Second Title", 70, 10),
+                 music.OnCard("Third Title", 80, 10)]
+        self.assertEqual(name(three), "3 songs: First Title, Second Title, Third Title")
+        self.assertEqual(name(three, sleekmenu_gui.REMOVE_MUSIC), "3 songs: First Title, Second Title, Third Title")
+        self.assertEqual(name(on_card, [Path("/x/a.wav"), Path("/x/" + "B" * 40 + ".mp3")], [1, 2]),
+                         "2 songs: a.wav, " + "B" * 25 + "…")
+        self.assertEqual(name(three[:1]), "First Title (1:00)", "one song: as it always was")
+        # under them: what happens to them
+        self.assertEqual(line([]), "Choose up to 8 songs. SleekMenu plays one each time it starts.")
+        self.assertEqual(line(None), sleekmenu_gui.MUSIC_HINT)
         self.assertEqual(line(on_card), "Plays in SleekMenu. Press Z on the console to turn it off.")
-        self.assertEqual(line(on_card, Path("/x/Credits.wav")), "Goes on the card at the next update.")
+        self.assertEqual(line(three), "Plays in SleekMenu. Press Z on the console to turn it off.")
+        self.assertEqual(line(on_card, [Path("/x/Credits.wav")]), "Goes on the card at the next update.")
+        self.assertEqual(line([], [Path("/x/a.wav"), Path("/x/b.wav"), Path("/x/c.wav")]),
+                         "3 songs will be put on the card at the next update.")
         self.assertEqual(line(on_card, sleekmenu_gui.REMOVE_MUSIC),
                          "The music comes off the card at the next update.")
         self.assertEqual(line(on_card, None, "This isn't a WAV file."), "This isn't a WAV file.")
@@ -1785,7 +1800,7 @@ class WindowTests(unittest.TestCase):
             self.assertIn("Colors", shown)
             self.assertIn("Music", shown)
             self.assertNotIn("Console", shown, "the group is called after what it holds")
-            self.assertEqual(note.get(), "Choose a song to play in SleekMenu.")
+            self.assertEqual(note.get(), sleekmenu_gui.MUSIC_HINT)
             self.assertEqual(name.get(), "")
             self.assertEqual(str(remove.cget("state")), "disabled", "nothing to remove")
 
@@ -1801,9 +1816,9 @@ class WindowTests(unittest.TestCase):
             self.assertEqual(name.get(), "Title Theme.wav (0:03)")
             self.assertEqual(note.get(), "Goes on the card at the next update.")
             self.assertEqual(str(remove.cget("state")), "normal", "a pick can be taken back")
-            self.assertIsNone(music.read_card(card), "nothing is written until the button is pressed")
+            self.assertEqual(music.read_card(card), [], "nothing is written until the button is pressed")
             run(root, state)
-            self.assertEqual(music.read_card(card).name, "Title Theme.wav")
+            self.assertEqual([song.name for song in music.read_card(card)], ["Title Theme.wav"])
             self.assertEqual(name.get(), "Title Theme.wav (0:03)")
             self.assertTrue(note.get().startswith("Plays in SleekMenu."), note.get())
             self.assertEqual(str(remove.cget("state")), "normal")
@@ -1820,10 +1835,97 @@ class WindowTests(unittest.TestCase):
             state["drop_music"]()
             self.assertEqual(note.get(), "The music comes off the card at the next update.")
             self.assertEqual(str(remove.cget("state")), "disabled")
-            self.assertIsNotNone(music.read_card(card))
+            self.assertTrue(music.read_card(card))
             run(root, state)
-            self.assertIsNone(music.read_card(card))
-            self.assertEqual(note.get(), "Choose a song to play in SleekMenu.")
+            self.assertEqual(music.read_card(card), [])
+            self.assertEqual(note.get(), sleekmenu_gui.MUSIC_HINT)
+            self.assertEqual(name.get(), "")
+            root.destroy()
+
+    def test_several_songs_are_picked_put_on_the_card_and_taken_off(self):
+        import wave
+        from tests.test_music import little, tone
+        from tools import music
+
+        def run(root, state):
+            state["start"]()
+            while state["runner"] is not None:
+                root.update()
+            self.assertEqual(state["last_code"], 0)
+
+        def song(name):
+            path = Path(scratch) / name
+            with wave.open(str(path), "wb") as file:
+                file.setnchannels(1)
+                file.setsampwidth(2)
+                file.setframerate(8000)
+                file.writeframes(little(tone(8000 * 2)))
+            return path
+
+        with tempfile.TemporaryDirectory() as scratch:
+            card = Path(scratch) / "CARD"
+            write_rom(card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
+            write_collection(card / "release-metadata.zip", "NWRE", zipped=True)
+            three = [song("First Title.wav"), song("Second Title.wav"), song("Third Title.wav")]
+            root = sleekmenu_gui.build(card=str(card))
+            root.update()
+            state = root.sleekmenu_state
+            note, remove, name = state["music_note"], state["buttons"]["music_remove"], state["music_name"]
+            self.assertEqual(note.get(), "Choose up to 8 songs. SleekMenu plays one each time it starts.")
+            self.assertEqual(name.get(), "", "no song")
+
+            # nine is one too many: said, and nothing is picked
+            state["pick_music"](three * 3)
+            self.assertEqual(note.get(), "You can choose up to 8 songs.")
+            self.assertEqual(name.get(), "")
+            self.assertEqual(str(remove.cget("state")), "disabled")
+            run(root, state)
+            self.assertEqual(music.read_card(card), [])
+
+            # three, in the order picked
+            state["pick_music"](three)
+            self.assertEqual(name.get(), "3 songs: First Title.wav, Second Title.wav, Third Title.wav")
+            self.assertEqual(note.get(), "3 songs will be put on the card at the next update.")
+            run(root, state)
+            self.assertEqual([found.name for found in music.read_card(card)],
+                             ["First Title.wav", "Second Title.wav", "Third Title.wav"])
+            self.assertEqual(name.get(), "3 songs: First Title.wav, Second Title.wav, Third Title.wav")
+            self.assertTrue(note.get().startswith("Plays in SleekMenu."), note.get())
+            # the names wrap inside the column rather than run past its edge
+            label, options = state["music_name_label"], state["columns"]["options"]
+            root.update()
+            self.assertLessEqual(label.winfo_rootx() + label.winfo_width(),
+                                 options.winfo_rootx() + options.winfo_width())
+            from tkinter import font as tkfont
+            line = tkfont.nametofont("TkDefaultFont").metrics("linespace")
+            self.assertGreater(label.winfo_height(), 1.5 * line, "on more than one line")
+            self.assertLessEqual(options.grid_bbox()[3], options.winfo_height(), "and nothing is cut off")
+
+            # one of several that can't be used is named
+            bad = Path(scratch) / "notes.wav"
+            bad.write_bytes(b"not a song")
+            state["pick_music"]([three[0], bad])
+            self.assertTrue(note.get().startswith("notes.wav: "), note.get())
+            self.assertEqual(name.get(), "3 songs: First Title.wav, Second Title.wav, Third Title.wav",
+                             "the card's songs are still shown")
+
+            # one song in place of three: the row is as it always was
+            state["pick_music"]([three[1]])
+            self.assertEqual(name.get(), "Second Title.wav (0:02)")
+            self.assertEqual(note.get(), "Goes on the card at the next update.")
+            run(root, state)
+            self.assertEqual([found.name for found in music.read_card(card)], ["Second Title.wav"])
+            self.assertFalse(music.track_path(card, 2).exists())
+            self.assertEqual(name.get(), "Second Title.wav (0:02)")
+
+            # Remove takes every song off
+            state["pick_music"](three)
+            run(root, state)
+            state["drop_music"]()
+            self.assertEqual(note.get(), "The music comes off the card at the next update.")
+            run(root, state)
+            self.assertEqual(music.read_card(card), [])
+            self.assertFalse(any(music.track_path(card, n).exists() for n in range(1, 9)))
             self.assertEqual(name.get(), "")
             root.destroy()
 
@@ -2013,7 +2115,7 @@ class WindowTests(unittest.TestCase):
             root.mainloop()
             self.assertEqual(root.sleekmenu_state["last_code"], 0)
             if music.decoder_available():
-                self.assertEqual(music.read_card(card).name, "tone.mp3")
+                self.assertEqual(music.read_card(card)[0].name, "tone.mp3")
             # and with no card at all it opens, finds nothing to act on, and closes
             root = sleekmenu_gui.build(smoke=True, card=str(Path(scratch) / "nowhere"))
             root.mainloop()

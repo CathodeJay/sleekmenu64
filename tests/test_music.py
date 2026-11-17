@@ -382,7 +382,7 @@ class CardTests(unittest.TestCase):
 
     def test_the_console_reads_what_the_tool_writes(self):
         """src/music.c's header check, on a file this module wrote."""
-        music.sync(self.card, self.song)
+        music.sync(self.card, [self.song])
         probe = Path(self.temporary.name) / "probe.c"
         probe.write_text(
             '#include "music.h"\n#include <stdio.h>\n'
@@ -407,22 +407,22 @@ class CardTests(unittest.TestCase):
 
     def test_sync_puts_the_song_on_and_takes_it_off(self):
         log = Log()
-        self.assertIsNone(music.read_card(self.card))
-        self.assertIsNone(music.sync(self.card, None, log=log))
+        self.assertEqual(music.read_card(self.card), [])
+        self.assertEqual(music.sync(self.card, None, log=log), [])
         self.assertEqual(log.text(), "", "told nothing, nothing happens")
         # the console had the last song off: a new song is heard
         music.setting_path(self.card).parent.mkdir(parents=True)
         music.setting_path(self.card).write_bytes(b"off\n")
-        on_card = music.sync(self.card, self.song, log=log)
+        [on_card] = music.sync(self.card, [self.song], log=log)
         self.assertEqual((on_card.name, round(on_card.seconds, 3)), ("Title Theme.wav", 3.0))
         self.assertFalse(music.setting_path(self.card).exists())
         self.assertIn("music:    Title Theme.wav, 0:03, 22050 Hz mono", log.text())
-        self.assertEqual(music.read_card(self.card), on_card)
+        self.assertEqual(music.read_card(self.card), [on_card])
         self.assertEqual(sorted(p.name for p in music.track_path(self.card).parent.iterdir()), ["music.wav64"])
         # off again, with the console's setting
         music.setting_path(self.card).write_bytes(b"off\n")
         log = Log()
-        self.assertIsNone(music.sync(self.card, None, remove=True, log=log))
+        self.assertEqual(music.sync(self.card, None, remove=True, log=log), [])
         self.assertFalse(music.track_path(self.card).exists())
         self.assertFalse(music.setting_path(self.card).exists())
         self.assertIn("music:    removed", log.text())
@@ -431,37 +431,37 @@ class CardTests(unittest.TestCase):
         self.assertEqual(log.text(), "", "nothing to remove")
 
     def test_a_song_that_cannot_be_read_leaves_the_card_as_it_was(self):
-        music.sync(self.card, self.song)
+        music.sync(self.card, [self.song])
         before = music.track_path(self.card).read_bytes()
         bad = Path(self.temporary.name) / "bad.wav"
         bad.write_bytes(b"junk")
         with self.assertRaises(music.MusicError):
-            music.sync(self.card, bad)
+            music.sync(self.card, [bad])
         self.assertEqual(music.track_path(self.card).read_bytes(), before)
         self.assertFalse(music.track_path(self.card).with_name("music.wav64.part").exists())
 
     def test_the_card_is_read_as_the_console_would(self):
-        music.sync(self.card, self.song)
+        music.sync(self.card, [self.song])
         target = music.track_path(self.card)
         good = target.read_bytes()
         for broken in (good[:20], b"WV64" + bytes([2, 1, 1, 16]) + good[8:], b"RIFF" + good[4:],
                        good[:5] + b"\x00\x02" + good[7:]):
             target.write_bytes(broken)
-            self.assertIsNone(music.read_card(self.card))
+            self.assertEqual(music.read_card(self.card), [])
         # cut short: what is there
         target.write_bytes(good[:len(good) - 22050 * 2])
-        self.assertAlmostEqual(music.read_card(self.card).seconds, 2.0)
-        self.assertIsNone(music.read_card(None))
+        self.assertAlmostEqual(music.read_card(self.card)[0].seconds, 2.0)
+        self.assertEqual(music.read_card(None), [])
 
     def test_a_run_puts_the_song_on_the_card_and_a_dry_run_does_not(self):
         with contextlib.redirect_stdout(io.StringIO()):
             log = Log()
-            sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, music=self.song, dry_run=True),
+            sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, music=[self.song], dry_run=True),
                                log=log, fail=log)
             self.assertFalse(music.track_path(self.card).exists())
-            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, music=self.song), log=log, fail=log)
+            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, music=[self.song]), log=log, fail=log)
             self.assertEqual(code, 0, log.text())
-            self.assertEqual(music.read_card(self.card).name, "Title Theme.wav")
+            self.assertEqual(music.read_card(self.card)[0].name, "Title Theme.wav")
             log = Log()
             sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card), log=log, fail=log)
             self.assertNotIn("music:", log.text(), "a run told nothing leaves the card's song")
@@ -471,31 +471,146 @@ class CardTests(unittest.TestCase):
             bad.write_bytes(b"junk")
             outcome = sleekmenu_prep.Outcome()
             log = Log()
-            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, music=bad), log=log, fail=log,
+            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, music=[bad]), log=log, fail=log,
                                       outcome=outcome)
             self.assertEqual(code, 0)
             # what is said depends on whether miniaudio had a go at it too
             said = "This file can't be read" if music.decoder_available() else "This isn't a WAV file."
             self.assertIn(f"music:    not changed ({said}", log.text())
             self.assertTrue(outcome.music_failure.startswith(said))
-            self.assertEqual(music.read_card(self.card).name, "Title Theme.wav")
+            self.assertEqual(music.read_card(self.card)[0].name, "Title Theme.wav")
             sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, no_music=True), log=log, fail=log)
             self.assertFalse(music.track_path(self.card).exists())
+
+    def songs(self, *names: str, seconds: int = 1) -> list[Path]:
+        """Short WAV songs beside the card, by name."""
+        made = []
+        for name in names:
+            path = Path(self.temporary.name) / name
+            with wave.open(str(path), "wb") as file:
+                file.setnchannels(1)
+                file.setsampwidth(2)
+                file.setframerate(8000)
+                file.writeframes(little(tone(8000 * seconds)))
+            made.append(path)
+        return made
+
+    def test_the_names_of_the_songs_agree_with_the_console(self):
+        self.assertEqual(card_layout.MUSIC_FILES,
+                         ("music.wav64",) + tuple(f"music-{n}.wav64" for n in range(2, 9)))
+        self.assertEqual(music.track_path(self.card, 2), self.card / "sleekmenu" / "music-2.wav64")
+        self.assertIn("#define SM_MUSIC_MAX_TRACKS 8u", (ROOT / "src" / "music.h").read_text(encoding="utf-8"))
+
+    def test_three_songs_are_written_as_songs_one_to_three(self):
+        log = Log()
+        music.setting_path(self.card).parent.mkdir(parents=True)
+        music.setting_path(self.card).write_bytes(b"off\n")
+        on_card = music.sync(self.card, self.songs("b.wav", "a.wav", "c.wav"), log=log)
+        self.assertEqual([song.name for song in on_card], ["b.wav", "a.wav", "c.wav"], "in the order given")
+        self.assertEqual(music.read_card(self.card), on_card)
+        self.assertEqual(sorted(p.name for p in music.track_path(self.card).parent.iterdir()),
+                         ["music-2.wav64", "music-3.wav64", "music.wav64"])
+        self.assertFalse(music.setting_path(self.card).exists(), "a new set is heard")
+        for name in ("b.wav", "a.wav", "c.wav"):
+            self.assertIn(f"music:    {name}, 0:01, 8000 Hz mono", log.text())
+
+    def test_a_set_of_one_replacing_three_deletes_songs_two_and_three(self):
+        music.sync(self.card, self.songs("a.wav", "b.wav", "c.wav"))
+        folder = music.track_path(self.card).parent
+        # what is not one of the tool's songs stays
+        (folder / "music-9.wav64").write_bytes(b"not ours")
+        (folder / "music-2.wav64.bak").write_bytes(b"not ours")
+        on_card = music.sync(self.card, [self.song])
+        self.assertEqual([song.name for song in on_card], ["Title Theme.wav"])
+        self.assertFalse(music.track_path(self.card, 2).exists())
+        self.assertFalse(music.track_path(self.card, 3).exists())
+        self.assertEqual(sorted(p.name for p in folder.iterdir()),
+                         ["music-2.wav64.bak", "music-9.wav64", "music.wav64"])
+
+    def test_nine_songs_are_refused_and_nothing_is_written(self):
+        music.sync(self.card, [self.song])
+        before = sorted((p.name, p.read_bytes()) for p in music.track_path(self.card).parent.iterdir())
+        nine = self.songs(*(f"{n}.wav" for n in range(1, 10)))
+        with self.assertRaises(music.MusicError) as refused:
+            music.sync(self.card, nine)
+        self.assertEqual(str(refused.exception), "You can choose up to 8 songs.")
+        self.assertEqual(sorted((p.name, p.read_bytes()) for p in music.track_path(self.card).parent.iterdir()),
+                         before)
+        # eight is the most, and fits
+        self.assertEqual(len(music.sync(self.card, nine[:8])), 8)
+
+    def test_remove_deletes_every_song(self):
+        music.sync(self.card, self.songs("a.wav", "b.wav", "c.wav"))
+        folder = music.track_path(self.card).parent
+        (folder / "music-9.wav64").write_bytes(b"not ours")
+        (folder / "theme.txt").write_bytes(b"grape\n")
+        music.setting_path(self.card).write_bytes(b"off\n")
+        log = Log()
+        self.assertEqual(music.sync(self.card, None, remove=True, log=log), [])
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), ["music-9.wav64", "theme.txt"])
+        self.assertIn("music:    removed", log.text())
+
+    def test_one_song_of_a_set_that_cannot_be_read_leaves_the_card_as_it_was(self):
+        music.sync(self.card, self.songs("a.wav", "b.wav"))
+        folder = music.track_path(self.card).parent
+        before = sorted((p.name, p.read_bytes()) for p in folder.iterdir())
+        bad = Path(self.temporary.name) / "bad.wav"
+        bad.write_bytes(b"junk")
+        with self.assertRaises(music.MusicError):
+            music.sync(self.card, self.songs("c.wav", "d.wav", "e.wav") + [bad])
+        self.assertEqual(sorted((p.name, p.read_bytes()) for p in folder.iterdir()), before, "no .part left")
+
+    def test_the_card_is_read_up_to_the_first_song_missing_or_unplayable(self):
+        music.sync(self.card, self.songs("a.wav", "b.wav", "c.wav"))
+        music.track_path(self.card, 2).write_bytes(b"RIFF")
+        self.assertEqual([song.name for song in music.read_card(self.card)], ["a.wav"])
+        music.track_path(self.card, 2).unlink()
+        self.assertEqual([song.name for song in music.read_card(self.card)], ["a.wav"], "as the console counts")
+
+    def test_a_run_puts_several_songs_on_the_card(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            log = Log()
+            code = sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, music=self.songs("a.wav", "b.wav")),
+                                      log=log, fail=log)
+            self.assertEqual(code, 0, log.text())
+            self.assertEqual([song.name for song in music.read_card(self.card)], ["a.wav", "b.wav"])
+            outcome = sleekmenu_prep.Outcome()
+            sleekmenu_prep.run(sleekmenu_prep.Options(card=self.card, music=[self.song] * 9), log=log, fail=log,
+                               outcome=outcome)
+            self.assertEqual(outcome.music_failure, "You can choose up to 8 songs.")
+            self.assertEqual([song.name for song in music.read_card(self.card)], ["a.wav", "b.wav"])
+
+    def test_the_command_line_takes_up_to_eight_songs(self):
+        with mock.patch.object(sleekmenu_prep, "run", return_value=0) as run:
+            sleekmenu_prep.main(["--card", str(self.card), "--music", "b.mp3", "--music", "a.mp3",
+                                 "--music", "c.mp3"])
+            self.assertEqual(run.call_args.args[0].music, [Path("b.mp3"), Path("a.mp3"), Path("c.mp3")])
+            run.reset_mock()
+            said = io.StringIO()
+            with contextlib.redirect_stderr(said), self.assertRaises(SystemExit) as stopped:
+                sleekmenu_prep.main(["--card", str(self.card)] + ["--music", "x.mp3"] * 9)
+            self.assertEqual(stopped.exception.code, 2)
+            self.assertIn("You can choose up to 8 songs.", said.getvalue())
+            run.assert_not_called()
+        helped = io.StringIO()
+        with contextlib.redirect_stdout(helped), self.assertRaises(SystemExit):
+            sleekmenu_prep.main(["--help"])
+        self.assertIn("a song to play in SleekMenu. Give it up to 8 times.", " ".join(helped.getvalue().split()))
 
     def test_the_command_line(self):
         with mock.patch.object(sleekmenu_prep, "run", return_value=0) as run:
             sleekmenu_prep.main(["--card", str(self.card), "--music", str(self.song)])
-            self.assertEqual((run.call_args.args[0].music, run.call_args.args[0].no_music), (self.song, False))
+            self.assertEqual((run.call_args.args[0].music, run.call_args.args[0].no_music), ([self.song], False))
             sleekmenu_prep.main(["--card", str(self.card), "--no-music"])
-            self.assertEqual((run.call_args.args[0].music, run.call_args.args[0].no_music), (None, True))
+            self.assertEqual((run.call_args.args[0].music, run.call_args.args[0].no_music), ([], True))
             sleekmenu_prep.main(["--card", str(self.card)])
-            self.assertEqual((run.call_args.args[0].music, run.call_args.args[0].no_music), (None, False))
+            self.assertEqual((run.call_args.args[0].music, run.call_args.args[0].no_music), ([], False))
 
     def test_the_song_is_never_a_game(self):
         from tools import library
         from tests.rom_fixtures import write_rom
         write_rom(self.card / "ROMS" / "Wave Race 64 (USA).z64", 0x11, 0x22, game_code="WR")
-        music.sync(self.card, self.song)
+        music.sync(self.card, [self.song])
         self.assertEqual(library.walk(self.card), ["ROMS/Wave Race 64 (USA).z64"])
 
     def test_durations_are_said_like_a_music_player(self):

@@ -25,6 +25,7 @@ static sm_music_info_t track;
 static char track_path[256];
 static bool available, enabled = true, playing;
 static uint32_t resume_at;
+static unsigned track_count, track_number;
 
 static uint32_t big32(const uint8_t *p) {
     return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
@@ -67,7 +68,39 @@ bool sm_music_setting_from_text(const char *text, size_t length) {
              (text[start + 2] | 0x20) == 'f');
 }
 
-static bool find_track(const char *path) {
+bool sm_music_track_path(char *out, size_t size, const char *first, unsigned number) {
+    const char *slash, *dot;
+    int written;
+    if (!out || !size || !first || number < 1u || number > SM_MUSIC_MAX_TRACKS) return false;
+    if (number == 1u) {
+        written = snprintf(out, size, "%s", first);
+    } else {
+        slash = strrchr(first, '/');
+        dot = strrchr(first, '.');
+        if (!dot || (slash && dot < slash)) dot = first + strlen(first);
+        written = snprintf(out, size, "%.*s-%u%s", (int)(dot - first), first, number, dot);
+    }
+    return written >= 0 && (size_t)written < size;
+}
+
+unsigned sm_music_pick(unsigned count, uint64_t seed) {
+    /* Both halves of the seed folded together, so the low bits come in as
+       they are, then mixed so that each bit of it moves every bit of the
+       result (MurmurHash3's finalizer). The remainder alone would let a
+       count of 2, 4 or 8 see only the lowest bits. */
+    uint32_t x = (uint32_t)seed ^ (uint32_t)(seed >> 32);
+    if (count <= 1u) return count;
+    x ^= x >> 16;
+    x *= 0x85EBCA6Bu;
+    x ^= x >> 13;
+    x *= 0xC2B2AE35u;
+    x ^= x >> 16;
+    return 1u + x % count;
+}
+
+/* Whether the file is a track that plays, and where its samples are. The
+   file is closed again whatever it holds. */
+static bool find_track(const char *path, sm_music_info_t *info) {
     uint8_t header[SM_MUSIC_HEADER_SIZE];
     long size;
     bool ok = false;
@@ -75,7 +108,7 @@ static bool find_track(const char *path) {
     if (!file) return false;
     if (fread(header, 1, sizeof(header), file) == sizeof(header) &&
         fseek(file, 0, SEEK_END) == 0 && (size = ftell(file)) > 0)
-        ok = sm_music_read_header(header, sizeof(header), (uint32_t)size, &track);
+        ok = sm_music_read_header(header, sizeof(header), (uint32_t)size, info);
     fclose(file);
     return ok;
 }
@@ -230,7 +263,8 @@ void sm_music_fade_out(void) {
 #endif
 
 void sm_music_init(const char *path, const char *setting_path) {
-    char text[16];
+    char text[16], candidate[sizeof(track_path)];
+    sm_music_info_t found[SM_MUSIC_MAX_TRACKS];
     size_t read = 0;
     FILE *file;
     if (playing) { stop(); playing = false; }
@@ -240,13 +274,26 @@ void sm_music_init(const char *path, const char *setting_path) {
         fclose(file);
         enabled = sm_music_setting_from_text(text, read);
     }
-    snprintf(track_path, sizeof(track_path), "%s", path);
-    available = strlen(path) < sizeof(track_path) && find_track(path);
+    /* The tracks, counted one file at a time: never two of them open. */
+    track_count = 0;
+    while (track_count < SM_MUSIC_MAX_TRACKS &&
+           sm_music_track_path(candidate, sizeof(candidate), path, track_count + 1u) &&
+           find_track(candidate, &found[track_count]))
+        track_count++;
+    /* The tick counter, read after the card has been read at start-up:
+       its low bits are what differs from one power-on to the next. */
+    track_number = sm_music_pick(track_count, get_ticks());
+    available = track_number > 0u &&
+        sm_music_track_path(track_path, sizeof(track_path), path, track_number);
+    if (available) track = found[track_number - 1u];
+    else track_count = track_number = 0;
     resume_at = 0;
     if (available && enabled) playing = start(0);
 }
 
 bool sm_music_available(void) { return available; }
+unsigned sm_music_track_count(void) { return available ? track_count : 0u; }
+unsigned sm_music_track(void) { return available ? track_number : 0u; }
 bool sm_music_enabled(void) { return enabled; }
 bool sm_music_playing(void) { return playing; }
 

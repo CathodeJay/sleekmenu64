@@ -3331,7 +3331,7 @@ static void draw_system(surface_t *s, const sm_layout_t *l, const sm_catalog_t *
     const sm_ui_t *ui) {
     sm_system_info_t info;
     const char *labels[7], *values[7];
-    char console[40], games[32];
+    char console[40], games[32], songs[24];
     int rows = 0;
     int width = l->safe_right - l->safe_left;
     int value_x = l->safe_left + 9 * SM_FONT_WIDTH + 6;
@@ -3348,8 +3348,11 @@ static void draw_system(surface_t *s, const sm_layout_t *l, const sm_catalog_t *
     if (info.firmware[0]) { labels[rows] = "FIRMWARE"; values[rows++] = info.firmware; }
     labels[rows] = "CONSOLE"; values[rows++] = console;
     labels[rows] = "GAMES"; values[rows++] = games;
+    /* With several songs on the card, how many there are to pick from. */
+    snprintf(songs, sizeof(songs), "On, %u songs", sm_music_track_count());
     labels[rows] = "MUSIC";
-    values[rows++] = !sm_music_available() ? "None" : sm_music_enabled() ? "On" : "Off";
+    values[rows++] = !sm_music_available() ? "None" : !sm_music_enabled() ? "Off"
+                   : sm_music_track_count() > 1u ? songs : "On";
     labels[rows] = "ABOUT"; values[rows++] = SM_ABOUT;
 
     graphics_draw_box(s, l->safe_left, l->safe_top, width, SM_HEADER_HEIGHT,

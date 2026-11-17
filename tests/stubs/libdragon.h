@@ -130,6 +130,9 @@ extern int sm_test_dir_opens;
 extern uint64_t sm_test_now_us;
 uint64_t get_ticks_us(void);
 uint64_t get_ticks_ms(void);
+/* The tick counter, which seeds the music's pick: whatever a test sets. */
+extern uint64_t sm_test_ticks;
+uint64_t get_ticks(void);
 
 /* --- the PI bus -----------------------------------------------------------
    What src/pro/pro_pi.c asks of libdragon. Nothing in the stub defines

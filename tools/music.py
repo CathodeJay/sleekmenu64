@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-"""Background music: one track the browser loops while it runs.
+"""Background music: up to eight songs, one of which the browser picks
+each time it starts and loops while it runs.
 
 The browser plays
 
-    sleekmenu/music.wav64
+    sleekmenu/music.wav64, music-2.wav64 ... music-8.wav64
 
-a WAV64 file, libdragon's audio container, holding plain 16-bit mono
-samples. Nothing is decoded on the console: the samples are streamed off
+numbered with no gaps, each a WAV64 file, libdragon's audio container,
+holding plain 16-bit mono samples. Nothing is decoded on the console: the samples are streamed off
 the card a few kilobytes at a time and handed to the mixer as they are, so
-the file is as simple as the console can play. This module writes it from
-the track the card owner picks.
+the file is as simple as the console can play. This module writes them
+from the songs the card owner picks, in the order they are given.
 
 A WAV file is read here, by the standard library alone, and keeps its own
 sample rate (one above 48 kHz is halved until it is not). Anything else --
@@ -21,8 +22,8 @@ is half the reading a stereo track would cost the cartridge while the
 browser draws.
 
 Whether the music plays is the console's choice, made on its filter page
-and kept in sleekmenu/music.txt. A new track clears that file, so the music
-someone just picked is heard.
+and kept in sleekmenu/music.txt. A new set of songs clears that file, so
+the music someone just picked is heard.
 
 The header records the name of the file the track came from, between the
 fields libdragon reads and the first sample (WAV64's start offset says
@@ -71,6 +72,10 @@ _HEADER = struct.Struct(">4sbbbbiiii")      # WAV64 version 2, as libdragon read
 _NAME_TAG = b"name"
 
 
+#: Said when more songs are picked than the card holds.
+TOO_MANY = f"You can choose up to {card_layout.MUSIC_MAX_SONGS} songs."
+
+
 class MusicError(Exception):
     """A track that cannot go on the card, said the way the window says it."""
 
@@ -93,8 +98,9 @@ class OnCard:
     size: int
 
 
-def track_path(card: Path) -> Path:
-    return card / card_layout.CARD_FOLDER / card_layout.MUSIC_FILE
+def track_path(card: Path, number: int = 1) -> Path:
+    """Song `number`, 1 to MUSIC_MAX_SONGS: music.wav64, then music-2.wav64..."""
+    return card / card_layout.CARD_FOLDER / card_layout.MUSIC_FILES[number - 1]
 
 
 def setting_path(card: Path) -> Path:
@@ -327,12 +333,9 @@ def encode(track: Track, name: str = "") -> bytes:
     return head + note + bytes(start - _HEADER.size - len(note)) + big.tobytes()
 
 
-def read_card(card: Path | None) -> OnCard | None:
-    """The track on the card, or None when there is none the browser would
-    play."""
-    if card is None:
-        return None
-    target = track_path(card)
+def _read_song(target: Path) -> OnCard | None:
+    """One song file as the browser reads it, or None when it would not
+    play it."""
     try:
         size = target.stat().st_size
         with target.open("rb") as file:
@@ -354,8 +357,22 @@ def read_card(card: Path | None) -> OnCard | None:
     return OnCard(name, count / rate, size)
 
 
-def write(card: Path, track: Track, name: str) -> Path:
-    target = track_path(card)
+def read_card(card: Path | None) -> list[OnCard]:
+    """The songs on the card the browser would play, first to last. Like
+    the browser, it stops at the first one missing or not playable."""
+    songs: list[OnCard] = []
+    if card is None:
+        return songs
+    for number in range(1, card_layout.MUSIC_MAX_SONGS + 1):
+        song = _read_song(track_path(card, number))
+        if song is None:
+            break
+        songs.append(song)
+    return songs
+
+
+def write(card: Path, track: Track, name: str, number: int = 1) -> Path:
+    target = track_path(card, number)
     target.parent.mkdir(parents=True, exist_ok=True)
     part = target.with_name(target.name + ".part")
     try:
@@ -367,28 +384,63 @@ def write(card: Path, track: Track, name: str) -> Path:
     return target
 
 
-def sync(card: Path, source: Path | None, remove: bool = False, log=None) -> OnCard | None:
-    """Put `source` on the card as its music, or take the music off with
-    `remove`, or leave the card as it is when told neither."""
+def _remove_songs(card: Path, first: int = 1) -> bool:
+    """Delete the tool's own song files from number `first` on. Nothing
+    else on the card is touched."""
+    removed = False
+    for number in range(first, card_layout.MUSIC_MAX_SONGS + 1):
+        target = track_path(card, number)
+        if target.exists():
+            target.unlink()
+            removed = True
+    return removed
+
+
+def sync(card: Path, sources=None, remove: bool = False, log=None) -> list[OnCard]:
+    """Put `sources` on the card as its songs, 1 to n in the order given,
+    or take every song off with `remove`, or leave the card as it is when
+    told neither. A song left from before past the new n is deleted.
+
+    Every song is converted and written beside its place, as a .part file,
+    before any song on the card is replaced: one that can't be used leaves
+    the card as it was."""
     say = log or (lambda _line: None)
     if remove:
-        removed = False
-        for target in (track_path(card), setting_path(card)):
-            if target.exists():
-                target.unlink()
-                removed = True
+        removed = _remove_songs(card)
+        if setting_path(card).exists():
+            setting_path(card).unlink()
+            removed = True
         if removed:
             say("music:    removed")
-        return None
-    if source is None:
+        return []
+    sources = list(sources or [])
+    if not sources:
         return read_card(card)
-    track = decode(source)
-    write(card, track, source.name)
-    # Turned off on the console for the last song is not a choice about
-    # this one.
+    if len(sources) > card_layout.MUSIC_MAX_SONGS:
+        raise MusicError(TOO_MANY)
+    written: list[tuple[Path, Path]] = []
+    lines = []
+    try:
+        for number, source in enumerate(sources, 1):
+            track = decode(source)
+            target = track_path(card, number)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            part = target.with_name(target.name + ".part")
+            written.append((part, target))
+            part.write_bytes(encode(track, source.name))
+            lines.append(f"music:    {source.name}, {duration(track.seconds)}, {track.rate} Hz mono "
+                         f"({part.stat().st_size / 1048576:.1f} MB)")
+        for part, target in written:
+            os.replace(part, target)
+    finally:
+        for part, _target in written:
+            if part.exists():
+                part.unlink()
+    _remove_songs(card, len(sources) + 1)
+    # Turned off on the console for the last songs is not a choice about
+    # these.
     if setting_path(card).exists():
         setting_path(card).unlink()
-    on_card = read_card(card)
-    say(f"music:    {source.name}, {duration(track.seconds)}, {track.rate} Hz mono"
-        + (f" ({on_card.size / 1048576:.1f} MB)" if on_card else ""))
-    return on_card
+    for line in lines:
+        say(line)
+    return read_card(card)

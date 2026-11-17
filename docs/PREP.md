@@ -92,9 +92,10 @@ only that. The card remembers the choice.
 - **Colors** picks the browser's colours; the squares beside it show the
   theme's background, title band, selection, accent and text. See
   [Themes](#themes).
-- **Music** is the song SleekMenu plays while you browse: **Choose…** picks
-  one, **Remove** takes it off. The line under it says which song is on the
-  card, or which one the next update puts there. See [Music](#music).
+- **Music** holds the songs SleekMenu plays while you browse, up to eight:
+  **Choose…** picks them, **Remove** takes them all off. The row says which
+  songs are on the card, or which ones the next update puts there. See
+  [Music](#music).
 
 **Saves**
 
@@ -368,11 +369,15 @@ colours they have on the controller.
 
 ## Music
 
-SleekMenu can loop one song while you browse. Choose it under **Theme** on
-the Card tab (`--music song.mp3` on the command line) and press Update
-card. The song is converted and written to `sleekmenu/music.wav64`; the
-file you picked stays where it is. **Remove** (`--no-music`) takes it off
-the card.
+SleekMenu can play up to eight songs. Each time it starts it picks one
+and loops it while you browse. Choose them under **Theme** on the Card
+tab, several at once in the file chooser, and press Update card. On the
+command line, give `--music song.mp3` once for each song. The songs are
+converted and written to `sleekmenu/music.wav64`, then `music-2.wav64` to
+`music-8.wav64`, in the order you chose them. The files you picked stay
+where they are. A new set replaces the songs on the card, and any left
+over from a longer set are deleted. More than eight are refused.
+**Remove** (`--no-music`) takes them all off the card.
 
 WAV files are always read. Other songs (MP3, M4A, FLAC, OGG, AIFF) go
 through the first decoder the computer has: the `miniaudio` package, which
@@ -385,7 +390,7 @@ formats are brought to 32 kHz. A three-minute song takes about 10 to 17 MB on th
 longer than 30 minutes are refused.
 
 The console turns the music on and off with its **MUSIC** row
-([CONSOLE.md](CONSOLE.md#music)). Putting a new song on the card turns it
+([CONSOLE.md](CONSOLE.md#music)). Putting new songs on the card turns it
 back on.
 
 ## Saves
@@ -486,7 +491,8 @@ card and run the tool again. The options mirror the window's:
   fetches the cheat codes and `--no-cheats` stops;
   `--direct-boot on` and `--direct-boot off` set an X7's start-up switch;
   `--theme` takes a theme's name in lower case (`--theme grape`);
-  `--music FILE` puts a song on the card and `--no-music` takes it off.
+  `--music FILE` puts a song on the card, up to eight times for eight
+  songs, and `--no-music` takes them all off.
 - `--backup-saves FILE` copies every save on the card to a zip, and
   `--restore-saves FILE` puts them back, keeping the saves that are newer
   on the card unless you add `--replace-newer`. Each does only that. See
@@ -524,7 +530,8 @@ What the tool writes, and what it leaves alone:
 /sleekmenu/shots-large.pak the same at 224×168, for the box view
 /sleekmenu/cheats/libretro/ cheat codes, one file per dump, when asked for
 /sleekmenu/theme.txt       the browser's theme, when you chose one
-/sleekmenu/music.wav64     the song the browser plays, when you chose one
+/sleekmenu/music.wav64     the song the browser plays, or the first of them
+/sleekmenu/music-2.wav64   the songs after the first, up to music-8.wav64
 /ED64/autoexec.v64         a copy of SleekMenu64.z64, when an X7 starts in it
 /ED64/menu.n64             a copy of SleekMenu64.z64, when a Pro starts in it
 /sleekmenu/favorites.txt   written by the browser as you star games

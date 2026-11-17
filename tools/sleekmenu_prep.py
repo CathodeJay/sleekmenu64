@@ -325,7 +325,8 @@ class Options:
     direct_boot: bool | None = None  # the console starts in SleekMenu: True, False, or None to
                                      # leave the card as it is and keep the copy in step
     theme: str | None = None        # the browser's colours, by a theme's id; None leaves the card's
-    music: Path | None = None       # a track to loop in the browser; None leaves the card's
+    music: list[Path] = field(default_factory=list)  # up to 8 songs for the browser to pick from,
+                                                     # as songs 1 to n; none leaves the card's
     no_music: bool = False          # take the music off the card
     browser: bool = False           # put this release's SleekMenu64.z64 on a card with an older one
                                     # or none (the command line and the window ask for it unless told
@@ -414,7 +415,7 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
         except OSError as error:
             log(f"theme:    not changed ({error})")
         # And its music.
-        if options.music is not None or options.no_music:
+        if options.music or options.no_music:
             try:
                 music.sync(card, options.music, options.no_music, log)
             except (OSError, music.MusicError) as error:
@@ -623,10 +624,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--theme", choices=[theme.id for theme in themes.THEMES], default=None,
                         help="the browser's colours on this card (the default is "
                              f"{themes.DEFAULT.id}); the card keeps the choice")
-    parser.add_argument("--music", type=Path, default=None, metavar="FILE",
-                        help="loop this song in the browser (WAV; MP3, M4A, FLAC, OGG and AIFF through "
-                             "miniaudio, macOS's afconvert or ffmpeg); the console's filter page turns it "
-                             "on and off")
+    parser.add_argument("--music", type=Path, action="append", default=[], metavar="FILE",
+                        help=f"a song to play in SleekMenu. Give it up to {card_layout.MUSIC_MAX_SONGS} times.")
     parser.add_argument("--no-music", action="store_true",
                         help="take the music off the card")
     saving = parser.add_mutually_exclusive_group()
@@ -655,6 +654,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.replace_newer and args.restore_saves is None:
         parser.error("--replace-newer goes with --restore-saves")
+    if len(args.music) > card_layout.MUSIC_MAX_SONGS:
+        parser.error(music.TOO_MANY)
     if args.backup_saves is not None or args.restore_saves is not None:
         return saves_only(args.card, args.backup_saves, args.restore_saves, args.replace_newer)
 

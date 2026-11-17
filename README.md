@@ -69,10 +69,10 @@ the six Funtastic colours (Jungle, Grape, Fire, Ice, Smoke, Watermelon),
 Atomic Purple and Gold. Change it on the console (Z, then the THEME row)
 or under **Theme** on the Game Catalog Manager's Card tab.
 
-**Music:** choose a song under **Theme** on the Game Catalog Manager's
-Card tab (MP3, WAV, FLAC or OGG) and SleekMenu plays it on a loop while
-you browse. It fades out when a game starts. Turn it on or off on the
-console with Z, then the MUSIC row.
+**Music:** choose up to eight songs under **Theme** on the Game Catalog
+Manager's Card tab (MP3, WAV, FLAC or OGG). SleekMenu plays one of them
+each time it starts, on a loop while you browse. It fades out when a game
+starts. Turn it on or off on the console with Z, then the MUSIC row.
 
 The Game Catalog Manager also shows your card the way the console will, and
 lets you give any game your own picture, description or facts; see

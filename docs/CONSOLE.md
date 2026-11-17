@@ -107,16 +107,17 @@ title bar names the genre you are in, spelled out.
 
 ## Music
 
-SleekMenu can play a song on a loop while you browse. Choose it in the Game
-Catalog Manager ([PREP.md](PREP.md#music)), which puts it on the card as
-`sleekmenu/music.wav64`. The music starts once the list is up and fades out
-when you start a game. If the game doesn't start, it picks up where it left
-off.
+SleekMenu can play a song on a loop while you browse. Choose up to eight
+in the Game Catalog Manager ([PREP.md](PREP.md#music)), which puts them on
+the card as `sleekmenu/music.wav64`, then `music-2.wav64` and on. Each time
+SleekMenu starts, it plays one of them. The music starts once the list is
+up and fades out when you start a game. If the game doesn't start, the same
+song picks up where it left off.
 
 To turn it off, press Z and go to the **MUSIC** row, the last one (up from
 the top row gets there at once): left or right turns it on or off, and you
 hear the change right away. B keeps the choice in `sleekmenu/music.txt`.
-The row says **None** when the card has no song. Choosing a new song in the
+The row says **None** when the card has no song. Choosing new songs in the
 Game Catalog Manager turns the music back on.
 
 ## System
@@ -124,7 +125,8 @@ Game Catalog Manager turns the music back on.
 Press Z, then A, for the **system** screen. It says which SleekMenu you
 have, which cartridge it runs on and, on the Pro, its firmware. It also
 says whether the console is NTSC, PAL or MPAL and whether an Expansion Pak
-is in, how many games the catalog has, and whether the music is on. Games
+is in, how many games the catalog has, and whether the music is on. With
+several songs on the card it says how many: **On, 3 songs**. Games
 the Game Catalog Manager set aside are not counted, and neither are files
 copied on since the last update. B goes back to the filter page.
 

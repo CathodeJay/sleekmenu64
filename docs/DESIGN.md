@@ -243,7 +243,7 @@ On the console the work is split into small modules:
 | `picture` | a cover shrunk by averaging, for the grid's tiles |
 | `ui` | list, grid and coverflow views, filters, the launch card and its screenshots, the box view, the cheats page, the system screen |
 | `theme` | the colours, by what each is for; the built-in themes and the card's choice of one |
-| `music` | the card's song, read ahead by the main loop and played by the audio interrupt, and whether it plays |
+| `music` | the card's songs and the one picked at start-up, read ahead by the main loop and played by the audio interrupt, and whether it plays |
 | `buttons` | the controller's buttons as pictures, and the help bar's lines of them |
 | `launch_policy` | suffix, magic, size and boot-code checks before anything boots |
 | `flashcart` / `launch` | one interface over the two cartridges; the X7 backend streams the ROM through libcart, the Pro backend (`src/pro/`) has the cartridge's MCU copy it |
@@ -420,6 +420,18 @@ interrupt is cleared too, so a game finds the audio as it is at power-on. A
 launch that comes back without booting starts it again where it was. The
 MUSIC row of the filter page turns it on and off like the theme row, at
 once, and writes `sleekmenu/music.txt` when the page is left.
+
+A card holds up to eight songs, `music.wav64` and `music-2.wav64` to
+`music-8.wav64`, with no gaps. At start-up the browser counts them. It
+opens each one, reads its header and closes it before the next, so the
+count never holds more than one file open, and it stops at the first
+song missing or not playable. Then it picks one, seeded by the tick
+counter, read after the catalog and the cheat pack are read off the card.
+What differs from one power-on to the next is mostly in the counter's
+lowest bits, so the pick folds its two halves together and mixes every
+bit into the result: a few ticks apart is enough to change the song.
+Only the song picked is opened to play. Turning the music off and on, and
+a launch that comes back, keep the song picked at start-up.
 
 **On the Pro, a DMA never shares a cache line.** Everything the Pro's MCU
 says comes back over the PI by DMA, which writes RDRAM behind the CPU's
