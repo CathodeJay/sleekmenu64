@@ -553,6 +553,42 @@ class DetailsCardReadsTests(unittest.TestCase):
         self.assertRegex(self.read("src/pro/pro_fs.h"), r"#define SM_PRO_FS_HANDLES 8u\b")
         self.assertIn("static unsigned open_limit = 1u;", self.read("src/cover_pack.c"))
 
+    def test_the_cheat_record_is_kept_in_memory(self):
+        """sleekmenu/cheats.txt is read once, behind a flag, and the save
+        keeps the copy as written. The player's own folder and the fetched
+        files are only tried when the listing at start-up saw them."""
+        io = self.read("src/cheats_io.c")
+        self.assertEqual(io.count("read_whole(SM_CHEATS_STATE_PATH"), 1)
+        load = self.body("src/cheats_io.c", "static void load_state(void)")
+        self.assertLess(load.index("if (state_loaded) return;"), load.index("read_whole(SM_CHEATS_STATE_PATH"))
+        self.assertIn("state_loaded = true;", load)
+        cheats = self.body("src/cheats_io.c", "bool sm_cheats_load(")
+        self.assertIn("load_state();", cheats)
+        self.assertNotIn("read_whole(", cheats)
+        save = self.body("src/cheats_io.c", "bool sm_cheats_save_state(")
+        self.assertLess(save.index("load_state();"), save.index("sm_cheats_state_update("))
+        self.assertLess(save.index('fopen(SM_CHEATS_STATE_PATH, "wb")'),
+                        save.index("memcpy(state_text, state_out, out_length);"))
+        self.assertIn("state_length = out_length;", save)
+        self.assertIn("state_loaded = false;", save)
+        # the attempts that need sleekmenu/cheats/ are guarded by what its
+        # listing found
+        self.assertIn("if (own_files && sm_cheats_file_from_rom_path(", cheats)
+        self.assertIn("if (!found && fetched_folder && sm_cheats_file_from_header(", cheats)
+        self.assertLess(cheats.index("own_files &&"), cheats.index("try_file(SM_CHEATS_DIR, by_file"))
+        self.assertLess(cheats.index("fetched_folder &&"), cheats.index("try_file(SM_CHEATS_FETCHED_DIR, by_file"))
+        # the pack's file is still read for every game
+        self.assertIn("found = try_file(SM_FIRMWARE_CHEATS_DIR, match.name, set, source);", cheats)
+        pack = self.body("src/cheats_io.c", "void sm_cheats_read_pack(")
+        self.assertIn("dir_findfirst(SM_CHEATS_DIR, &entry)", pack)
+        self.assertIn('entry.d_type == DT_REG && length > 4u && !strcasecmp(entry.d_name + length - 4u, ".cht")', pack)
+        self.assertIn("entry.d_type == DT_DIR && !strcasecmp(entry.d_name, fetched_name)", pack)
+        self.assertIn("SM_CHEATS_FETCHED_DIR + sizeof(SM_CHEATS_DIR)", pack)
+        self.assertLess(pack.index("own_files = false;"), pack.index("own_files = true;"))
+        self.assertLess(pack.index("fetched_folder = false;"), pack.index("fetched_folder = true;"))
+        paths = self.read("src/card_paths.h")
+        self.assertIn('#define SM_CHEATS_FETCHED_DIR SM_CHEATS_DIR "/libretro"', paths)
+
 
 class RetiredModuleTests(unittest.TestCase):
     """The hand-rolled X7 register driver and the FAT chain planner are gone.

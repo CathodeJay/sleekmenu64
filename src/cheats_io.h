@@ -15,7 +15,9 @@
 
 #ifdef __mips__
 /* List ED64/CHEATS into the pack, once. An absent folder leaves it empty
-   and read. */
+   and read. sleekmenu/cheats/ is listed too, to note whether it holds any
+   .cht of the player's own and the folder of fetched files: a game's
+   cheats are not looked for where there are none. */
 void sm_cheats_read_pack(sm_cheat_pack_t *pack);
 
 /* Fill the set for a game: the browser's own folder by file name; then the

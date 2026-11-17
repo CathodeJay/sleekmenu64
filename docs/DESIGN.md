@@ -564,6 +564,14 @@ file, the pack's when it is sure of the match (a file named like the ROM,
 or a region tag that agrees with the cartridge), the fetched file, and last
 the pack's guess (`sm_cheat_match_sure()` in `cheat_pack.c`).
 
+**What is read for each game.** At start-up the browser lists
+`sleekmenu/cheats/` beside the pack. When it holds no `.cht` of the
+player's own, a game's details do not look there, and when it has no
+`libretro/` folder, they do not look for a fetched file. The pack's file
+is read for each game. The record of what is on, `sleekmenu/cheats.txt`,
+is read once and kept in memory. The browser is the only one that writes
+it, and it updates its copy when it does.
+
 ## Maintaining the database
 
 Inspect and correct rows:
