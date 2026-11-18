@@ -2351,8 +2351,28 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     newer_text.grid(row=0, column=0, sticky="w")
     newer_link = ttk.Label(newer_bar, text="Download it", foreground=colors["info"], cursor="hand2")
     newer_link.grid(row=1, column=0, sticky="w")
+    # The saves the EverDrive and SleekMenu keep on the card, copied to the
+    # computer and back: at the foot of this column, with the rest of what
+    # is done to the card's files. Done at once, not by the button: nothing
+    # else changes on the card.
+    ttk.Label(body, text="Saves", font=strong).grid(row=12, column=0, sticky="w", pady=(18, 0))
+    saves_buttons = ttk.Frame(body)
+    saves_buttons.grid(row=13, column=0, sticky="w", pady=(6, 0))
+    back_up = ttk.Button(saves_buttons, text=BACK_UP_SAVES)
+    back_up.grid(row=0, column=0)
+    put_back = ttk.Button(saves_buttons, text=RESTORE_SAVES)
+    put_back.grid(row=0, column=1, padx=(6, 0))
+    saves_hint = ttk.Label(body, text=SAVES_HINT, foreground=colors["muted"], wraplength=width, justify="left")
+    saves_hint.grid(row=14, column=0, sticky="w", pady=(4, 0))
+    saves_note = tk.StringVar()
+    # What a backup or a restore did, under the hint, and only once there
+    # is something to say.
+    saves_said = ttk.Label(body, textvariable=saves_note, foreground=colors["muted"], wraplength=width,
+                           justify="left")
+    saves_said.grid(row=15, column=0, sticky="w", pady=(4, 0))
+    saves_said.grid_remove()
     fit(body, [(headline, 0), (detail, 0), (explain, 0), (result, 0), (browser_hint, 24), (boot_hint, 24),
-               (newer_text, 0)])
+               (newer_text, 0), (saves_hint, 0), (saves_said, 0)])
 
     # The choices, in groups: what each is about, not the order they came in.
     hints: list[tuple] = []
@@ -2457,24 +2477,6 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
             music_name_label.configure(wraplength=wrap)
     options.bind("<Configure>", wrap_music_name, add="+")
     hint(19, music_note)
-
-    # The saves the EverDrive and SleekMenu keep on the card, copied to the
-    # computer and back. Done at once, not by the button: nothing else
-    # changes on the card.
-    group(20, "Saves")
-    saves_buttons = ttk.Frame(options)
-    saves_buttons.grid(row=21, column=0, sticky="w", pady=(6, 0))
-    back_up = ttk.Button(saves_buttons, text=BACK_UP_SAVES)
-    back_up.grid(row=0, column=0)
-    put_back = ttk.Button(saves_buttons, text=RESTORE_SAVES)
-    put_back.grid(row=0, column=1, padx=(6, 0))
-    hint(22, SAVES_HINT)
-    saves_note = tk.StringVar()
-    # What a backup or a restore did, under the hint, and only once there
-    # is something to say: the column is the window's tallest.
-    saves_said = hint(23, saves_note)
-    saves_said.grid_configure(pady=(4, 0))
-    saves_said.grid_remove()
 
     fit(options, hints)
 

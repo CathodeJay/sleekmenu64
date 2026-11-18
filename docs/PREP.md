@@ -53,6 +53,9 @@ right.
   [Starting the console in SleekMenu](#starting-the-console-in-sleekmenu).
 - When a newer Game Catalog Manager is out, the tab says so under those,
   with a link to the file for your computer.
+- **Back up saves…**, at the bottom, copies every save on the card to one
+  file on your computer, and **Restore saves…** puts them back. Both act
+  at once, without the button. See [Saves](#saves).
 
 The right side is what most people never change. It applies the next time
 you press the button.
@@ -96,11 +99,6 @@ only that. The card remembers the choice.
   **Choose…** picks them, **Remove** takes them all off. The row says which
   songs are on the card, or which ones the next update puts there. See
   [Music](#music).
-
-**Saves**
-
-- **Back up saves…** copies every save on the card to one file on your
-  computer, and **Restore saves…** puts them back. See [Saves](#saves).
 
 ### Games
 

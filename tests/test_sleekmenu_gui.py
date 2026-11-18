@@ -1956,6 +1956,14 @@ class WindowTests(unittest.TestCase):
                           "Copies every save on the card to a file on your computer. On the Pro, start the "
                           "console once after playing first, so the last save is on the card."):
                 self.assertIn(words, shown)
+            # at the foot of the left column, with the rest of what is done
+            # to the card's files: the right column is the tall one, and a
+            # group under Theme ran past the bottom of a laptop's screen
+            left, right = state["columns"]["card"], state["columns"]["options"]
+            for button in (back_up, put_back):
+                self.assertTrue(str(button).startswith(str(left) + "."), "the Saves group is in the left column")
+                self.assertFalse(str(button).startswith(str(right) + "."))
+            self.assertLessEqual(left.grid_bbox()[3], left.winfo_height(), "and it all fits there")
             self.assertEqual(str(back_up.cget("state")), "disabled", "no card")
             self.assertEqual(str(put_back.cget("state")), "disabled", "no card")
 
