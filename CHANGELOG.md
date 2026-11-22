@@ -1,5 +1,29 @@
 # Changelog
 
+## 2.3.0
+
+**Upgrading from 2.2.2:** download the new Game Catalog Manager and press
+**Update card**. It puts SleekMenu 2.3.0 on the card.
+
+- **EverDrive-64 Pro: a game's details open much faster.** In a folder of
+  several hundred games they took about a second, most of it spent reading
+  the whole folder to look for a 64DD disk. They now take about a tenth of
+  a second, whatever the folder's size. Start no longer reads the folder
+  either, unless the game has a 64DD disk beside it.
+- **Several songs.** Choose up to eight under **Theme** on the Card tab.
+  SleekMenu plays one of them each time it starts.
+- **Back up and restore saves.** Two new buttons at the bottom of the Card
+  tab copy every save on the card to one file on your computer, and put
+  them back. A save on the card that differs from the backup is only
+  replaced if you say so. On the command line: `--backup-saves FILE` and
+  `--restore-saves FILE`.
+- **A System screen.** Press Z, then A. It shows which SleekMenu, which
+  EverDrive and firmware, and which console you have. Quote it when you
+  report a problem.
+- **Turn all cheats off at once.** Z on a game's cheats page.
+- **An empty list says why.** When SleekMenu can't read the SD card, or
+  finds no games on it, the bar at the bottom now says so.
+
 ## 2.2.2
 
 **Upgrading from 2.2.1:** download the new Game Catalog Manager and press
