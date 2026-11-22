@@ -506,6 +506,27 @@ def music_name(on_card=(), picked=None, seconds=()) -> str:
     return f"{len(songs)} songs: " + ", ".join(names)
 
 
+def fit_music_name(text: str, width: int, measure) -> str:
+    """`text` from music_name(), made to fit `width` on one line, as
+    `measure` (a font's) counts it. Several songs keep as many names as fit
+    and say how many more there are: "3 songs: First Title.wav and 2 more".
+    What still does not fit is cut, with "…". One line, so that a long
+    list of songs cannot push the column past the bottom of the window."""
+    if measure(text) <= width:
+        return text
+    head, sep, rest = text.partition(" songs: ")
+    if sep and head.isdigit():
+        names = rest.split(", ")
+        for kept in range(len(names) - 1, 0, -1):
+            tried = f"{head}{sep}{', '.join(names[:kept])} and {len(names) - kept} more"
+            if measure(tried) <= width:
+                return tried
+        text = f"{head}{sep}{names[0]} and {len(names) - 1} more"
+    while len(text) > 1 and measure(text + "…") > width:
+        text = text[:-1].rstrip()
+    return text + "…"
+
+
 def music_line(on_card=(), picked=None, problem: str = "") -> str:
     """Under the Music buttons: what happens to the songs, or why the files
     picked can't be used."""
@@ -2462,19 +2483,24 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
     remove_music = ttk.Button(music_buttons, text="Remove")
     remove_music.grid(row=0, column=1, padx=(6, 0))
     # The songs themselves, on the row, where the buttons that change them
-    # are. Several names wrap at the column's edge rather than run past it.
+    # are. One line, cut to the column's width: a list of songs that wrapped
+    # made the column taller than a laptop's screen. music_name_var holds
+    # the whole text, the label shows what fits of it.
     music_name_var = tk.StringVar()
-    music_name_label = ttk.Label(music_buttons, textvariable=music_name_var, justify="left")
+    music_name_shown = tk.StringVar()
+    music_name_label = ttk.Label(music_buttons, textvariable=music_name_shown, justify="left")
     music_name_label.grid(row=0, column=2, padx=(10, 0), sticky="w")
+    music_name_font = tkfont.nametofont("TkDefaultFont")
 
     def wrap_music_name(_event=None) -> None:
-        if not music_name_label.winfo_ismapped():
-            return
-        inset = music_name_label.winfo_rootx() - options.winfo_rootx()
-        wrap = max(160, options.winfo_width() - inset - 4)
-        if str(music_name_label.cget("wraplength")) != str(wrap):
-            music_name_label.configure(wraplength=wrap)
+        text = music_name_var.get()
+        if music_name_label.winfo_ismapped():
+            inset = music_name_label.winfo_rootx() - options.winfo_rootx()
+            text = fit_music_name(text, max(160, options.winfo_width() - inset - 4), music_name_font.measure)
+        if music_name_shown.get() != text:
+            music_name_shown.set(text)
     options.bind("<Configure>", wrap_music_name, add="+")
+    music_name_var.trace_add("write", lambda *_args: wrap_music_name())
     hint(19, music_note)
 
     fit(options, hints)

@@ -1891,15 +1891,23 @@ class WindowTests(unittest.TestCase):
                              ["First Title.wav", "Second Title.wav", "Third Title.wav"])
             self.assertEqual(name.get(), "3 songs: First Title.wav, Second Title.wav, Third Title.wav")
             self.assertTrue(note.get().startswith("Plays in SleekMenu."), note.get())
-            # the names wrap inside the column rather than run past its edge
+            # the names stay on one line, cut to the column: names that
+            # wrapped made the column taller than a Mac's window could grow
             label, options = state["music_name_label"], state["columns"]["options"]
-            root.update()
-            self.assertLessEqual(label.winfo_rootx() + label.winfo_width(),
-                                 options.winfo_rootx() + options.winfo_width())
             from tkinter import font as tkfont
             line = tkfont.nametofont("TkDefaultFont").metrics("linespace")
-            self.assertGreater(label.winfo_height(), 1.5 * line, "on more than one line")
+            longer = [song(f"{word} Theme From The Longest Game Ever Made.wav")
+                      for word in ("First", "Second", "Third", "Fourth")]
+            state["pick_music"](longer)
+            root.update()
+            self.assertTrue(name.get().startswith("4 songs: First Theme"), name.get())
+            shown = label.cget("text") or root.globalgetvar(str(label.cget("textvariable")))
+            self.assertRegex(shown, r"^4 songs: .*( and \d more|…)$", "what does not fit is cut")
+            self.assertLessEqual(label.winfo_rootx() + label.winfo_width(),
+                                 options.winfo_rootx() + options.winfo_width())
+            self.assertLess(label.winfo_height(), 1.5 * line, "on one line")
             self.assertLessEqual(options.grid_bbox()[3], options.winfo_height(), "and nothing is cut off")
+            state["pick_music"](three)
 
             # one of several that can't be used is named
             bad = Path(scratch) / "notes.wav"
@@ -2604,3 +2612,23 @@ class WindowTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MusicNameTests(unittest.TestCase):
+    """The Music row on one line: fit_music_name() with a measure that
+    counts characters, so no window is needed."""
+
+    def test_it_keeps_what_fits_and_says_how_many_more(self):
+        fit = sleekmenu_gui.fit_music_name
+        three = "3 songs: First Title.wav, Second Title.wav, Third Title.wav"
+        self.assertEqual(fit(three, 100, len), three, "all of it when it fits")
+        self.assertEqual(fit(three, 53, len), "3 songs: First Title.wav, Second Title.wav and 1 more")
+        self.assertEqual(fit(three, 52, len), "3 songs: First Title.wav and 2 more")
+        self.assertEqual(fit(three, 40, len), "3 songs: First Title.wav and 2 more")
+        cut = fit(three, 20, len)
+        self.assertTrue(cut.endswith("…") and len(cut) <= 20, cut)
+        one = "A Very Long Song Name That Goes On.mp3 (3:07)"
+        self.assertEqual(fit(one, 100, len), one)
+        cut = fit(one, 20, len)
+        self.assertTrue(cut.startswith("A Very") and cut.endswith("…") and len(cut) <= 20, cut)
+        self.assertEqual(fit("", 10, len), "")
