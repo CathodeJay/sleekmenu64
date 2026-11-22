@@ -524,6 +524,8 @@ void launch_note_sibling_disk(const char *catalog_path) {
     describe_ready();
 }
 
+bool launch_takes_sibling_disk(void) { return sm_flashcart()->attach_disk != NULL; }
+
 void launch_read_cheat_pack(void) { sm_cheats_read_pack(&cheat_pack); }
 const sm_cheat_pack_t *launch_cheat_pack(void) { return &cheat_pack; }
 bool launch_cheats_available(void) { return cheats_available; }

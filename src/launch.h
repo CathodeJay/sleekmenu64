@@ -161,6 +161,9 @@ const char *launch_sibling_disk(void);
    shows. Start lists the folder again and attaches what it finds there.
    Ignored on a cartridge without a drive. */
 void launch_note_sibling_disk(const char *catalog_path);
+/* Whether this cartridge can attach a 64DD disk to a game: only then is a
+   disk looked for when a game's details open. */
+bool launch_takes_sibling_disk(void);
 /* The prepared game as the launcher read it: its header in z64 order
    (SM_N64_HEADER_SIZE bytes, NULL for a disk image, which has none), its
    size, and whether it is a disk. False when nothing is prepared. */

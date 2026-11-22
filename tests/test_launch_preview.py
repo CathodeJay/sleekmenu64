@@ -368,6 +368,15 @@ class DetailsTimersTests(unittest.TestCase):
     ROM's symbol file gives each function its source line, so the release
     build's lines must not move either (src/perf.h)."""
 
+    def test_the_browser_compiles_with_the_measuring_code_in(self):
+        """make perf builds with -Werror, and the host tests build the
+        browser without the define, so a slip that only shows with the
+        timers in (an unbraced guard in front of an SM_PERF) would break the
+        measuring build with every test passing."""
+        subprocess.run(HOST_CC + ["-fsyntax-only", "-Itests/stubs", "-Ithird_party/n64flashcartmenu/boot",
+                                  "-DSM_SHOW_FRAME_TIME", "src/ui.c"],
+                       cwd=ROOT, check=True, capture_output=True, text=True)
+
     NAMES = ("launch_times", "launch_times_clear", "launch_times_lap", "sm_launch_times_t",
              "SM_PREP_ROM", "SM_PREP_DB", "SM_PREP_DISK", "SM_PREP_CHEATS", "SM_PREP_STEPS",
              "prepare_times", "sm_pro_fs_counters", "sm_pro_fs_counters_t",

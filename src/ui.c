@@ -1018,6 +1018,20 @@ static void settle_on_a_new_list(sm_ui_t *ui, const sm_catalog_t *catalog) {
    dropped into a slot by that position -- rather than fifteen walks looking
    for one path each. Gaps are left by games that have since come off the
    card, and compacted away afterwards. */
+/* The 64DD disks the catalog knows, by index, found in one pass over every
+   record and kept until the list is rebuilt or the catalog grows. Walking
+   every record each time a game's details opened cost about 45 ms on a card
+   of 3,400 games, for disks most cards do not have. Past SM_UI_DISKS_MAX,
+   the lookup walks every record as before. */
+#define SM_UI_DISKS_MAX 64u
+static struct {
+    bool known, too_many;
+    const sm_catalog_t *catalog;
+    const void *data;
+    uint32_t total, count;
+    uint32_t index[SM_UI_DISKS_MAX];
+} disks;
+
 static void rebuild_history(sm_ui_t *ui, const sm_catalog_t *catalog) {
     uint32_t slots[SM_HISTORY_MAX];
     uint32_t i;
@@ -1100,6 +1114,7 @@ static void rebuild(sm_ui_t *ui, sm_catalog_t *catalog) {
     uint32_t folders_end;
     bool remembered = false;
     ui->item_count = 0;
+    disks.known = false;
     /* The folder changed: what the card has here beyond the catalog is
        either remembered from earlier and listed now, or read over the next
        frames and listed then. A card with no catalog was scanned whole at
@@ -1592,17 +1607,38 @@ static uint32_t catalog_games(const sm_catalog_t *catalog) {
     return games;
 }
 
+static void know_disks(const sm_catalog_t *catalog) {
+    uint32_t total = catalog_total(catalog);
+    if (disks.known && disks.catalog == catalog && disks.data == catalog->data && disks.total == total) return;
+    disks.known = true;
+    disks.too_many = false;
+    disks.catalog = catalog;
+    disks.data = catalog->data;
+    disks.total = total;
+    disks.count = 0;
+    for (uint32_t i = 0; i < total; i++) {
+        sm_game_t game;
+        if (!catalog_get(catalog, i, &game) || (game.flags & SM_FLAG_SET_ASIDE)) continue;
+        if (!launch_suffix_is_disk(game.path)) continue;
+        if (disks.count == SM_UI_DISKS_MAX) { disks.too_many = true; return; }
+        disks.index[disks.count++] = i;
+    }
+}
+
 /* The 64DD disk beside a ROM, as the catalog knows the card: the one named
    like the ROM, otherwise the first in name order, "" for none. Files the
    browser found since the last update count, set-aside ones do not. Nothing
    is read off the card. */
 static const char *catalog_sibling_disk(const sm_catalog_t *catalog, const char *rom_path) {
     const char *best = "";
-    uint32_t total = catalog_total(catalog);
+    uint32_t total;
     if (launch_suffix_is_disk(rom_path)) return best;
-    for (uint32_t i = 0; i < total; i++) {
+    know_disks(catalog);
+    total = disks.too_many ? catalog_total(catalog) : disks.count;
+    for (uint32_t k = 0; k < total; k++) {
         sm_game_t game;
         bool same_name;
+        uint32_t i = disks.too_many ? k : disks.index[k];
         if (!catalog_get(catalog, i, &game) || (game.flags & SM_FLAG_SET_ASIDE)) continue;
         if (!launch_disk_beside(rom_path, game.path, &same_name)) continue;
         if (same_name) return game.path;
@@ -1620,7 +1656,7 @@ static void open_card(sm_ui_t *ui, const sm_catalog_t *catalog, const sm_layout_
        the game is looked for in the catalog, not in the folder. */
     sm_folder_scan_yield(&ui->scan); SM_PERF(ui_card_times_begin();)
     if (launch_prepare(game->path) == SM_LAUNCH_OK) { SM_PERF(launch_times_lap(-1);)
-        launch_note_sibling_disk(catalog_sibling_disk(catalog, game->path)); SM_PERF(launch_times_lap(SM_PREP_DISK);)
+        if (launch_takes_sibling_disk()) { launch_note_sibling_disk(catalog_sibling_disk(catalog, game->path)); } SM_PERF(launch_times_lap(SM_PREP_DISK);)
     } SM_PERF(ui_card_times_lap(SM_CARD_PREP);)
     ui->status = launch_status_message();
     ui->diagnostics = false;

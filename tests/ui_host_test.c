@@ -94,6 +94,8 @@ void launch_note_sibling_disk(const char *path) {
     snprintf(fake_sibling, sizeof(fake_sibling), "%s", path);
     fake_sibling_notes++;
 }
+static bool fake_takes_disk = true;      /* false: a cartridge with no 64DD drive, the X7 */
+bool launch_takes_sibling_disk(void) { return fake_takes_disk; }
 void launch_cancel(void) { fake_selected[0] = '\0'; fake_sibling[0] = '\0'; }
 /* The header the launcher read for the prepared game, when a test gives it
    one. Without it the launcher has nothing to hand out, as after a failed
@@ -2717,6 +2719,64 @@ int main(void) {
         assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, "Alone/Solo.z64"));
         assert(fake_sibling_notes == notes + 1 && fake_sibling[0] == '\0');
         frame(PRESS(back)); frame(PRESS(back));
+    }
+
+    /* ---- no disk is looked for on a cartridge that cannot take one ------ */
+    {
+        static const row_t rows[] = {
+            {"Game.ndd", "Game Disk", "Action", 0, "", 0, NULL},
+            {"Game.z64", "Game", "Action", 0, "", 0, NULL},
+        };
+        int notes;
+        start(rows, 2u);
+        settle();
+        fake_takes_disk = false;
+        cursor_to("Game.z64");
+        notes = fake_sibling_notes;
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_selected, "Game.z64"));
+        assert(fake_sibling_notes == notes);
+        frame(PRESS(back));
+        fake_takes_disk = true;
+    }
+
+    /* ---- the disks are found again when the catalog changes ------------- */
+    {
+        /* Same catalog, same number of records, the disk elsewhere: what was
+           found for the last catalog must not answer for this one. */
+        static const row_t rows[] = {
+            {"Alone/Solo.z64", "Solo", "Action", 0, "", 0, NULL},
+            {"Disk/Other.z64", "Other", "Action", 0, "", 0, NULL},
+            {"Game.z64", "Game", "Action", 0, "", 0, NULL},
+            {"Other.z64", "Other", "Action", 0, "", 0, NULL},
+            {"Planet.z64", "Planet", "Action", 0, "", 0, NULL},
+            {"Zebra.ndd", "Zebra Disk", "Action", 0, "", 0, NULL},
+        };
+        start(rows, 6u);
+        settle();
+        cursor_to("Game.z64");
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_sibling, "Zebra.ndd"));
+        frame(PRESS(back));
+    }
+
+    /* ---- more disks than are kept: every record is walked, as before ---- */
+    {
+        enum { DISKS = 70 };
+        static row_t rows[DISKS + 2];
+        static char paths[DISKS][16];
+        for (int d = 0; d < DISKS; d++) {
+            snprintf(paths[d], sizeof(paths[d]), "Disk %02d.ndd", d);
+            rows[d] = (row_t){paths[d], paths[d], "Action", 0, "", 0, NULL};
+        }
+        rows[DISKS] = (row_t){"Game.z64", "Game", "Action", 0, "", 0, NULL};
+        rows[DISKS + 1] = (row_t){"Game.ndd", "Game Disk", "Action", 0, "", 0, NULL};
+        start(rows, DISKS + 2);
+        settle();
+        cursor_to("Game.z64");
+        frame(PRESS(select));
+        assert(ui.screen == SM_SCREEN_LAUNCH_DETAILS && !strcmp(fake_sibling, "Game.ndd"));
+        frame(PRESS(back));
     }
 
     /* ---- the card's facts come from the header the launcher read -------- */
