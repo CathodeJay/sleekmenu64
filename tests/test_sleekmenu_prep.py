@@ -321,8 +321,8 @@ class EntryPointTests(unittest.TestCase):
         (saves.folder(self.card) / mario).unlink()
         write_tree(self.card, {"Paper Mario (USA).fla": b"played since"}, when=PLAYED + 3600)
         self.assertEqual(self.run_prep("--restore-saves", str(backup)), 0)
-        self.assertEqual(self.output, "Put 1 save back. 1 newer save on the card was kept.\n")
-        self.assertEqual(self.run_prep("--restore-saves", str(backup), "--replace-newer"), 0)
+        self.assertEqual(self.output, "Put 1 save back. 1 save on the card was kept.\n")
+        self.assertEqual(self.run_prep("--restore-saves", str(backup), "--replace-changed"), 0)
         self.assertEqual(self.output, "Put 1 save back.\n")
         self.assertEqual(read_tree(self.card), X7_TREE)
         self.assertFalse((self.card / card_layout.CARD_FOLDER).exists(), "only that, no catalog")
@@ -332,8 +332,8 @@ class EntryPointTests(unittest.TestCase):
             self.assertEqual(sleekmenu_prep.main(["--card", str(self.card), "--restore-saves",
                                                   str(self.card / "release-metadata.zip")]), 1)
         self.assertEqual(errors.getvalue(), "This file isn't a SleekMenu saves backup.\n")
-        # --replace-newer means nothing alone, and the two can't go together
-        for wrong in (["--replace-newer"], ["--backup-saves", str(backup), "--restore-saves", str(backup)]):
+        # --replace-changed means nothing alone, and the two can't go together
+        for wrong in (["--replace-changed"], ["--backup-saves", str(backup), "--restore-saves", str(backup)]):
             with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
                 sleekmenu_prep.main(["--card", str(self.card), *wrong])
 

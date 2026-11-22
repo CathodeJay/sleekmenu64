@@ -48,10 +48,6 @@ MANIFEST = "sleekmenu-saves.json"
 TREE = card_layout.GAMEDATA_FOLDER + "/"
 #: What this module writes and the newest it reads.
 FORMAT = 1
-#: A zip keeps a file's time to two seconds; a file on the card no newer
-#: than that is the backup's own.
-SLACK_SECONDS = 2
-
 NOT_A_BACKUP = "This file isn't a SleekMenu saves backup."
 NO_SAVES = "There are no saves on this card yet."
 
@@ -84,8 +80,8 @@ class Backup:
 @dataclass
 class Plan:
     """What a restore would do with each save in the backup."""
-    put: list = field(default_factory=list)       # missing from the card, or older there
-    newer: list = field(default_factory=list)     # changed on the card since the backup
+    put: list = field(default_factory=list)       # missing from the card
+    changed: list = field(default_factory=list)   # on the card, and not as the backup has it
     same: list = field(default_factory=list)      # already on the card as it is
 
 
@@ -216,16 +212,17 @@ def _plan(card: Path, archive: zipfile.ZipFile, backup_: Backup) -> Plan:
             plan.put.append(name)
         elif _same(archive, info, target):
             plan.same.append(name)
-        elif target.stat().st_mtime > _when(info) + SLACK_SECONDS:
-            plan.newer.append(name)
         else:
-            plan.put.append(name)
+            # Whatever its date: the cartridge's clock decides a save's date,
+            # and a clock that is wrong would pass a save played since the
+            # backup for an older one.
+            plan.changed.append(name)
     return plan
 
 
 def plan(card: Path, zip_path: Path) -> Plan:
     """What restore() would do, without doing it: for the question about
-    saves that are newer on the card."""
+    saves on the card that differ from the backup."""
     with _open(zip_path) as archive:
         return _plan(card, archive, _read(archive))
 
@@ -244,16 +241,17 @@ def _write(archive: zipfile.ZipFile, info: zipfile.ZipInfo, target: Path) -> Non
     os.utime(target, (when, when))
 
 
-def restore(card: Path, zip_path: Path, replace_newer: bool = False) -> Restored:
-    """The backup's saves back under ED64/gamedata/. Saves newer on the
-    card are kept unless `replace_newer`. Nothing is deleted."""
+def restore(card: Path, zip_path: Path, replace_changed: bool = False) -> Restored:
+    """The backup's saves back under ED64/gamedata/. A save on the card that
+    differs from the backup's is kept unless `replace_changed`. Nothing is
+    deleted."""
     with _open(zip_path) as archive:
         held = _read(archive)
         todo = _plan(card, archive, held)
-        writing = todo.put + (todo.newer if replace_newer else [])
+        writing = todo.put + (todo.changed if replace_changed else [])
         for name in writing:
             _write(archive, archive.getinfo(TREE + name), folder(card) / name)
-    return Restored(len(writing), 0 if replace_newer else len(todo.newer), len(todo.same))
+    return Restored(len(writing), 0 if replace_changed else len(todo.changed), len(todo.same))
 
 
 # -- what the window and the terminal say ------------------------------------
@@ -266,17 +264,21 @@ def restore_question(held: Backup) -> str:
     return f"This backup holds {count_of(held.count)} from {spoken_date(held.made)}. Put them back on the card?"
 
 
-def newer_question(count: int) -> str:
+def changed_question(count: int) -> str:
     if count == 1:
-        return "1 save on the card is newer than the backup."
-    return f"{count:,} saves on the card are newer than the backup."
+        return "1 save on the card differs from the backup."
+    return f"{count:,} saves on the card differ from the backup."
+
+
+def keep_label(count: int) -> str:
+    return "Keep the one on the card" if count == 1 else "Keep the ones on the card"
 
 
 def restored_line(result: Restored) -> str:
     line = f"Put {count_of(result.put)} back."
     if result.kept == 1:
-        line += " 1 newer save on the card was kept."
+        line += " 1 save on the card was kept."
     elif result.kept:
-        line += f" {result.kept:,} newer saves on the card were kept."
+        line += f" {result.kept:,} saves on the card were kept."
     return line
 

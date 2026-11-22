@@ -73,8 +73,7 @@ BACK_UP_SAVES = "Back up saves…"
 RESTORE_SAVES = "Restore saves…"
 #: The answers to the questions before a restore.
 PUT_THEM_BACK = "Put them back"
-KEEP_NEWER = "Keep the newer ones"
-REPLACE_NEWER = "Replace them"
+REPLACE_CHANGED = "Replace them"
 CANCEL = "Cancel"
 SAVES_FAILED = ("The saves couldn't be backed up. Check that the card is still in, then try again. "
                 "See the Log tab for details.")
@@ -2784,13 +2783,14 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
             held = saves.inspect(source)
             if ask(root, saves.restore_question(held), [PUT_THEM_BACK, CANCEL]) != PUT_THEM_BACK:
                 return
-            newer = len(saves.plan(chosen, source).newer)
+            changed = len(saves.plan(chosen, source).changed)
             replace = False
-            if newer:
-                answer = ask(root, saves.newer_question(newer), [KEEP_NEWER, REPLACE_NEWER, CANCEL])
+            if changed:
+                answer = ask(root, saves.changed_question(changed),
+                             [saves.keep_label(changed), REPLACE_CHANGED, CANCEL])
                 if answer is None:
                     return
-                replace = answer == REPLACE_NEWER
+                replace = answer == REPLACE_CHANGED
             result = saves.restore(chosen, source, replace)
         except saves.SavesError as error:
             saves_said_it(str(error), False)
@@ -2799,7 +2799,7 @@ def build(smoke: bool = False, card: str = "", metadata: str = "", song: str = "
             say(f"saves:    {error}")
             saves_said_it(RESTORE_FAILED, False)
             return
-        say(f"saves:    {plural(result.put, 'save')} put back from {source}, {result.kept:,} newer kept, "
+        say(f"saves:    {plural(result.put, 'save')} put back from {source}, {result.kept:,} on the card kept, "
             f"{result.same:,} already on the card")
         saves_said_it(saves.restored_line(result), True)
         refresh()

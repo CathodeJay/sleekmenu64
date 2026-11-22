@@ -2013,16 +2013,16 @@ class WindowTests(unittest.TestCase):
                                       "Put them back on the card?", ["Put them back", "Cancel"])])
             self.assertFalse((saves.folder(card) / mario).exists())
 
-            # then about the saves that are newer on the card
+            # then about the saves on the card that differ from the backup
             asked.clear()
             with answering("Put them back", None):
                 state["restore_saves"](backup)
-            self.assertEqual(asked[1], ("1 save on the card is newer than the backup.",
-                                        ["Keep the newer ones", "Replace them", "Cancel"]))
+            self.assertEqual(asked[1], ("1 save on the card differs from the backup.",
+                                        ["Keep the one on the card", "Replace them", "Cancel"]))
             self.assertFalse((saves.folder(card) / mario).exists(), "Cancel writes nothing")
-            with answering("Put them back", "Keep the newer ones"):
+            with answering("Put them back", "Keep the one on the card"):
                 state["restore_saves"](backup)
-            self.assertEqual(note.get(), "Put 1 save back. 1 newer save on the card was kept.")
+            self.assertEqual(note.get(), "Put 1 save back. 1 save on the card was kept.")
             self.assertEqual((saves.folder(card) / mario).read_bytes(), X7_TREE[mario])
             self.assertEqual((saves.folder(card) / "Paper Mario (USA).fla").read_bytes(), b"played since")
             with answering("Put them back", "Replace them"):
@@ -2065,8 +2065,8 @@ class WindowTests(unittest.TestCase):
                     button.invoke()
             for word, answer in (("Replace them", "Replace them"), ("Cancel", None)):
                 root.after(20, lambda word=word: press(word))
-                self.assertEqual(sleekmenu_gui.ask(root, "12 saves on the card are newer than the backup.",
-                                                   ["Keep the newer ones", "Replace them", "Cancel"]), answer)
+                self.assertEqual(sleekmenu_gui.ask(root, "12 saves on the card differ from the backup.",
+                                                   ["Keep the ones on the card", "Replace them", "Cancel"]), answer)
             root.destroy()
 
     def test_the_window_grows_until_nothing_in_a_column_is_cut_off(self):

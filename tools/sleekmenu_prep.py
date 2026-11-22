@@ -548,14 +548,14 @@ def run(options: Options, log=print, fail=None, progress_factory=None, cancel=No
     return 0
 
 
-def saves_only(card: Path | None, backup: Path | None, restore: Path | None, replace_newer: bool = False) -> int:
+def saves_only(card: Path | None, backup: Path | None, restore: Path | None, replace_changed: bool = False) -> int:
     """--backup-saves or --restore-saves: that, and nothing else."""
     try:
         card = find_card(card)
         if backup is not None:
             print(saves.backed_up_line(saves.backup(card, backup), backup))
         else:
-            print(saves.restored_line(saves.restore(card, restore, replace_newer)))
+            print(saves.restored_line(saves.restore(card, restore, replace_changed)))
     except saves.SavesError as error:
         print(error, file=sys.stderr)
         return 1
@@ -633,9 +633,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="copy every save in ED64/gamedata/ to this zip, and do nothing else")
     saving.add_argument("--restore-saves", type=Path, default=None, metavar="FILE",
                         help="put the saves in a backup made by --backup-saves back on the card, and do "
-                             "nothing else. A save that is newer on the card is kept, and nothing is deleted")
-    parser.add_argument("--replace-newer", action="store_true",
-                        help="with --restore-saves: replace the saves that are newer on the card too")
+                             "nothing else. A save on the card that differs from the backup is kept, and nothing "
+                             "is deleted")
+    parser.add_argument("--replace-changed", action="store_true",
+                        help="with --restore-saves: replace the saves on the card that differ from the backup too")
     parser.add_argument("--gui", action="store_true",
                         help="open the window instead of running in the terminal")
     parser.add_argument("--version", action="version", version=f"%(prog)s {version.VERSION}")
@@ -652,12 +653,12 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         return sleekmenu_gui.main([])
 
-    if args.replace_newer and args.restore_saves is None:
-        parser.error("--replace-newer goes with --restore-saves")
+    if args.replace_changed and args.restore_saves is None:
+        parser.error("--replace-changed goes with --restore-saves")
     if len(args.music) > card_layout.MUSIC_MAX_SONGS:
         parser.error(music.TOO_MANY)
     if args.backup_saves is not None or args.restore_saves is not None:
-        return saves_only(args.card, args.backup_saves, args.restore_saves, args.replace_newer)
+        return saves_only(args.card, args.backup_saves, args.restore_saves, args.replace_changed)
 
     try:
         return run(Options(card=args.card, roms=args.roms, metadata=args.metadata,

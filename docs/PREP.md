@@ -402,16 +402,19 @@ save is on the card.
 
 **Restore saves…** puts a backup's saves back in `ED64/gamedata/`. It says
 how many saves the backup holds and from which day, and asks first. A save
-that is the same on the card is left alone. A save you played on since the
-backup was made is newer on the card, and the window asks whether to keep
-it or replace it with the backup's. Nothing on the card is deleted: a save
+that is the same on the card is left alone. When a save on the card
+differs from the backup's, the window asks whether to keep the one on the
+card or replace it with the backup's. It does not go by the dates: the
+cartridge's clock sets them, and a clock that is wrong would make a save
+you played since the backup look older. Nothing on the card is deleted: a save
 that is not in the backup stays. A zip that is not a backup made here is
 refused.
 
 Each save is copied as it is, under its own name. The tool never changes
 what is inside one. On the command line, `--backup-saves FILE` and
 `--restore-saves FILE` do the same, and nothing else. A restore there keeps
-the newer saves unless you add `--replace-newer`.
+the saves on the card that differ from the backup unless you add
+`--replace-changed`.
 
 ## Versions
 
@@ -492,8 +495,9 @@ card and run the tool again. The options mirror the window's:
   `--music FILE` puts a song on the card, up to eight times for eight
   songs, and `--no-music` takes them all off.
 - `--backup-saves FILE` copies every save on the card to a zip, and
-  `--restore-saves FILE` puts them back, keeping the saves that are newer
-  on the card unless you add `--replace-newer`. Each does only that. See
+  `--restore-saves FILE` puts them back, keeping the saves on the card that
+  differ from the backup unless you add `--replace-changed`. Each does only
+  that. See
   [Saves](#saves).
 - `--keep-browser` leaves `SleekMenu64.z64` on the card as it is; by
   default an older one, or none, is replaced by this release's.

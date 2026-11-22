@@ -103,22 +103,29 @@ class SavesTests(unittest.TestCase):
         for name in PRO_TREE:
             self.assertEqual((saves.folder(self.card) / name).stat().st_mtime, later)
 
-    def test_a_save_newer_on_the_card_is_kept_unless_asked_and_an_older_one_is_replaced(self):
+    def test_a_save_that_differs_on_the_card_is_kept_unless_asked_whatever_its_date(self):
+        """The cartridge's clock dates a save. A clock that is wrong makes a
+        save played since the backup look older, so the dates decide
+        nothing: a save that differs is kept unless the owner says
+        otherwise, and one missing from the card is put back."""
         write_tree(self.card, X7_TREE)
         saves.backup(self.card, self.zip)
         mario, zelda = "Super Mario 64 (USA).eep", "Legend of Zelda, The - Ocarina of Time (USA).srm"
+        missing = "Paper Mario (USA).fla"
+        self.assertIn(missing, X7_TREE)
         write_tree(self.card, {mario: b"played since"}, when=PLAYED + 3600)
-        write_tree(self.card, {zelda: b"older than the backup"}, when=PLAYED - 3600)
+        write_tree(self.card, {zelda: b"played since, clock behind"}, when=PLAYED - 3600)
+        (saves.folder(self.card) / missing).unlink()
         todo = saves.plan(self.card, self.zip)
-        self.assertEqual(todo.newer, [mario])
-        self.assertEqual(todo.put, [zelda])
-        self.assertEqual(len(todo.same), 1)
-        self.assertEqual(saves.restore(self.card, self.zip), saves.Restored(put=1, kept=1, same=1))
+        self.assertEqual(sorted(todo.changed), sorted([mario, zelda]))
+        self.assertEqual(todo.put, [missing])
+        self.assertEqual(saves.restore(self.card, self.zip), saves.Restored(put=1, kept=2, same=0))
         self.assertEqual((saves.folder(self.card) / mario).read_bytes(), b"played since")
-        self.assertEqual((saves.folder(self.card) / zelda).read_bytes(), X7_TREE[zelda])
+        self.assertEqual((saves.folder(self.card) / zelda).read_bytes(), b"played since, clock behind")
+        self.assertEqual((saves.folder(self.card) / missing).read_bytes(), X7_TREE[missing])
         # and replaced on request
-        self.assertEqual(saves.restore(self.card, self.zip, replace_newer=True),
-                         saves.Restored(put=1, kept=0, same=2))
+        self.assertEqual(saves.restore(self.card, self.zip, replace_changed=True),
+                         saves.Restored(put=2, kept=0, same=1))
         self.assertEqual(read_tree(self.card), X7_TREE)
 
     def test_nothing_on_the_card_is_deleted(self):
@@ -127,7 +134,7 @@ class SavesTests(unittest.TestCase):
         mine = {"Star Fox 64 (USA).eep": b"only on the card", "F-Zero X (USA)/F-Zero X (USA).srm": b"mine too"}
         write_tree(self.card, mine)
         write_tree(self.card, {"Super Mario 64 (USA).eep": b"newer"}, when=PLAYED + 3600)
-        saves.restore(self.card, self.zip, replace_newer=True)
+        saves.restore(self.card, self.zip, replace_changed=True)
         self.assertEqual(read_tree(self.card), {**X7_TREE, **mine})
 
     def test_a_zip_that_reaches_outside_the_folder_is_refused_and_nothing_is_written(self):
@@ -204,12 +211,14 @@ class SavesTests(unittest.TestCase):
                          "Backed up 143 saves to SleekMenu saves 2026-11-17.zip.")
         self.assertEqual(saves.restore_question(saves.Backup(day, ("x",) * 143)),
                          "This backup holds 143 saves from November 17, 2026. Put them back on the card?")
-        self.assertEqual(saves.newer_question(12), "12 saves on the card are newer than the backup.")
-        self.assertEqual(saves.newer_question(1), "1 save on the card is newer than the backup.")
+        self.assertEqual(saves.changed_question(12), "12 saves on the card differ from the backup.")
+        self.assertEqual(saves.changed_question(1), "1 save on the card differs from the backup.")
+        self.assertEqual(saves.keep_label(12), "Keep the ones on the card")
+        self.assertEqual(saves.keep_label(1), "Keep the one on the card")
         self.assertEqual(saves.restored_line(saves.Restored(131, 12, 0)),
-                         "Put 131 saves back. 12 newer saves on the card were kept.")
+                         "Put 131 saves back. 12 saves on the card were kept.")
         self.assertEqual(saves.restored_line(saves.Restored(1, 1, 0)),
-                         "Put 1 save back. 1 newer save on the card was kept.")
+                         "Put 1 save back. 1 save on the card was kept.")
         self.assertEqual(saves.restored_line(saves.Restored(5, 0, 3)), "Put 5 saves back.")
         self.assertEqual(saves.spoken_date(datetime.date(2027, 1, 2)), "January 2, 2027")
 
