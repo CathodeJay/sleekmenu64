@@ -158,8 +158,9 @@ bool launch_selected_is_disk(void);
 const char *launch_sibling_disk(void);
 /* The disk the browser found beside the prepared ROM in the catalog, or ""
    for none, called after a successful launch_prepare. It is what the card
-   shows. Start lists the folder again and attaches what it finds there.
-   Ignored on a cartridge without a drive. */
+   shows. When it names one, Start lists the folder again and attaches what
+   it finds there. When it names none, Start attaches none and lists
+   nothing. Ignored on a cartridge without a drive. */
 void launch_note_sibling_disk(const char *catalog_path);
 /* Whether this cartridge can attach a 64DD disk to a game: only then is a
    disk looked for when a game's details open. */

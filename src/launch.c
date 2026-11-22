@@ -406,8 +406,10 @@ sm_launch_result_t launch_rom(sm_launch_progress_cb progress, void *context) {
         }
     } else {
         /* The expansion disk, if one sits beside the ROM: the folder as it
-           is now, whatever the card showed. */
-        if (cart->attach_disk) find_sibling_disk(opened_path);
+           is now. It is listed only when the catalog knows a disk there.
+           Listing a large folder on the Pro takes most of a second, and
+           few games have a disk. */
+        if (cart->attach_disk && sibling_disk[0]) find_sibling_disk(opened_path);
         loaded = cart->load_rom(opened_path, (uint32_t)selected_size,
             selected_format == SM_ROM_FORMAT_V64, boot_mode == SM_BOOT_VERIFY,
             load_progress, &bridge, status, sizeof(status));

@@ -515,9 +515,12 @@ own they boot from the drive's IPL, which the Pro menu keeps in
 `ED64/64ddipl/`, chosen by the disk's region; a `.ndd` beside a cartridge
 ROM is attached to it as an expansion disk. The details find that disk in
 the catalog, without reading the card: the one named like the ROM,
-otherwise the first in name order. Start lists the folder and attaches the
-first `.ndd` there, preferring one named like the ROM, so a disk copied on
-since the last update is attached too. Not yet run on hardware.
+otherwise the first in name order. When the catalog knows a disk there,
+Start lists the folder and attaches the first `.ndd` in it, preferring one
+named like the ROM. When it knows none, Start lists nothing: on the Pro,
+listing a large folder takes most of a second. A disk copied on since the
+last update is known once the browser has looked through that folder,
+which it does when you open the folder. Not yet run on hardware.
 
 ## Saves
 

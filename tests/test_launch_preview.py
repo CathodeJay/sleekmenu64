@@ -517,12 +517,14 @@ class DetailsCardReadsTests(unittest.TestCase):
 
     def test_the_disk_is_looked_for_in_the_folder_at_start_only(self):
         """The details find the disk in the catalog. Start lists the folder,
-        once, before the load, and attaches what it finds there."""
+        once, before the load, and attaches what it finds there, and only
+        when the catalog knows a disk beside the game: a large folder takes
+        most of a second to list on the Pro."""
         prepare = self.body("src/launch.c", "sm_launch_result_t launch_prepare(")
         self.assertNotIn("find_sibling_disk(", prepare)
         launch = self.body("src/launch.c", "sm_launch_result_t launch_rom(")
         self.assertEqual(launch.count("find_sibling_disk("), 1)
-        self.assertIn("if (cart->attach_disk) find_sibling_disk(opened_path);", launch)
+        self.assertIn("if (cart->attach_disk && sibling_disk[0]) find_sibling_disk(opened_path);", launch)
         self.assertLess(launch.index("find_sibling_disk("), launch.index("cart->load_rom("))
         self.assertLess(launch.index("cart->load_rom("),
                         launch.index("cart->attach_disk(sibling_disk,"))
