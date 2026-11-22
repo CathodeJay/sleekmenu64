@@ -220,6 +220,13 @@ listed if there is something to play in it: an empty folder, or one with
 only Controller Pak files, is left out. A ROM-shaped file the tool set
 aside as not a ROM is known to the browser and never listed.
 
+## An empty list
+
+When SleekMenu cannot read the SD card, or finds no games on it, the list
+is empty and the bar at the bottom says which: "Can't read the SD card.
+Check it, then restart." or "No games found on the card. Add some, then
+restart."
+
 ## Not done yet
 
 Controller Pak (`.mpk`) backup and restore.

@@ -108,6 +108,7 @@ int main(void) {
     draw_scan_now(&scan_display, NULL);
     if (!cart->init(error, sizeof(error))) {
         ui.status = error;
+        ui.card_problem = SM_UI_CARD_UNREADABLE;
     } else {
         bool catalog_loaded = false;
         /* Before anything else touches the card: whatever the last game left
@@ -141,6 +142,7 @@ int main(void) {
                     : "ROMs discovered; metadata can be added later";
             } else {
                 ui.status = error;
+                ui.card_problem = SM_UI_NO_GAMES;
             }
         } else {
             snprintf(loaded_status, sizeof(loaded_status), "Catalog loaded: %lu games",

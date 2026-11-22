@@ -2681,6 +2681,33 @@ int main(void) {
         ROW_SHOTS = NULL;
     }
 
+    /* ---- an empty list says why, when the card is the reason ------------ */
+    {
+        /* At start-up the browser keeps why the list is empty. The status
+           line is cleared when the list is built, so the help bar shows the
+           reason itself, for as long as there is nothing to list. */
+        static const row_t one[] = { {"Game.z64", "Game", "Action", 0, "", 0, NULL} };
+        start(one, 0u);
+        ui.status = "SD unavailable";
+        ui.card_problem = SM_UI_CARD_UNREADABLE;
+        frame(PRESS(genre_next));               /* rebuilds the list: the status goes */
+        frame(NONE);
+        draw();
+        assert(!sm_test_drew("SD unavailable"));
+        assert(sm_test_drew(SM_UI_CARD_UNREADABLE));
+        ui.card_problem = SM_UI_NO_GAMES;
+        draw();
+        assert(sm_test_drew(SM_UI_NO_GAMES) && !sm_test_drew(SM_UI_CARD_UNREADABLE));
+        /* A list with something in it shows its usual help. */
+        start(one, 1u);
+        settle();
+        ui.card_problem = SM_UI_NO_GAMES;
+        frame(NONE);
+        draw();
+        assert(!sm_test_drew(SM_UI_NO_GAMES));
+        ui.card_problem = NULL;
+    }
+
     /* ---- the disk beside a game is found in the catalog ------------------ */
     {
         /* Game.z64 has a disk named like it, though another sorts first.

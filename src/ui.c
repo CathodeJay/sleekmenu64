@@ -3491,6 +3491,8 @@ void ui_draw(surface_t *s, const sm_layout_t *l, const sm_catalog_t *c, const sm
            says what the screen in front of you actually does. */
         if (ui->status) {
             draw_help_sentence(s, l, ui->status);
+        } else if (ui->card_problem && !ui->item_count) {
+            draw_help_sentence(s, l, ui->card_problem);
         } else {
             bool sentence = false;
             const char *line = footer_hint(c, ui, &sentence);

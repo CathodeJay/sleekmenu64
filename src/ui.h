@@ -63,6 +63,10 @@ typedef enum { SM_SCREEN_LIBRARY, SM_SCREEN_FILTERS, SM_SCREEN_LAUNCH_DETAILS, S
                SM_SCREEN_BOX, SM_SCREEN_SYSTEM } sm_screen_t;
 typedef enum { SM_VIEW_LIST, SM_VIEW_GRID, SM_VIEW_COVERFLOW } sm_view_t;
 
+/* What the help bar says when the list is empty because of the card. */
+#define SM_UI_CARD_UNREADABLE "Can't read the SD card. Check it, then restart."
+#define SM_UI_NO_GAMES "No games found on the card. Add some, then restart."
+
 typedef struct {
     uint32_t selected;
     uint32_t first_visible;
@@ -123,6 +127,11 @@ typedef struct {
     uint32_t cheat_row;
     uint32_t cheat_first;
     const char *status;
+    /* Why the list is empty, set at start-up when the card could not be read
+       or held no games (SM_UI_CARD_UNREADABLE, SM_UI_NO_GAMES). The status
+       above is cleared by the first frame. This stays, and the help bar shows
+       it for as long as the list has nothing in it. */
+    const char *card_problem;
     sprite_t *cover_sprite;
     uint32_t cover_index;
     bool cover_loaded;

@@ -197,6 +197,19 @@ class HostModuleTests(unittest.TestCase):
         build_and_run("buttons-test", ["src/buttons.c", "tests/stubs/libdragon_stub.c", "tests/buttons_test.c"],
                       ["-Itests/stubs"], whole)
 
+    def test_an_empty_list_says_why_when_the_card_is_the_reason(self):
+        """When the card cannot be read, or holds no games, main.c keeps the
+        reason for the help bar: the status line is cleared by the first
+        frame. Both sentences fit the bar, which holds 53 characters."""
+        main = (ROOT / "src/main.c").read_text(encoding="utf-8")
+        header = (ROOT / "src/ui.h").read_text(encoding="utf-8")
+        self.assertRegex(main, r"if \(!cart->init\(error, sizeof\(error\)\)\) \{\s*ui\.status = error;\s*"
+                               r"ui\.card_problem = SM_UI_CARD_UNREADABLE;")
+        self.assertRegex(main, r"\} else \{\s*ui\.status = error;\s*ui\.card_problem = SM_UI_NO_GAMES;")
+        for name in ("SM_UI_CARD_UNREADABLE", "SM_UI_NO_GAMES"):
+            text = re.search(r'#define ' + name + r' "([^"]*)"', header).group(1)
+            self.assertLessEqual(len(text), (296 - 24 - 6) // 5, text)
+
     def test_the_d_pad_is_drawn_as_the_d_pad(self):
         """{<} and {>} are the yellow C-left and C-right, which switch the
         genre tabs; the D-pad's left and right are {-}. A hint for the
