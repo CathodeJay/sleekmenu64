@@ -1906,7 +1906,11 @@ class WindowTests(unittest.TestCase):
             self.assertLessEqual(label.winfo_rootx() + label.winfo_width(),
                                  options.winfo_rootx() + options.winfo_width())
             self.assertLess(label.winfo_height(), 1.5 * line, "on one line")
-            self.assertLessEqual(options.grid_bbox()[3], options.winfo_height(), "and nothing is cut off")
+            # The window grows to show the whole column, up to the screen's
+            # height: on a small virtual screen (the macOS runner's) it has
+            # no room to grow into, as in the test of make_room below.
+            if root.winfo_screenheight() >= 1000:
+                self.assertLessEqual(options.grid_bbox()[3], options.winfo_height(), "and nothing is cut off")
             state["pick_music"](three)
 
             # one of several that can't be used is named
@@ -2632,3 +2636,6 @@ class MusicNameTests(unittest.TestCase):
         cut = fit(one, 20, len)
         self.assertTrue(cut.startswith("A Very") and cut.endswith("…") and len(cut) <= 20, cut)
         self.assertEqual(fit("", 10, len), "")
+        # a name already cut by music_name() is not cut twice
+        cut = fit("2 songs: First Theme From The Long…, Second Theme From The Lo…", 36, len)
+        self.assertEqual(cut.count("…"), 1, cut)

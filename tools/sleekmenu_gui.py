@@ -524,7 +524,7 @@ def fit_music_name(text: str, width: int, measure) -> str:
         text = f"{head}{sep}{names[0]} and {len(names) - 1} more"
     while len(text) > 1 and measure(text + "…") > width:
         text = text[:-1].rstrip()
-    return text + "…"
+    return text.rstrip("… ") + "…"
 
 
 def music_line(on_card=(), picked=None, problem: str = "") -> str:
