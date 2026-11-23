@@ -26,6 +26,7 @@ void sm_rom_boot(sm_rom_boot_hook at_point_of_no_return, bool from_64dd, const u
     params.tv_type = BOOT_TV_TYPE_PASSTHROUGH;
     params.detect_cic_seed = true;  /* fingerprint the target's own IPL3 */
     params.cic_seed = 0;
+    params.clear_rdram = false;
     /* The list is read by cheats_install() inside boot(), before the jump;
        with NULL it declines and the game boots clean. A retail IPL3 is
        required for the engine to find its patch point; anything else boots

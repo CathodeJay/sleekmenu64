@@ -86,12 +86,33 @@ void boot (boot_params_t *params) {
     while (cpu_io_read(&SP->DMA_BUSY));
 
     cpu_io_write(&PI->SR, PI_SR_CLR_INTR | PI_SR_RESET);
+
+    // Wait for the VI to finish its current frame before proceeding. 
+    // This ensures that the VI is not actively reading from RDRAM, 
+    // which could lead to data corruption when we clear RDRAM.
     while ((cpu_io_read(&VI->CURR_LINE) & ~(VI_CURR_LINE_FIELD)) != 0);
-    cpu_io_write(&VI->V_INTR, 0x3FF);
-    cpu_io_write(&VI->H_LIMITS, 0);
-    cpu_io_write(&VI->CURR_LINE, 0);
+
+    // Fully re-Initialize Audio registers (all booted ROMs should do their own initialization)
     cpu_io_write(&AI->MADDR, 0);
     cpu_io_write(&AI->LEN, 0);
+
+    // Fully re-Initialize VI registers (all booted ROMs should do their own initialization)
+    // Disabling the VI output before clearing the timing registers.
+
+    cpu_io_write(&VI->CR, 0); /**< Control Register. (this requires a reset due to libdragon between August 2023 and April 2025) */
+    cpu_io_write(&VI->V_INTR, 0x3FF); /*< Vertical Interrupt. */
+    cpu_io_write(&VI->H_LIMITS, 0); /*< Horizontal Limits. */
+    cpu_io_write(&VI->CURR_LINE, 0); /*< Current Scanline. */
+    cpu_io_write(&VI->MADDR, 0); /**< Memory Address. */
+    cpu_io_write(&VI->H_WIDTH, 0); /**< Horizontal Width. */
+    cpu_io_write(&VI->TIMING, 0); /**< Timings. */
+    cpu_io_write(&VI->V_SYNC, 0); /**< Vertical Sync. */
+    cpu_io_write(&VI->H_SYNC, 0); /**< Horizontal Sync. (this one is particularly important for RD RAM init) */
+    cpu_io_write(&VI->H_SYNC_LEAP, 0); /**< Horizontal Sync Leap. */
+    cpu_io_write(&VI->V_LIMITS, 0); /**< Vertical Limits. */
+    cpu_io_write(&VI->COLOR_BURST, 0); /**< Color Burst. */
+    cpu_io_write(&VI->H_SCALE, 0); /**< Horizontal Scale. */
+    cpu_io_write(&VI->V_SCALE, 0); /**< Vertical Scale. */
 
     while (cpu_io_read(&SP->SR) & SP_SR_DMA_BUSY);
 
@@ -129,6 +150,7 @@ void boot (boot_params_t *params) {
 
     bool cheats_installed = cheats_install(cic_type, params->cheat_list);
 
+    register uint32_t clear_rdram asm ("s1");
     register uint32_t skip_rdram_reset asm ("a0");
     register uint32_t boot_device asm ("s3");
     register uint32_t tv_type asm ("s4");
@@ -136,6 +158,7 @@ void boot (boot_params_t *params) {
     register uint32_t cic_seed asm ("s6");
     register uint32_t version asm ("s7");
 
+    clear_rdram = params->clear_rdram && !cheats_installed;
     skip_rdram_reset = cheats_installed;
     boot_device = (params->device_type & 0x01);
     tv_type = (params->tv_type & 0x03);
@@ -153,6 +176,7 @@ void boot (boot_params_t *params) {
         "la $t3, reboot \n"
         "jr $t3 \n" ::
         [c0_status] "i" (C0_STATUS_CU1 | C0_STATUS_CU0 | C0_STATUS_FR),
+        [clear_rdram] "r" (clear_rdram),
         [skip_rdram_reset] "r" (skip_rdram_reset),
         [boot_device] "r" (boot_device),
         [tv_type] "r" (tv_type),

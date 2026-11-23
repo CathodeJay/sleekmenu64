@@ -1,7 +1,7 @@
 # N64FlashcartMenu — boot handoff (vendored, unmodified)
 
 Source: https://github.com/Polprzewodnikowy/N64FlashcartMenu
-Commit: 6407ab15f6c19d1bf9ded5104c1c8b3c36471379 (tag v0.3.2)
+Commit: 7fcef17d92eef786482673d55b0a8bf7894f8a31 (branch main)
 Path:   src/boot/  ->  third_party/n64flashcartmenu/boot/
 Files:  boot.c boot.h boot_io.h cic.c cic.h cheats.c cheats.h vr4300_asm.h reboot.S reboot.h
 
@@ -10,6 +10,9 @@ verifies it. Nothing else from that project is used — in particular none of
 its flashcart drivers, whose EverDrive X-series support is an empty stub
 (`ed64_xseries_ll.h` declares nothing and `set_save_type` is a FIXME no-op).
 What is used is the generic IPL2->IPL3 handoff, which is hardware-generic.
+
+`src/rom_boot.c` explicitly disables upstream's optional `clear_rdram` flag
+to preserve SleekMenu's existing handoff behavior.
 
 ## LICENCE — READ THIS
 
